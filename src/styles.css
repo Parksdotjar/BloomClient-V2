@@ -2220,6 +2220,7 @@ body,
 .instance-tabs > button > span { width: 41px; height: 41px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px; color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--control)); }
 .instance-tabs b, .instance-tabs small { display: block; }.instance-tabs b { font-size: 13px; }.instance-tabs small { margin-top: 5px; color: var(--muted); font-size: 11px; }
 .instance-manager { margin-top: 16px; padding: 22px; }
+.instance-manager:not(.settings-manager) { margin-bottom: 76px; }
 .manager-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .manager-heading h2 { margin: 0; font-size: 17px; }.manager-heading h2 span { margin-left: 6px; padding: 3px 7px; border-radius: 99px; color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); font-size: 11px; }
 .manager-heading p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
@@ -2248,8 +2249,11 @@ body,
 .content-pagination button { min-width: 76px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--control); color: var(--text); font-size: 11px; font-weight: 700; }
 .content-pagination button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--accent); }
 .content-pagination button:disabled { opacity: .35; cursor: default; }
-.content-search { display: flex; align-items: center; gap: 10px; margin-top: 15px; padding: 7px 10px 7px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--control); color: var(--muted); }
-.content-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); }.content-search .select-wrap { width: 130px; }
+.content-search { position: sticky; z-index: 14; bottom: 18px; width: calc(100% - 28px); min-height: 58px; display: flex; align-items: center; gap: 12px; margin: 18px auto -58px; padding: 9px 11px 9px 17px; transform: translateY(52px); border: 1px solid color-mix(in srgb, var(--border) 88%, var(--accent)); border-radius: 18px; background: color-mix(in srgb, var(--panel-strong) 94%, transparent); color: var(--muted); box-shadow: 0 20px 46px #000b, 0 5px 15px #0007, inset 0 1px 0 #ffffff08; backdrop-filter: blur(18px); transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+.content-search:focus-within { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); box-shadow: 0 22px 52px #000c, 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px 0 #ffffff0a; transform: translateY(50px); }
+.content-search > svg { flex: 0 0 auto; }
+.content-search input { flex: 1; min-width: 0; height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 13px; }.content-search .select-wrap { width: 142px; }
+.content-search .select-trigger { min-height: 38px; border-color: color-mix(in srgb, var(--border) 75%, transparent); background: color-mix(in srgb, var(--control) 82%, transparent); }
 .instance-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }.instance-settings-grid label { display: grid; gap: 8px; color: var(--text); font-size: 12px; font-weight: 700; }.instance-settings-grid label > span { display: flex; justify-content: space-between; }.instance-settings-grid input:not([type="range"]), .instance-settings-grid textarea { border: 1px solid var(--border); border-radius: 8px; background: var(--control); color: var(--text); padding: 11px 12px; outline: 0; }.instance-settings-grid textarea { min-height: 105px; resize: vertical; }.instance-settings-grid .wide { grid-column: 1 / -1; }
 .instance-message { margin: 13px 0 0; color: var(--accent); font-size: 12px; }
 @media (max-width: 1250px) { .instance-tabs { grid-template-columns: 1fr 1fr; }.instance-hero-actions { position: static; margin-top: 18px; }.content-loader { display: none; } }
