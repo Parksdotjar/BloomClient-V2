@@ -2079,3 +2079,23 @@ body,
 @keyframes download-complete { 45% { transform: scale(1.34); opacity: .42; } 100% { transform: scale(1); opacity: 1; } }
 @keyframes check-in { from { opacity: 0; transform: scale(.45); } to { opacity: 1; transform: scale(1); } }
 @keyframes toast-drop { from { opacity: 0; transform: translate(-50%, -16px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* Final compact account handoff placement */
+.profile { position: relative; }
+.signin-panel {
+  bottom: calc(100% + 8px);
+  min-height: 0;
+  height: auto;
+  padding: 8px 10px;
+  justify-content: center;
+}
+.signin-panel .device-code {
+  min-height: 42px;
+  margin: 0;
+  padding: 7px 10px;
+}
+.signin-panel .signin-error {
+  position: relative;
+  z-index: 3;
+  margin: 7px 3px 2px;
+}

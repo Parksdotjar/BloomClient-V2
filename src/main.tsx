@@ -951,6 +951,11 @@ function App() {
     else localStorage.removeItem("bloom-profile");
   }, [profile]);
   useEffect(() => {
+    void invoke<MinecraftProfile | null>("get_saved_minecraft_profile")
+      .then((savedProfile) => setProfile(savedProfile))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
     void invoke<InstanceDraft[]>("list_instances").then(setInstances);
   }, []);
   useEffect(() => {

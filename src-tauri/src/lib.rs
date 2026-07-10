@@ -27,24 +27,39 @@ fn emit_launch(app: &tauri::AppHandle, instance_id: &str, state: &str, progress:
 fn get_minecraft_launch_status() -> LaunchProgress { current_launch().lock().map(|status| status.clone()).unwrap_or(LaunchProgress { instance_id: String::new(), state: "idle".into(), progress: 0, message: String::new() }) }
 
 fn saved_session() -> Option<MinecraftSession> {
-    let entry = keyring::Entry::new("Bloom Client", "minecraft-session").ok()?;
-    serde_json::from_str(&entry.get_password().ok()?).ok()
+    let profile_entry = keyring::Entry::new("Bloom Client", "minecraft-profile").ok()?;
+    let profile: serde_json::Value = serde_json::from_str(&profile_entry.get_password().ok()?).ok()?;
+    let access_token = keyring::Entry::new("Bloom Client", "minecraft-access-token").ok()?.get_password().ok()?;
+    let refresh_token = keyring::Entry::new("Bloom Client", "microsoft-refresh-token").ok().and_then(|entry| entry.get_password().ok()).unwrap_or_default();
+    Some(MinecraftSession {
+        username: profile["username"].as_str()?.to_string(),
+        uuid: profile["uuid"].as_str()?.to_string(),
+        client_id: profile["clientId"].as_str()?.to_string(),
+        access_token,
+        refresh_token,
+    })
 }
 
 fn save_session(session: &MinecraftSession) -> Result<(), String> {
-    let entry = keyring::Entry::new("Bloom Client", "minecraft-session").map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?;
-    let value = serde_json::to_string(session).map_err(|error| error.to_string())?;
-    entry.set_password(&value).map_err(|error| format!("Windows could not save your sign-in securely: {error}"))
+    let profile = serde_json::json!({ "username": session.username, "uuid": session.uuid, "clientId": session.client_id }).to_string();
+    for (name, value) in [("minecraft-profile", profile.as_str()), ("minecraft-access-token", session.access_token.as_str()), ("microsoft-refresh-token", session.refresh_token.as_str())] {
+        let entry = keyring::Entry::new("Bloom Client", name).map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?;
+        entry.set_password(value).map_err(|error| format!("Windows could not save your sign-in securely: {error}"))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
 fn sign_out_minecraft(state: tauri::State<'_, LauncherState>) -> Result<(), String> {
     *state.session.lock().map_err(|_| "Unable to clear the Minecraft sign-in session.")? = None;
-    let entry = keyring::Entry::new("Bloom Client", "minecraft-session").map_err(|error| error.to_string())?;
-    match entry.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(format!("Windows could not remove the saved sign-in: {error}")),
+    for name in ["minecraft-profile", "minecraft-access-token", "microsoft-refresh-token", "minecraft-session"] {
+        let entry = keyring::Entry::new("Bloom Client", name).map_err(|error| error.to_string())?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(error) => return Err(format!("Windows could not remove the saved sign-in: {error}")),
+        }
     }
+    Ok(())
 }
 
 #[tauri::command]
@@ -87,7 +102,7 @@ async fn complete_microsoft_login(state: tauri::State<'_, LauncherState>, client
         match body.get("error").and_then(|v| v.as_str()) { Some("authorization_pending") => continue, Some("slow_down") => { wait_seconds += 5; continue; }, _ => return Err(body.get("error_description").and_then(|v| v.as_str()).unwrap_or("Microsoft sign-in failed.").to_string()) }
     };
     let access_token = tokens["access_token"].as_str().ok_or("Microsoft did not return an access token.")?.to_string();
-    let refresh_token = tokens["refresh_token"].as_str().ok_or("Microsoft did not return a refresh token. Reconnect your account once more.")?.to_string();
+    let refresh_token = tokens["refresh_token"].as_str().unwrap_or_default().to_string();
     let xbl_response = client.post("https://user.auth.xboxlive.com/user/authenticate").json(&serde_json::json!({"Properties":{"AuthMethod":"RPS","SiteName":"user.auth.xboxlive.com","RpsTicket":format!("d={access_token}")},"RelyingParty":"http://auth.xboxlive.com","TokenType":"JWT"})).send().await.map_err(|error| error.to_string())?;
     let xbl = read_auth_response(xbl_response, "Xbox Live").await?;
     let xsts_response = client.post("https://xsts.auth.xboxlive.com/xsts/authorize").json(&serde_json::json!({"Properties":{"SandboxId":"RETAIL","UserTokens":[xbl["Token"]]},"RelyingParty":"rp://api.minecraftservices.com/","TokenType":"JWT"})).send().await.map_err(|error| error.to_string())?;
@@ -108,20 +123,10 @@ async fn complete_microsoft_login(state: tauri::State<'_, LauncherState>, client
     Ok(profile)
 }
 
-async fn refresh_minecraft_session(previous: MinecraftSession) -> Result<MinecraftSession, String> {
-    let client = reqwest::Client::new();
-    let response = client.post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token").form(&[("client_id", previous.client_id.clone()), ("grant_type", "refresh_token".into()), ("refresh_token", previous.refresh_token.clone())]).send().await.map_err(|error| error.to_string())?;
-    let tokens = read_auth_response(response, "Microsoft sign-in").await?;
-    let access_token = tokens["access_token"].as_str().ok_or("Microsoft did not return a refreshed access token.")?;
-    let refresh_token = tokens["refresh_token"].as_str().unwrap_or(&previous.refresh_token).to_string();
-    let xbl = read_auth_response(client.post("https://user.auth.xboxlive.com/user/authenticate").json(&serde_json::json!({"Properties":{"AuthMethod":"RPS","SiteName":"user.auth.xboxlive.com","RpsTicket":format!("d={access_token}")},"RelyingParty":"http://auth.xboxlive.com","TokenType":"JWT"})).send().await.map_err(|error| error.to_string())?, "Xbox Live").await?;
-    let xsts = read_auth_response(client.post("https://xsts.auth.xboxlive.com/xsts/authorize").json(&serde_json::json!({"Properties":{"SandboxId":"RETAIL","UserTokens":[xbl["Token"]]},"RelyingParty":"rp://api.minecraftservices.com/","TokenType":"JWT"})).send().await.map_err(|error| error.to_string())?, "Xbox security").await?;
-    let identity = xsts["DisplayClaims"]["xui"][0]["uhs"].as_str().ok_or("Xbox authentication did not return a user identity.")?;
-    let xsts_token = xsts["Token"].as_str().ok_or("Xbox authentication did not return an XSTS token.")?;
-    let minecraft = read_auth_response(client.post("https://api.minecraftservices.com/authentication/login_with_xbox").json(&serde_json::json!({"identityToken":format!("XBL3.0 x={identity};{xsts_token}")})).send().await.map_err(|error| error.to_string())?, "Minecraft services").await?;
-    let minecraft_token = minecraft["access_token"].as_str().ok_or("Minecraft services did not return an access token.")?.to_string();
-    let profile = read_auth_response(client.get("https://api.minecraftservices.com/minecraft/profile").bearer_auth(&minecraft_token).send().await.map_err(|error| error.to_string())?, "Minecraft profile").await?;
-    Ok(MinecraftSession { username: profile["name"].as_str().ok_or("No Minecraft profile was found on this account.")?.to_string(), uuid: profile["id"].as_str().ok_or("No Minecraft profile was found on this account.")?.to_string(), access_token: minecraft_token, refresh_token, client_id: previous.client_id })
+#[tauri::command]
+fn get_saved_minecraft_profile(state: tauri::State<'_, LauncherState>) -> Option<serde_json::Value> {
+    let session = state.session.lock().ok().and_then(|session| session.clone()).or_else(saved_session)?;
+    Some(serde_json::json!({ "id": session.uuid, "name": session.username }))
 }
 
 #[derive(serde::Serialize)]
@@ -216,14 +221,8 @@ async fn launch_minecraft(app: tauri::AppHandle, state: tauri::State<'_, Launche
         if *active { return Err("Something is already downloading or running. Please wait.".into()); }
         *active = true;
     }
-    let saved = state.session.lock().map_err(|_| "Unable to read the Minecraft sign-in session.")?.clone().or_else(saved_session)
+    let session = state.session.lock().map_err(|_| "Unable to read the Minecraft sign-in session.")?.clone().or_else(saved_session)
         .ok_or_else(|| { if let Ok(mut active) = state.launch_active.lock() { *active = false; } "Sign in with Microsoft before launching Minecraft.".to_string() })?;
-    let session = match refresh_minecraft_session(saved).await {
-        Ok(session) => session,
-        Err(error) => { if let Ok(mut active) = state.launch_active.lock() { *active = false; } return Err(format!("Your Microsoft session could not be refreshed. Reconnect only if this continues: {error}")); }
-    };
-    save_session(&session)?;
-    *state.session.lock().map_err(|_| "Unable to save the refreshed Minecraft session.")? = Some(session.clone());
     let active = Arc::new(state.launch_active.clone());
     std::thread::spawn(move || {
         let config = match load_instance(&instance_id) { Ok(config) => config, Err(error) => { emit_launch(&app, &instance_id, "error", 0, error); if let Ok(mut value) = active.lock() { *value = false; } return; } };
@@ -271,7 +270,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(LauncherState::default())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, request_microsoft_device_code, complete_microsoft_login, detect_java_installations, get_minecraft_releases, save_instance, list_instances, launch_minecraft, get_minecraft_launch_status, sign_out_minecraft])
+        .invoke_handler(tauri::generate_handler![greet, request_microsoft_device_code, complete_microsoft_login, detect_java_installations, get_minecraft_releases, save_instance, list_instances, launch_minecraft, get_minecraft_launch_status, sign_out_minecraft, get_saved_minecraft_profile])
         .run(tauri::generate_context!())
         .expect("error while running Bloom Client");
 }
