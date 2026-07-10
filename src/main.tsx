@@ -902,6 +902,7 @@ function App() {
     state: "idle",
     message: "",
   });
+  const [gameRunning, setGameRunning] = useState(false);
   const [toast, setToast] = useState("");
   const [signInOpen, setSignInOpen] = useState(false);
   const [profile, setProfile] = useState<MinecraftProfile | null>(() => {
@@ -944,19 +945,22 @@ function App() {
       (event) => {
         const next = event.payload;
         setDownload({
-          active:
-            next.state === "installing" ||
-            next.state === "launching" ||
-            next.state === "running",
+          active: next.state === "installing" || next.state === "launching" || next.state === "running",
           progress: next.progress,
           state: next.state,
           message: next.message,
         });
         if (next.state === "error") {
+          setGameRunning(false);
           setToast(next.message);
           window.setTimeout(() => setToast(""), 5000);
         }
+        if (next.state === "running") {
+          setGameRunning(true);
+          window.setTimeout(() => setDownload(current => ({ ...current, active: false })), 900);
+        }
         if (next.state === "idle")
+          setGameRunning(false),
           window.setTimeout(
             () =>
               setDownload({
@@ -974,7 +978,7 @@ function App() {
     return () => unlisten?.();
   }, []);
   const launch = async (instance: InstanceDraft) => {
-    if (download.active) {
+    if (download.active || gameRunning) {
       setToast("Something is already downloading or running. Please wait.");
       window.setTimeout(() => setToast(""), 3500);
       return;
@@ -1183,7 +1187,7 @@ function App() {
                         </div>
                         <button
                           className="play-instance"
-                          disabled={download.active}
+                          disabled={download.active || gameRunning}
                           onClick={() => void launch(instance)}
                         >
                           <Play size={17} fill="currentColor" />
