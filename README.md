@@ -1,8 +1,8 @@
-# BlimClient V2
+# Bloom Client V2
 
 > A clean, open-source Minecraft desktop client built with Tauri, React, TypeScript, Vite, and Rust.
 
-BlimClient V2 is a fresh rebuild focused on a fast launcher experience, a maintainable codebase, and a welcoming open-source workflow. The frontend owns presentation and user interaction; Rust owns native Windows operations; Tauri is the bridge between them.
+Bloom Client V2 is a fresh rebuild focused on a fast launcher experience, a maintainable codebase, and a welcoming open-source workflow. The frontend owns presentation and user interaction; Rust owns native Windows operations; Tauri is the bridge between them.
 
 ## Architecture
 
@@ -63,7 +63,7 @@ Pull requests should explain the user-facing change, include screenshots for UI 
 
 ## Project status
 
-BlimClient V2 is in early foundation work. APIs and UI surfaces may change while the core launcher architecture is being built.
+Bloom Client V2 is in early foundation work. APIs and UI surfaces may change while the core launcher architecture is being built.
 
 ## Contributing
 

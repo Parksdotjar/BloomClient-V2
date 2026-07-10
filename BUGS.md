@@ -1,6 +1,6 @@
-# BlimClient V2 Bug Ledger
+# Bloom Client V2 Bug Ledger
 
-This file is the durable, context-independent record of bugs found in BlimClient V2. Search by the bug ID, error text, or symptom before investigating a new report.
+This file is the durable, context-independent record of bugs found in Bloom Client V2. Search by the bug ID, error text, or symptom before investigating a new report.
 
 ## Status values
 
@@ -54,4 +54,3 @@ Use the next ID and record the same fields every time:
 5. Fix
 6. Verification command or result
 7. Any tempting workaround that should not be repeated
-

@@ -1,5 +1,5 @@
 #[tauri::command]
-fn greet(name: &str) -> String { format!("Welcome to BlimClient, {name}!") }
+fn greet(name: &str) -> String { format!("Welcome to Bloom Client, {name}!") }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -7,5 +7,5 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet])
         .run(tauri::generate_context!())
-        .expect("error while running BlimClient");
+        .expect("error while running Bloom Client");
 }

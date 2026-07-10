@@ -1,6 +1,6 @@
-# Contributing to BlimClient V2
+# Contributing to Bloom Client V2
 
-Thanks for helping make BlimClient better.
+Thanks for helping make Bloom Client better.
 
 ## Before you start
 

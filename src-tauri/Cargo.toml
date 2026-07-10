@@ -1,12 +1,12 @@
 [package]
-name = "blimclient"
+name = "bloomclient"
 version = "0.1.0"
 description = "An open-source Minecraft desktop client"
-authors = ["BlimClient contributors"]
+authors = ["Bloom Client contributors"]
 edition = "2021"
 
 [lib]
-name = "blimclient_lib"
+name = "bloomclient_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
