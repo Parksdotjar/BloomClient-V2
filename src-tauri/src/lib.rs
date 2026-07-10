@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct MinecraftSession { username: String, uuid: String, access_token: String }
 
 #[derive(Default)]
@@ -13,6 +13,17 @@ struct LaunchProgress { instance_id: String, state: String, progress: u8, messag
 
 fn emit_launch(app: &tauri::AppHandle, instance_id: &str, state: &str, progress: u8, message: impl Into<String>) {
     let _ = app.emit("minecraft-launch-progress", LaunchProgress { instance_id: instance_id.to_string(), state: state.to_string(), progress, message: message.into() });
+}
+
+fn saved_session() -> Option<MinecraftSession> {
+    let entry = keyring::Entry::new("Bloom Client", "minecraft-session").ok()?;
+    serde_json::from_str(&entry.get_password().ok()?).ok()
+}
+
+fn save_session(session: &MinecraftSession) {
+    if let (Ok(entry), Ok(value)) = (keyring::Entry::new("Bloom Client", "minecraft-session"), serde_json::to_string(session)) {
+        let _ = entry.set_password(&value);
+    }
 }
 
 #[tauri::command]
@@ -68,7 +79,9 @@ async fn complete_microsoft_login(state: tauri::State<'_, LauncherState>, client
     if profile.get("id").and_then(|v| v.as_str()).is_none() || profile.get("name").and_then(|v| v.as_str()).is_none() { return Err("No Minecraft profile was found on this account.".into()); }
     let username = profile["name"].as_str().unwrap_or_default().to_string();
     let uuid = profile["id"].as_str().unwrap_or_default().to_string();
-    *state.session.lock().map_err(|_| "Unable to save the Minecraft sign-in session.")? = Some(MinecraftSession { username, uuid, access_token: minecraft_token.to_string() });
+    let session = MinecraftSession { username, uuid, access_token: minecraft_token.to_string() };
+    save_session(&session);
+    *state.session.lock().map_err(|_| "Unable to save the Minecraft sign-in session.")? = Some(session);
     Ok(profile)
 }
 
@@ -164,7 +177,7 @@ fn launch_minecraft(app: tauri::AppHandle, state: tauri::State<'_, LauncherState
         if *active { return Err("Something is already downloading or running. Please wait.".into()); }
         *active = true;
     }
-    let session = state.session.lock().map_err(|_| "Unable to read the Minecraft sign-in session.")?.clone()
+    let session = state.session.lock().map_err(|_| "Unable to read the Minecraft sign-in session.")?.clone().or_else(saved_session)
         .ok_or_else(|| { if let Ok(mut active) = state.launch_active.lock() { *active = false; } "Sign in with Microsoft before launching Minecraft.".to_string() })?;
     let active = Arc::new(state.launch_active.clone());
     std::thread::spawn(move || {

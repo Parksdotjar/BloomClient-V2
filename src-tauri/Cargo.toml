@@ -21,3 +21,4 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["time"] }
 zip = "2"
 mc-launcher-core = "0.1.1"
+keyring = "3.6.3"

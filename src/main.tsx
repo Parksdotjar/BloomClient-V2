@@ -987,7 +987,11 @@ function App() {
     try {
       await invoke("launch_minecraft", { instanceId: instance.id });
     } catch (error) {
-      setToast(String(error));
+      const message = String(error);
+      if (message.includes("Sign in with Microsoft")) {
+        setSignInOpen(true);
+        setToast("Your saved profile needs a quick Microsoft reconnect before launching.");
+      } else setToast(message);
       window.setTimeout(() => setToast(""), 5000);
     }
   };
