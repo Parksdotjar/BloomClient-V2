@@ -2030,14 +2030,20 @@ body,
   color: var(--muted);
   font-size: 10px;
 }
-.instance-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #ed5555;
+.instance-placeholder-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
   flex: 0 0 auto;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #ed5555 14%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--control);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
 }
+.instance-card .instance-placeholder-icon { width: 30px; height: 30px; border-radius: 6px; font-size: 15px; }
 .instance-card {
   display: flex;
   align-items: center;

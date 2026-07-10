@@ -1246,7 +1246,7 @@ function App() {
                 key={instance.id}
                 onClick={() => { setSelectedInstanceId(instance.id); setPage("instance"); }}
               >
-                {instance.icon ? <img className="sidebar-instance-icon" src={instance.icon} alt="" /> : <span className="instance-dot" />}
+                {instance.icon ? <img className="sidebar-instance-icon" src={instance.icon} alt="" /> : <span className="instance-placeholder-icon" aria-hidden="true">?</span>}
                 <span>
                   <b>{instance.name}</b>
                   <small>{instance.version}</small>
@@ -1379,7 +1379,7 @@ function App() {
                 {instances.length
                   ? instances.map((instance) => (
                       <div className="instance-card" key={instance.id} onClick={() => { setSelectedInstanceId(instance.id); setPage("instance"); }}>
-                        {instance.icon ? <img className="recent-instance-icon" src={instance.icon} alt="" /> : <span className="instance-dot" />}
+                        {instance.icon ? <img className="recent-instance-icon" src={instance.icon} alt="" /> : <span className="instance-placeholder-icon" aria-hidden="true">?</span>}
                         <div>
                           <b>{instance.name}</b>
                           <small>{instance.version} • {instance.loader}</small>
