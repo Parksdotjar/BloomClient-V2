@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { invoke } from '@tauri-apps/api/core';
 import { animate } from 'animejs';
-import { ChevronDown, ChevronRight, CirclePlus, Cuboid, Download, FolderOpen, House, Layers3, PackageOpen, Palette, Puzzle, Rocket, Settings as SettingsIcon, Shield, SlidersHorizontal, TerminalSquare } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CirclePlus, Clipboard, Cuboid, Download, FolderOpen, House, Layers3, PackageOpen, Palette, Puzzle, Rocket, Settings as SettingsIcon, Shield, SlidersHorizontal, TerminalSquare } from 'lucide-react';
 import './styles.css';
 
 type Theme = 'dark' | 'oled' | 'dusk';
@@ -28,7 +28,7 @@ function SignInPanel({ onClose, onSignedIn }: { onClose: () => void; onSignedIn:
   const copyCode = async () => { if (!code) return; await navigator.clipboard?.writeText(code); setCopied(true); window.setTimeout(() => setCopied(false), 2000); };
   const startMicrosoftLogin = async () => { try { const device = await invoke<{ user_code: string; verification_uri: string; message: string; device_code: string; interval: number; expires_in: number }>('request_microsoft_device_code', { clientId: MICROSOFT_CLIENT_ID }); setCode(device.user_code); setVerificationUri(device.verification_uri); setStatus(device.message || 'Open Microsoft sign-in and enter the code.'); await openUrl(device.verification_uri); const profile = await invoke<MinecraftProfile>('complete_microsoft_login', { clientId: MICROSOFT_CLIENT_ID, deviceCode: device.device_code, interval: device.interval, expiresIn: device.expires_in }); onSignedIn(profile); } catch (error) { setStatus(String(error)); } };
   useEffect(() => { void startMicrosoftLogin(); }, []);
-  return <div className={'signin-panel ' + (copied ? 'copied' : '')}><div className="signin-panel-head"><div><b>Sign in with Microsoft</b><span>{status}</span></div><button onClick={onClose}>×</button></div><div className="device-code" onClick={copyCode}><strong>{code || '•••• ••••'}</strong><span>{copied ? 'Code copied to clipboard' : code ? 'Click to copy' : 'Preparing your code…'}</span></div><button className="microsoft-button" onClick={() => openUrl(verificationUri)}>Open Microsoft sign-in <ChevronRight size={15} /></button></div>;
+  return <div className={'signin-panel ' + (copied ? 'copied' : '')}><div className="signin-panel-head"><div><b>Sign in with Microsoft</b><span>{status}</span></div><button onClick={onClose}>×</button></div><div className="device-code"><strong>{code || '•••• ••••'}</strong><button onClick={copyCode} aria-label="Copy sign-in code">{copied ? <Check size={17} /> : <Clipboard size={17} />}</button></div>{copied && <div className="copy-toast">Copied</div>}<button className="microsoft-button" onClick={() => openUrl(verificationUri)}>Open Microsoft sign-in <ChevronRight size={15} /></button></div>;
 }
 function SettingsPage({ settings, setSettings }: { settings: SettingsState; setSettings: (s: SettingsState) => void }) {
   const update = <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => setSettings({ ...settings, [key]: value });
