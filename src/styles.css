@@ -91,3 +91,6 @@ html,body,.app-shell{background:var(--page);color:#f1f4f1}.sidebar{background:li
 
 .empty-plus{display:grid;place-items:center;height:22px;min-width:22px;font-size:0}.hero-card button{display:flex;align-items:center;gap:5px}
 
+
+.signed-in{width:100%;display:flex;align-items:center;gap:10px;min-width:0}.signed-in-name{min-width:0;flex:1;overflow:hidden}.signed-in-name b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.signed-in>button{margin-left:auto;flex:0 0 auto;border:0;background:transparent;color:#899298;padding:4px}
+
