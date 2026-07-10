@@ -81,3 +81,6 @@ html,body,.app-shell{background:var(--page);color:#f1f4f1}.sidebar{background:li
 .hero-glow{background:radial-gradient(circle at 10% 50%,color-mix(in srgb,var(--accent) 28%,transparent),transparent 45%),linear-gradient(90deg,transparent,#11171999)}
 .hero-card button{background:var(--accent);box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 22%,transparent);transition:filter 160ms ease,box-shadow 160ms ease}.hero-card button:hover{filter:brightness(1.08);box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 34%,transparent)}
 
+
+.settings-section{scroll-margin-top:28px;margin-bottom:25px}.settings-section h2{scroll-margin-top:28px}.danger-button{border:1px solid #7b3d43;border-radius:8px;background:#2a171a;color:#ff858d;padding:9px 13px;font:inherit;font-size:12px}.danger-button:hover{background:#3a1d21;border-color:#ff6873}
+
