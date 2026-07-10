@@ -694,7 +694,7 @@ function NewInstancePage({
   onCreated,
 }: {
   onCancel: () => void;
-  onCreated: () => void;
+  onCreated: (destination: "home" | "downloads") => void;
 }) {
   const [draft, setDraft] = useState<InstanceDraft>({
     id: "",
@@ -745,7 +745,7 @@ function NewInstancePage({
       setMessage(
         `${saved.loader} instance created and ready to install.`,
       );
-      onCreated();
+      onCreated("home");
     } catch (error) {
       setMessage(String(error));
     }
@@ -755,7 +755,7 @@ function NewInstancePage({
     setMessage("");
     try {
       const importedId = await invoke<string | null>("import_fabric_modpack");
-      if (importedId) onCreated();
+      if (importedId) onCreated("downloads");
     } catch (error) {
       setMessage(String(error));
     } finally {
@@ -786,7 +786,7 @@ function NewInstancePage({
     <div className="instance-page">
       <div className="instance-heading">
         <div><h1>New Instance</h1><p>Create a new Minecraft instance to start playing.</p></div>
-        <button className="import-pack-action" disabled={importing} onClick={() => void importPack()}><CirclePlus size={17} /><span>{importing ? "Opening…" : "Import"}</span><small>.mrpack or .zip</small></button>
+        <button className="import-pack-action" disabled={importing} onClick={() => void importPack()}><CirclePlus size={17} /><span>{importing ? "Opening…" : "Import"}</span></button>
       </div>
       <div className="instance-layout">
         <section className="instance-main">
@@ -1325,9 +1325,9 @@ function App() {
         ) : page === "new-instance" ? (
           <NewInstancePage
             onCancel={() => setPage("home")}
-            onCreated={() => {
+            onCreated={(destination) => {
               void invoke<InstanceDraft[]>("list_instances").then(setInstances);
-              setPage("home");
+              setPage(destination);
             }}
           />
         ) : (
