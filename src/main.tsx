@@ -29,6 +29,8 @@ import {
   PackageOpen,
   Palette,
   Play,
+  Moon,
+  Monitor,
   Puzzle,
   Rocket,
   Search,
@@ -36,7 +38,9 @@ import {
   Shield,
   SlidersHorizontal,
   TerminalSquare,
+  Sun,
   Trash2,
+  UserRound,
 } from "lucide-react";
 import "./styles.css";
 
@@ -92,6 +96,7 @@ const settingTabs = [
   [Cuboid, "Minecraft"],
   [Rocket, "Launcher"],
   [Shield, "Privacy"],
+  [UserRound, "My Profile"],
   [TerminalSquare, "Advanced"],
 ] as const;
 
@@ -294,10 +299,14 @@ function SettingsPage({
   settings,
   setSettings,
   onSignOut,
+  profile,
+  initialTab,
 }: {
   settings: SettingsState;
   setSettings: (s: SettingsState) => void;
   onSignOut: () => void;
+  profile: MinecraftProfile | null;
+  initialTab?: string;
 }) {
   const update = <K extends keyof SettingsState>(
     key: K,
@@ -321,6 +330,7 @@ function SettingsPage({
       ease: "inOut(3)",
     });
   };
+  useEffect(() => { if (!initialTab) return; const timer = window.setTimeout(() => jumpTo(initialTab), 0); return () => window.clearTimeout(timer); }, [initialTab]);
   const section = (label: string) => ({
     ref: (node: HTMLDivElement | null) => {
       sections.current[label] = node;
@@ -596,6 +606,14 @@ function SettingsPage({
                   onChange={() => {}}
                 />
               </SettingRow>
+            </div>
+          </div>
+          <div className="settings-section" {...section("My Profile")}>
+            <h2>My Profile</h2>
+            <p className="section-subtitle">Your connected Minecraft account.</p>
+            <div className="settings-card profile-settings-card">
+              <div className="profile-settings-avatar">{profile?.name.slice(0, 1).toUpperCase() || "?"}</div>
+              <div><b>{profile?.name || "Not signed in"}</b><span>{profile ? "Microsoft account connected" : "Connect a Microsoft account from the sidebar."}</span></div>
             </div>
           </div>
           <div className="settings-section" {...section("Advanced")}>
@@ -998,6 +1016,9 @@ function App() {
       return null;
     }
   });
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [appearanceMenuOpen, setAppearanceMenuOpen] = useState(false);
+  const [settingsTarget, setSettingsTarget] = useState("General");
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -1148,11 +1169,12 @@ function App() {
   };
   const selectedInstance = instances.find(instance => instance.id === selectedInstanceId);
   const mostRecentInstance = instances[0];
+  const signOut = () => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setSignInOpen(false); setProfileMenuOpen(false); }); };
   return (
     <div
       className="app-shell"
       onContextMenu={handleContextMenu}
-      onClick={() => setContextMenu(null)}
+      onClick={() => { setContextMenu(null); setProfileMenuOpen(false); }}
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
@@ -1233,15 +1255,19 @@ function App() {
         <div className="profile">
           {profile ? (
             <div className="signed-in">
-              <div className="avatar">
-                {profile.name.slice(0, 1).toUpperCase()}
-              </div>
-              <div className="signed-in-name">
-                <b>{profile.name}</b>
-              </div>
-              <button onClick={() => setPage("settings")}>
+              <button className="profile-trigger" onClick={(event) => { event.stopPropagation(); setProfileMenuOpen(value => !value); }}>
+                <div className="avatar">{profile.name.slice(0, 1).toUpperCase()}</div>
+                <div className="signed-in-name"><b>{profile.name}</b></div>
+              </button>
+              <button onClick={() => { setSettingsTarget("General"); setPage("settings"); }}>
                 <SettingsIcon size={16} />
               </button>
+              {profileMenuOpen && <div className="profile-popover" onClick={event => event.stopPropagation()}>
+                <button onClick={() => { setProfileMenuOpen(false); setSettingsTarget("My Profile"); setPage("settings"); }}>My profile</button>
+                <div className="profile-appearance-row"><button onClick={() => setAppearanceMenuOpen(value => !value)}>Appearance <Palette size={15} /></button>{appearanceMenuOpen && <div className="theme-mini-picker"><button className={settings.theme === "dark" ? "picked" : ""} onClick={() => setSettings({ ...settings, theme: "dark" })} title="Dark"><Moon size={15} /></button><button className={settings.theme === "oled" ? "picked" : ""} onClick={() => setSettings({ ...settings, theme: "oled" })} title="OLED Dark"><Monitor size={15} /></button><button className={settings.theme === "dusk" ? "picked" : ""} onClick={() => setSettings({ ...settings, theme: "dusk" })} title="Dusk"><Sun size={15} /></button></div>}</div>
+                <div className="profile-popover-rule" />
+                <button className="profile-logout" onClick={signOut}>Log out</button>
+              </div>}
             </div>
           ) : (
             <button
@@ -1272,7 +1298,7 @@ function App() {
         ) : page === "downloads" ? (
           <DownloadsPage download={download} instances={instances} completed={completedDownloads} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} />
         ) : page === "settings" ? (
-          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={() => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setSignInOpen(false); }); }} />
+          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} initialTab={settingsTarget} />
         ) : page === "new-instance" ? (
           <NewInstancePage
             onCancel={() => setPage("home")}

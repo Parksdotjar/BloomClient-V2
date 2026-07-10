@@ -1381,6 +1381,21 @@ body,
   color: #899298;
   padding: 4px;
 }
+.signed-in > .profile-trigger { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; margin-left: 0; padding: 0; border: 0; background: transparent; text-align: left; }
+.profile-trigger .avatar { flex: 0 0 auto; }
+.profile-popover { position: absolute; z-index: 30; bottom: calc(100% + 10px); left: 0; width: 226px; padding: 7px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel-strong); box-shadow: 0 16px 38px #000a; animation: profile-popover-in 160ms ease both; }
+.profile-popover > button, .profile-appearance-row > button { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 10px 9px; border: 0; border-radius: 7px; background: transparent; text-align: left; color: var(--text); font-size: 14px; }
+.profile-popover > button:hover, .profile-appearance-row > button:hover { background: var(--control); }
+.profile-appearance-row { position: relative; }
+.theme-mini-picker { display: flex; gap: 6px; padding: 3px 8px 9px; }
+.theme-mini-picker button { width: 34px; height: 30px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 7px; background: var(--control); color: var(--muted); }
+.theme-mini-picker button:hover, .theme-mini-picker button.picked { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--control)); }
+.profile-popover-rule { height: 1px; margin: 5px 0; background: var(--border); }
+.profile-popover .profile-logout { color: #f37b7b; }
+@keyframes profile-popover-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+.profile-settings-card { min-height: 82px; display: flex; align-items: center; gap: 13px; padding: 14px 18px; }
+.profile-settings-avatar { width: 47px; height: 47px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--accent) 35%, var(--control)); color: #fff; font-size: 18px; font-weight: 800; }
+.profile-settings-card b, .profile-settings-card span { display: block; }.profile-settings-card b { font-size: 14px; }.profile-settings-card span { margin-top: 5px; color: var(--muted); font-size: 12px; }
 
 /* Expanded Microsoft sign-in overlay */
 .signin-panel {
