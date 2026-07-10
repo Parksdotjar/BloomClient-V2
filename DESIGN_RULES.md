@@ -24,6 +24,7 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 
 - Never use native browser dropdown menus. Use the Bloom custom dropdown component so the open menu matches the client.
 - Toggles must follow standard semantics: off is gray with the thumb left; on is accent-colored with the thumb right.
+- Every toggle must be backed by real state and an `onChange` handler before it is added to the UI. Never ship a hardcoded toggle with a no-op handler.
 - Interactive controls need hover, focus, and pressed states.
 - Use Anime.js for purposeful UI motion, including toggle thumb movement and subtle state transitions. Respect the Show Animations setting.
 - Do not expose browser context menus or browser-looking actions inside the client.
