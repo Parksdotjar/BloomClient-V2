@@ -1,30 +1,39 @@
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, Ordering}};
 use tauri::Emitter;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct MinecraftSession { username: String, uuid: String, access_token: String, refresh_token: String, client_id: String }
 
 #[derive(Default)]
-struct LauncherState { session: Mutex<Option<MinecraftSession>>, launch_active: Arc<Mutex<bool>> }
+struct LauncherState { session: Mutex<Option<MinecraftSession>>, launch_active: Arc<Mutex<bool>>, cancel_requested: Arc<AtomicBool> }
 
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct LaunchProgress { instance_id: String, state: String, progress: u8, message: String }
+struct LaunchProgress { instance_id: String, state: String, progress: u8, message: String, downloaded_bytes: u64, total_bytes: u64, bytes_per_second: u64 }
 
 static CURRENT_LAUNCH: OnceLock<Mutex<LaunchProgress>> = OnceLock::new();
 
 fn current_launch() -> &'static Mutex<LaunchProgress> {
-    CURRENT_LAUNCH.get_or_init(|| Mutex::new(LaunchProgress { instance_id: String::new(), state: "idle".into(), progress: 0, message: String::new() }))
+    CURRENT_LAUNCH.get_or_init(|| Mutex::new(LaunchProgress { instance_id: String::new(), state: "idle".into(), progress: 0, message: String::new(), downloaded_bytes: 0, total_bytes: 0, bytes_per_second: 0 }))
 }
 
 fn emit_launch(app: &tauri::AppHandle, instance_id: &str, state: &str, progress: u8, message: impl Into<String>) {
-    let payload = LaunchProgress { instance_id: instance_id.to_string(), state: state.to_string(), progress, message: message.into() };
+    let payload = LaunchProgress { instance_id: instance_id.to_string(), state: state.to_string(), progress, message: message.into(), downloaded_bytes: 0, total_bytes: 0, bytes_per_second: 0 };
+    if let Ok(mut current) = current_launch().lock() { *current = payload.clone(); }
+    let _ = app.emit("minecraft-launch-progress", payload);
+}
+
+fn emit_download(app: &tauri::AppHandle, instance_id: &str, progress: u8, message: String, downloaded_bytes: u64, total_bytes: u64, bytes_per_second: u64) {
+    let payload = LaunchProgress { instance_id: instance_id.to_string(), state: "installing".into(), progress, message, downloaded_bytes, total_bytes, bytes_per_second };
     if let Ok(mut current) = current_launch().lock() { *current = payload.clone(); }
     let _ = app.emit("minecraft-launch-progress", payload);
 }
 
 #[tauri::command]
-fn get_minecraft_launch_status() -> LaunchProgress { current_launch().lock().map(|status| status.clone()).unwrap_or(LaunchProgress { instance_id: String::new(), state: "idle".into(), progress: 0, message: String::new() }) }
+fn get_minecraft_launch_status() -> LaunchProgress { current_launch().lock().map(|status| status.clone()).unwrap_or(LaunchProgress { instance_id: String::new(), state: "idle".into(), progress: 0, message: String::new(), downloaded_bytes: 0, total_bytes: 0, bytes_per_second: 0 }) }
+
+#[tauri::command]
+fn cancel_minecraft_launch(state: tauri::State<'_, LauncherState>) { state.cancel_requested.store(true, Ordering::SeqCst); }
 
 fn saved_session() -> Option<MinecraftSession> {
     let profile_entry = keyring::Entry::new("Bloom Client", "minecraft-profile").ok()?;
@@ -221,24 +230,44 @@ async fn launch_minecraft(app: tauri::AppHandle, state: tauri::State<'_, Launche
         if *active { return Err("Something is already downloading or running. Please wait.".into()); }
         *active = true;
     }
+    state.cancel_requested.store(false, Ordering::SeqCst);
     let session = state.session.lock().map_err(|_| "Unable to read the Minecraft sign-in session.")?.clone().or_else(saved_session)
         .ok_or_else(|| { if let Ok(mut active) = state.launch_active.lock() { *active = false; } "Sign in with Microsoft before launching Minecraft.".to_string() })?;
     let active = Arc::new(state.launch_active.clone());
+    let cancel_requested = state.cancel_requested.clone();
     std::thread::spawn(move || {
         let config = match load_instance(&instance_id) { Ok(config) => config, Err(error) => { emit_launch(&app, &instance_id, "error", 0, error); if let Ok(mut value) = active.lock() { *value = false; } return; } };
         emit_launch(&app, &instance_id, "installing", 2, "Preparing Minecraft files");
         let launcher = mc_launcher_core::launcher::Launcher::new(&config.directory);
         let mut finished_tasks = 0u8;
+        let mut last_label = String::new();
+        let mut last_received = 0u64;
+        let mut last_sample = std::time::Instant::now();
         let app_for_progress = app.clone();
         let id_for_progress = instance_id.clone();
-        let install = launcher.install_with_progress(mc_launcher_core::install::InstallRequest::vanilla(&config.version), &mut move |event| {
+        let install = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| launcher.install_with_progress(mc_launcher_core::install::InstallRequest::vanilla(&config.version), &mut move |event| {
             use mc_launcher_core::progress::ProgressEvent;
+            if cancel_requested.load(Ordering::SeqCst) { std::panic::panic_any("bloom-download-cancelled"); }
             match event {
-                ProgressEvent::StageStarted { stage } => emit_launch(&app_for_progress, &id_for_progress, "installing", 4, format!("{:?}", stage)),
+                ProgressEvent::StageStarted { stage } => {
+                    use mc_launcher_core::progress::InstallStage;
+                    let message = match stage { InstallStage::ResolveVersion => "Checking Minecraft version", InstallStage::DownloadLibraries => "Downloading libraries", InstallStage::DownloadAssets => "Downloading game assets", InstallStage::InstallRuntime => "Preparing Java runtime", InstallStage::ExtractNatives => "Extracting native files", InstallStage::LoaderInstall => "Installing loader", InstallStage::Verify => "Verifying downloaded files" };
+                    emit_launch(&app_for_progress, &id_for_progress, "installing", 4, message);
+                }
                 ProgressEvent::TaskFinished { label } | ProgressEvent::TaskSkipped { label, .. } => { finished_tasks = finished_tasks.saturating_add(1); let progress = 5 + finished_tasks.saturating_mul(2).min(88); emit_launch(&app_for_progress, &id_for_progress, "installing", progress, label); }
+                ProgressEvent::BytesReceived { label, received, total } => {
+                    if label != last_label { last_label = label.clone(); last_received = 0; last_sample = std::time::Instant::now(); }
+                    let elapsed = last_sample.elapsed().as_secs_f64();
+                    let speed = if elapsed > 0.15 { ((received.saturating_sub(last_received)) as f64 / elapsed) as u64 } else { 0 };
+                    if elapsed > 0.15 { last_received = received; last_sample = std::time::Instant::now(); }
+                    let fraction = total.filter(|value| *value > 0).map(|value| received.saturating_mul(100) / value).unwrap_or(0) as u8;
+                    let progress = (5 + finished_tasks.saturating_mul(2) + fraction / 50).min(93);
+                    emit_download(&app_for_progress, &id_for_progress, progress, label, received, total.unwrap_or(0), speed);
+                }
                 _ => {}
             }
-        });
+        })));
+        let install = match install { Ok(result) => result, Err(_) => { emit_launch(&app, &instance_id, "cancelled", 0, "Download cancelled"); if let Ok(mut value) = active.lock() { *value = false; } return; } };
         let result = (|| -> Result<(), String> {
             let installed = install.map_err(|error| format!("Minecraft installation failed: {error}"))?;
             let version = launcher.load_version(&installed.version_id).map_err(|error| format!("Minecraft metadata could not be loaded: {error}"))?;
@@ -270,7 +299,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(LauncherState::default())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, request_microsoft_device_code, complete_microsoft_login, detect_java_installations, get_minecraft_releases, save_instance, list_instances, launch_minecraft, get_minecraft_launch_status, sign_out_minecraft, get_saved_minecraft_profile])
+        .invoke_handler(tauri::generate_handler![greet, request_microsoft_device_code, complete_microsoft_login, detect_java_installations, get_minecraft_releases, save_instance, list_instances, launch_minecraft, get_minecraft_launch_status, cancel_minecraft_launch, sign_out_minecraft, get_saved_minecraft_profile])
         .run(tauri::generate_context!())
         .expect("error while running Bloom Client");
 }

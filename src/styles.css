@@ -2099,3 +2099,38 @@ body,
   z-index: 3;
   margin: 7px 3px 2px;
 }
+
+/* Downloads */
+.downloads-link.active { background: var(--control); color: var(--accent); font-weight: 700; }
+.downloads-page { padding: 24px 18px 32px; min-height: 100%; }
+.downloads-heading { padding-bottom: 26px; border-bottom: 1px solid var(--border); }
+.downloads-heading h1 { margin: 0; font-size: 30px; letter-spacing: -.04em; }
+.downloads-heading p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+.download-section { margin-top: 30px; }
+.download-section h2 { margin: 0 0 14px; font-size: 17px; }
+.download-task { min-height: 84px; display: flex; align-items: center; gap: 16px; padding: 14px 18px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel); }
+.download-task + .download-task { margin-top: 9px; }
+.download-task-icon { width: 48px; height: 48px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--control)); }
+.download-task-main { flex: 1; min-width: 0; }
+.download-task-main > b, .download-task-main > small, .download-task-title b, .download-task-title small, .download-task-status b, .download-task-status small, .download-metrics span, .download-metrics small { display: block; }
+.download-task-main b, .download-task-title b { font-size: 14px; }
+.download-task-main small, .download-task-title small, .download-task-status small, .download-metrics small { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.download-task-title { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
+.download-task-title > span { color: var(--accent); font-size: 13px; font-weight: 800; }
+.download-linear { height: 4px; margin-top: 10px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--muted) 18%, transparent); }
+.download-linear i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 180ms ease; }
+.download-metrics { width: 155px; text-align: right; font-size: 12px; color: var(--text); }
+.download-task-status { width: 145px; }
+.download-task-status b { color: var(--accent); font-size: 13px; }
+.cancel-download { width: 36px; height: 36px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px; background: var(--control); color: var(--muted); font-size: 21px; line-height: 1; }
+.cancel-download:hover { color: #f16a6a; border-color: color-mix(in srgb, #f16a6a 50%, var(--border)); }
+.downloads-empty { min-height: 78px; display: flex; align-items: center; gap: 13px; padding: 16px 18px; border: 1px dashed var(--border); border-radius: 11px; color: var(--muted); background: color-mix(in srgb, var(--panel) 65%, transparent); }
+.downloads-empty b, .downloads-empty span { display: block; }
+.downloads-empty b { color: var(--text); font-size: 14px; }.downloads-empty span { margin-top: 4px; font-size: 12px; }
+.downloads-empty.compact { min-height: 68px; }
+.completed-task { min-height: 74px; }
+.completed-time { margin-left: auto; color: var(--muted); font-size: 12px; }
+.completed-check { color: var(--accent); }
+.downloads-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; color: var(--muted); font-size: 12px; }
+.downloads-footer button { display: flex; align-items: center; gap: 8px; padding: 10px 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--control); font-size: 12px; font-weight: 700; }
+.downloads-footer button:disabled { opacity: .4; cursor: default; }

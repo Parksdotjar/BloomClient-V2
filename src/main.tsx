@@ -33,6 +33,7 @@ import {
   Shield,
   SlidersHorizontal,
   TerminalSquare,
+  Trash2,
 } from "lucide-react";
 import "./styles.css";
 
@@ -905,17 +906,44 @@ function NewInstancePage({
     </div>
   );
 }
+type DownloadViewState = { active: boolean; progress: number; state: string; message: string; instanceId?: string; downloadedBytes?: number; totalBytes?: number; bytesPerSecond?: number };
+type CompletedDownload = { id: string; name: string; version: string; completedAt: number };
+
+const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
+function DownloadsPage({ download, instances, completed, onClear, onCancel }: { download: DownloadViewState; instances: InstanceDraft[]; completed: CompletedDownload[]; onClear: () => void; onCancel: () => void }) {
+  const activeInstance = instances.find(instance => instance.id === download.instanceId) || instances[0];
+  const status = download.state === "launching" ? "Starting" : download.state === "running" ? "Ready" : "Downloading";
+  return <div className="downloads-page">
+    <header className="downloads-heading"><h1>Downloads</h1><p>Monitor Minecraft installations and launch tasks.</p></header>
+    <section className="download-section"><h2>Active</h2>
+      {download.active ? <div className="download-task active-task">
+        <span className="download-task-icon"><Cuboid size={24} /></span>
+        <div className="download-task-main"><div className="download-task-title"><div><b>{activeInstance?.name || "Minecraft"}</b><small>{activeInstance ? `${activeInstance.version} • Vanilla` : "Preparing instance"}</small></div><span>{Math.round(download.progress)}%</span></div><div className="download-linear"><i style={{ width: `${download.progress}%` }} /></div></div>
+        <div className="download-metrics"><span>{download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Preparing"}</span><small>{download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : download.message || "Preparing files"}</small></div>
+        <div className="download-task-status"><b>{status}</b><small>{download.message || "Preparing files"}</small></div><button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>
+      </div> : <div className="downloads-empty"><Download size={20} /><div><b>No active downloads</b><span>New Minecraft installations will appear here.</span></div></div>}
+    </section>
+    <section className="download-section completed-section"><h2>Completed</h2>
+      {completed.length ? completed.map(item => <div className="download-task completed-task" key={item.id}>
+        <span className="download-task-icon"><Cuboid size={22} /></span><div className="download-task-main"><b>{item.name}</b><small>{item.version} • Vanilla</small></div><span className="completed-time">Completed {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-Math.max(1, Math.round((Date.now() - item.completedAt) / 60000)), "minute")}</span><Check className="completed-check" size={20} />
+      </div>) : <div className="downloads-empty compact"><Check size={18} /><div><b>No completed downloads yet</b><span>Finished installations will be saved here.</span></div></div>}
+    </section>
+    <footer className="downloads-footer"><span>Downloads are saved inside each instance directory.</span><button disabled={!completed.length} onClick={onClear}><Trash2 size={16} />Clear Completed</button></footer>
+  </div>;
+}
+
 function App() {
-  const [page, setPage] = useState<"home" | "settings" | "new-instance">(
+  const [page, setPage] = useState<"home" | "settings" | "new-instance" | "downloads">(
     "home",
   );
   const [instances, setInstances] = useState<InstanceDraft[]>([]);
-  const [download, setDownload] = useState({
+  const [download, setDownload] = useState<DownloadViewState>({
     active: false,
     progress: 0,
     state: "idle",
     message: "",
   });
+  const [completedDownloads, setCompletedDownloads] = useState<CompletedDownload[]>(() => { try { return JSON.parse(localStorage.getItem("bloom-completed-downloads") || "[]").slice(0, 5); } catch { return []; } });
   const [ringProgress, setRingProgress] = useState(0);
   const [gameRunning, setGameRunning] = useState(false);
   const [toast, setToast] = useState("");
@@ -960,7 +988,7 @@ function App() {
   }, []);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    void listen<{ state: string; progress: number; message: string }>(
+    void listen<DownloadViewState>(
       "minecraft-launch-progress",
       (event) => {
         const next = event.payload;
@@ -969,6 +997,10 @@ function App() {
           progress: next.progress,
           state: next.state,
           message: next.message,
+          instanceId: next.instanceId,
+          downloadedBytes: next.downloadedBytes,
+          totalBytes: next.totalBytes,
+          bytesPerSecond: next.bytesPerSecond,
         });
         if (next.state === "error") {
           setGameRunning(false);
@@ -997,6 +1029,13 @@ function App() {
     });
     return () => unlisten?.();
   }, []);
+  useEffect(() => { localStorage.setItem("bloom-completed-downloads", JSON.stringify(completedDownloads.slice(0, 5))); }, [completedDownloads]);
+  useEffect(() => {
+    if (download.state !== "running" || !download.instanceId) return;
+    const instance = instances.find(item => item.id === download.instanceId);
+    if (!instance) return;
+    setCompletedDownloads(current => [{ id: `${instance.id}-${Date.now()}`, name: instance.name, version: instance.version, completedAt: Date.now() }, ...current.filter(item => item.name !== instance.name || item.version !== instance.version)].slice(0, 5));
+  }, [download.state, download.instanceId, instances]);
   useEffect(() => {
     if (!download.active) {
       if (download.state === "idle") setRingProgress(0);
@@ -1021,8 +1060,8 @@ function App() {
   }, [download.state, ringProgress]);
   useEffect(() => {
     const poll = window.setInterval(() => {
-      void invoke<{ state: string; progress: number; message: string }>("get_minecraft_launch_status").then((status) => {
-        if (status.state === "installing" || status.state === "launching") setDownload({ active: true, progress: status.progress, state: status.state, message: status.message });
+      void invoke<DownloadViewState>("get_minecraft_launch_status").then((status) => {
+        if (status.state === "installing" || status.state === "launching") setDownload({ ...status, active: true });
       }).catch(() => {});
     }, 250);
     return () => window.clearInterval(poll);
@@ -1038,6 +1077,7 @@ function App() {
       progress: 1,
       state: "installing",
       message: "Preparing Minecraft download",
+      instanceId: instance.id,
     });
     try {
       await invoke("launch_minecraft", { instanceId: instance.id });
@@ -1137,7 +1177,7 @@ function App() {
           <span>Add instance</span>
         </button>
         <div className="sidebar-spacer" />
-        <button className="sidebar-link downloads-link">
+        <button className={`sidebar-link downloads-link ${page === "downloads" ? "active" : ""}`} onClick={() => setPage("downloads")}>
           <Download size={17} />
           Downloads {download.active && <span className={`download-ring ${download.state === "running" && ringProgress >= 99 ? "complete" : ""}`} style={{ "--download-progress": `${ringProgress}%` } as CSSProperties}>{download.state === "running" && ringProgress >= 99 && <Check size={12} />}</span>}
         </button>
@@ -1182,7 +1222,9 @@ function App() {
         </div>
       </aside>
       <main className="content">
-        {page === "settings" ? (
+        {page === "downloads" ? (
+          <DownloadsPage download={download} instances={instances} completed={completedDownloads} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} />
+        ) : page === "settings" ? (
           <SettingsPage settings={settings} setSettings={setSettings} onSignOut={() => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setSignInOpen(false); }); }} />
         ) : page === "new-instance" ? (
           <NewInstancePage
