@@ -211,6 +211,7 @@ function SignInPanel({
   onClose: () => void;
   onSignedIn: (profile: MinecraftProfile) => void;
 }) {
+  const loginStarted = useRef(false);
   const [copied, setCopied] = useState(false);
   const [handoffReady, setHandoffReady] = useState(false);
   const [status, setStatus] = useState("Requesting a Microsoft sign-in code…");
@@ -253,6 +254,8 @@ function SignInPanel({
     }
   };
   useEffect(() => {
+    if (loginStarted.current) return;
+    loginStarted.current = true;
     void startMicrosoftLogin();
   }, []);
   return (
@@ -279,15 +282,18 @@ function SignInPanel({
         )}
       </div>
       {copied && <div className="copy-toast">Copied</div>}
+      {!status.startsWith("Requesting") && !status.startsWith("Code ready") && <div className="signin-error">{status}</div>}
     </div>
   );
 }
 function SettingsPage({
   settings,
   setSettings,
+  onSignOut,
 }: {
   settings: SettingsState;
   setSettings: (s: SettingsState) => void;
+  onSignOut: () => void;
 }) {
   const update = <K extends keyof SettingsState>(
     key: K,
@@ -612,6 +618,14 @@ function SettingsPage({
                   value="Default directory"
                   readOnly
                 />
+              </SettingRow>
+              <SettingRow
+                title="Minecraft Account"
+                description="Remove the saved Microsoft account from this device."
+              >
+                <button className="danger-button" onClick={onSignOut}>
+                  Sign out
+                </button>
               </SettingRow>
               <SettingRow
                 title="Reset Preferences"
@@ -1164,7 +1178,7 @@ function App() {
       </aside>
       <main className="content">
         {page === "settings" ? (
-          <SettingsPage settings={settings} setSettings={setSettings} />
+          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={() => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setSignInOpen(false); }); }} />
         ) : page === "new-instance" ? (
           <NewInstancePage
             onCancel={() => setPage("home")}

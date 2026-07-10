@@ -38,6 +38,16 @@ fn save_session(session: &MinecraftSession) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn sign_out_minecraft(state: tauri::State<'_, LauncherState>) -> Result<(), String> {
+    *state.session.lock().map_err(|_| "Unable to clear the Minecraft sign-in session.")? = None;
+    let entry = keyring::Entry::new("Bloom Client", "minecraft-session").map_err(|error| error.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(format!("Windows could not remove the saved sign-in: {error}")),
+    }
+}
+
+#[tauri::command]
 fn greet(name: &str) -> String { format!("Welcome to Bloom Client, {name}!") }
 
 #[tauri::command]
@@ -261,7 +271,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(LauncherState::default())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, request_microsoft_device_code, complete_microsoft_login, detect_java_installations, get_minecraft_releases, save_instance, list_instances, launch_minecraft, get_minecraft_launch_status])
+        .invoke_handler(tauri::generate_handler![greet, request_microsoft_device_code, complete_microsoft_login, detect_java_installations, get_minecraft_releases, save_instance, list_instances, launch_minecraft, get_minecraft_launch_status, sign_out_minecraft])
         .run(tauri::generate_context!())
         .expect("error while running Bloom Client");
 }
