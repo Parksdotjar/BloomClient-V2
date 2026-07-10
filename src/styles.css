@@ -2045,12 +2045,16 @@ body,
 }
 .downloads-link {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .download-ring {
   --download-progress: 0%;
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   margin-left: auto;
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
   background: conic-gradient(var(--accent) var(--download-progress), color-mix(in srgb, var(--text-muted) 25%, transparent) 0);

@@ -957,7 +957,7 @@ function App() {
         }
         if (next.state === "running") {
           setGameRunning(true);
-          window.setTimeout(() => setDownload(current => ({ ...current, active: false })), 900);
+          window.setTimeout(() => setDownload(current => ({ ...current, active: false })), 1800);
         }
         if (next.state === "idle") {
           setGameRunning(false);
@@ -984,6 +984,12 @@ function App() {
       window.setTimeout(() => setToast(""), 3500);
       return;
     }
+    setDownload({
+      active: true,
+      progress: 1,
+      state: "installing",
+      message: "Preparing Minecraft download",
+    });
     try {
       await invoke("launch_minecraft", { instanceId: instance.id });
     } catch (error) {
@@ -992,6 +998,7 @@ function App() {
         setSignInOpen(true);
         setToast("Your saved profile needs a quick Microsoft reconnect before launching.");
       } else setToast(message);
+      setDownload({ active: false, progress: 0, state: "idle", message: "" });
       window.setTimeout(() => setToast(""), 5000);
     }
   };
