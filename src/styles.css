@@ -2158,7 +2158,7 @@ body,
 .downloads-footer button:disabled { opacity: .4; cursor: default; }
 
 /* Instance workspace */
-.sidebar-instance.active { background: color-mix(in srgb, var(--accent) 10%, var(--control)); color: var(--accent); box-shadow: inset 2px 0 var(--accent); }
+.sidebar-instance.active { background: color-mix(in srgb, var(--accent) 10%, var(--control)); color: var(--accent); }
 .sidebar-instance-icon, .recent-instance-icon { width: 24px; height: 24px; flex: 0 0 auto; object-fit: cover; border-radius: 6px; }
 .recent-instance-icon { width: 30px; height: 30px; }
 .instance-card { cursor: pointer; }
