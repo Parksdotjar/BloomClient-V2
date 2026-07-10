@@ -37,7 +37,7 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Pagination controls use Bloom's custom button styling and remain theme- and accent-aware.
 - Provider catalogs must filter by the instance's exact Minecraft version and loader before showing an install action.
 - Catalog installation uses the accent-filled plus action, reports genuine byte progress through Downloads, and returns to the installed list through an accent-filled close action.
-- Instance collection search and filters live in a separate sticky floating surface below the collection card, with enough shadow and contrast to remain distinct while the list scrolls independently.
+- Instance collection search and filters live in a separate floating surface overlapping the collection's bottom edge by roughly half its height; pagination sits beneath it while the list scrolls independently.
 
 ## Scrollbars
 
