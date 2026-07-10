@@ -66,3 +66,13 @@ html,body,.app-shell{background:var(--page);color:#f1f4f1}.sidebar{background:li
 :root[data-theme=oled] .ad-rail{background:#050606;border-color:#1b1f20}
 :root[data-theme=oled] .ad-placeholder{background:linear-gradient(145deg,#0d1011,#070909);border-color:#252a2b}
 
+
+/* OLED Dark v2: near-black surfaces */
+:root[data-theme=oled]{--page:#000;--sidebar-surface:#030404;--panel:#080a0b;--panel-strong:#0c0e0f;--rail:#020303;--line:#111313;--muted:#737879;--control:#060808;--scroll-track:#020303;--scroll-thumb:#202425}
+:root[data-theme=oled] .sidebar{background:#030404;border-color:#111313}
+:root[data-theme=oled] .settings-card,:root[data-theme=oled] .quick-card,:root[data-theme=oled] .hero-card{background:#080a0b;border-color:#111313}
+:root[data-theme=oled] .settings-tabs button.selected,:root[data-theme=oled] .settings-tabs button:hover{background:#0c0e0f}
+:root[data-theme=oled] .select-trigger,:root[data-theme=oled] .text-input,:root[data-theme=oled] .select-menu,:root[data-theme=oled] .context-menu{background:#060808;border-color:#111313}
+:root[data-theme=oled] .ad-rail{background:#020303;border-color:#111313}
+:root[data-theme=oled] .ad-placeholder{background:#080a0b;border-color:#181b1c}
+
