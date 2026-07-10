@@ -2132,6 +2132,9 @@ body,
 @keyframes loading-dot-cycle { 0%, 100% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 .cancel-download { width: 36px; height: 36px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px; background: var(--control); color: var(--muted); font-size: 21px; line-height: 1; }
 .cancel-download:hover { color: #f16a6a; border-color: color-mix(in srgb, #f16a6a 50%, var(--border)); }
+.failed-task { border-color: color-mix(in srgb, #f16a6a 42%, var(--border)); }
+.failed-task .download-task-status { width: 260px; }
+.failed-task .download-task-status b { color: #f16a6a; }
 .downloads-empty { min-height: 78px; display: flex; align-items: center; gap: 13px; padding: 16px 18px; border: 1px dashed var(--border); border-radius: 11px; color: var(--muted); background: color-mix(in srgb, var(--panel) 65%, transparent); }
 .downloads-empty b, .downloads-empty span { display: block; }
 .downloads-empty b { color: var(--text); font-size: 14px; }.downloads-empty span { margin-top: 4px; font-size: 12px; }

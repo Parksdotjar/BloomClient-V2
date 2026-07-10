@@ -295,7 +295,15 @@ fn install_instance_files(app: &tauri::AppHandle, instance_id: &str, config: &In
         mc_launcher_core::install::loader::write_loader_profile(minecraft_dir, &profile).map_err(|error| error.to_string())?;
         let launcher = mc_launcher_core::launcher::Launcher::new(minecraft_dir);
         let merged = launcher.load_version(&version_id).map_err(|error| error.to_string())?;
-        let loader_plan = mc_launcher_core::install::vanilla::plan_vanilla_downloads(&merged, minecraft_dir).map_err(|error| error.to_string())?;
+        let mut loader_plan = mc_launcher_core::install::vanilla::plan_vanilla_downloads(&merged, minecraft_dir).map_err(|error| error.to_string())?;
+        for library in &merged.libraries {
+            if library.downloads.is_some() { continue; }
+            let Some(repository) = library.url.as_deref() else { continue; };
+            let coordinate = mc_launcher_core::core::maven::MavenCoordinate::parse(&library.name).map_err(|error| error.to_string())?;
+            let path = coordinate.artifact_path();
+            let relative = path.to_string_lossy().replace('\\', "/");
+            loader_plan.tasks.push(mc_launcher_core::net::download::DownloadTask { url: format!("{}/{}", repository.trim_end_matches('/'), relative), destination: minecraft_dir.join("libraries").join(path), checksum: None, label: library.name.clone() });
+        }
         execute_download_plan(app, instance_id, &loader_plan, cancel, 89, 94, "Installing Fabric Loader", false)?;
         mc_launcher_core::install::natives::extract_natives(&merged.libraries, minecraft_dir, &version_id).map_err(|error| error.to_string())?;
         emit_launch(app, instance_id, "installing", 94, "Installing Fabric API");

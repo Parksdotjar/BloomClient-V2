@@ -918,15 +918,16 @@ type CompletedDownload = { id: string; name: string; version: string; loader?: s
 const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
 function DownloadsPage({ download, instances, completed, onClear, onCancel }: { download: DownloadViewState; instances: InstanceDraft[]; completed: CompletedDownload[]; onClear: () => void; onCancel: () => void }) {
   const activeInstance = instances.find(instance => instance.id === download.instanceId) || instances[0];
-  const status = download.state === "launching" ? "Starting" : download.state === "running" ? "Ready" : "Downloading";
+  const failed = download.state === "error";
+  const status = failed ? "Failed" : download.state === "launching" ? "Starting" : download.state === "running" ? "Ready" : "Downloading";
   return <div className="downloads-page">
     <header className="downloads-heading"><h1>Downloads</h1><p>Monitor Minecraft installations and launch tasks.</p></header>
     <section className="download-section"><h2>Active</h2>
-      {download.active ? <div className="download-task active-task">
+      {download.active || failed ? <div className={`download-task active-task ${failed ? "failed-task" : ""}`}>
         <span className="download-task-icon"><Cuboid size={24} /></span>
         <div className="download-task-main"><div className="download-task-title"><div><b>{activeInstance?.name || "Minecraft"}</b><small>{activeInstance ? `${activeInstance.version} • ${activeInstance.loader}` : "Preparing instance"}</small></div><span>{Math.round(download.progress)}%</span></div><div className="download-linear"><i style={{ width: `${download.progress}%` }} /></div></div>
-        <div className="download-metrics"><span>{download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Scanning files"}</span><small>{download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : "Calculating speed"}</small></div>
-        <div className="download-task-status"><b>{status}</b><small>{download.message || "Preparing files"}{download.message === "Loading assets" && <i className="loading-dots" />}</small></div><button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>
+        <div className="download-metrics"><span>{failed ? "Task stopped" : download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Scanning files"}</span><small>{failed ? "See error" : download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : "Calculating speed"}</small></div>
+        <div className="download-task-status"><b>{status}</b><small title={download.message}>{download.message || "Preparing files"}{download.message === "Loading assets" && <i className="loading-dots" />}</small></div>{!failed && <button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>}
       </div> : <div className="downloads-empty"><Download size={20} /><div><b>No active downloads</b><span>New Minecraft installations will appear here.</span></div></div>}
     </section>
     <section className="download-section completed-section"><h2>Completed</h2>

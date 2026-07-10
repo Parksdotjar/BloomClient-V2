@@ -16,6 +16,7 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 | BLIM-002 | Fixed | Development | Vite watched Rust build binaries and crashed with Windows `EBUSY` |
 | BLIM-003 | Open | Packaging | Tauri packaging needs the supplied icon assets enabled |
 | BLIM-004 | Fixed | Launcher | Download completed before Minecraft was actually ready |
+| BLIM-005 | Fixed | Fabric | Fabric profile installed without its Maven libraries |
 
 ---
 
@@ -51,6 +52,14 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 - **Root cause:** Progress used an estimated event counter, the dependency library did not emit its advertised byte events, and `running` was emitted at process spawn rather than game readiness. Each instance also used a separate dependency root.
 - **Fix:** Bloom now streams official download plans itself with byte counts, transfer speed, checksum verification, cancellation, and exact task completion. Libraries/assets use a shared Bloom cache, while saves/mods remain isolated per instance. Startup remains active until Minecraft logs a real renderer/resource/audio readiness milestone.
 - **Verification:** `cargo check` and `npm run build` pass.
+
+## BLIM-005 — Fabric Maven libraries were missing
+
+- **Status:** Fixed
+- **Symptom:** Fabric installation disappeared from Active Downloads, but no playable Minecraft window opened and no new game log was created.
+- **Root cause:** Fabric metadata exposes loader libraries through Maven coordinates and repository URLs without Mojang-style `downloads` objects. The dependency planner ignored those legacy Maven entries, leaving the Fabric library cache empty.
+- **Fix:** Bloom now resolves those Maven coordinates, streams every Fabric library into the shared cache, and keeps failed tasks visible on Downloads with their error message.
+- **Verification:** The generated Fabric Maven URL returns HTTP 200; `cargo check` and `npm run build` pass.
 
 ## How to add a bug
 
