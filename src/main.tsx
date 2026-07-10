@@ -1,56 +1,29 @@
-import { StrictMode, useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { createRoot } from 'react-dom/client';
-import { Archive, ArrowDownToLine, ChevronRight, CirclePlus, Cuboid, Download, FolderOpen, Gamepad2, House, Layers3, List, PackageOpen, Puzzle, Settings, Sparkles, TerminalSquare, WandSparkles } from 'lucide-react';
+import { StrictMode, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { animate } from 'animejs';
+import { ChevronDown, ChevronRight, CirclePlus, Cuboid, Download, FolderOpen, House, Layers3, PackageOpen, Palette, Puzzle, Rocket, Settings as SettingsIcon, Shield, SlidersHorizontal, TerminalSquare, WandSparkles } from 'lucide-react';
 import './styles.css';
 
-const nav = [
-  [House, 'Home'], [Puzzle, 'Mods'], [PackageOpen, 'Resource Packs'], [Layers3, 'Shaders'], [Settings, 'Settings'],
-];
-const quickActions = [
-  [Puzzle, 'Browse Mods', 'Find and install mods\nfrom Modrinth', 'green'],
-  [FolderOpen, 'Resource Packs', 'Browse and manage\nyour resource packs', 'gold'],
-  [Cuboid, 'Shaders', 'Manage your\nshader packs', 'blue'],
-  [Settings, 'Settings', 'Configure client\npreferences', 'slate'],
-];
+type Theme = 'dark' | 'oled' | 'dusk';
+type SettingsState = { theme: Theme; accent: string; animations: boolean; tray: boolean; updates: boolean; memory: string; java: string };
+const defaults: SettingsState = { theme: 'dark', accent: '#8ee365', animations: true, tray: true, updates: true, memory: '4096 MB', java: 'Automatic' };
+const nav = [[House, 'Home'], [Puzzle, 'Mods'], [PackageOpen, 'Resource Packs'], [Layers3, 'Shaders'], [SettingsIcon, 'Settings']] as const;
+const quickActions = [[Puzzle, 'Browse Mods', 'Find and install mods\nfrom Modrinth', 'green'], [FolderOpen, 'Resource Packs', 'Browse and manage\nyour resource packs', 'gold'], [Cuboid, 'Shaders', 'Manage your\nshader packs', 'blue'], [SettingsIcon, 'Settings', 'Configure client\npreferences', 'slate']] as const;
+const settingTabs = [[SettingsIcon, 'General'], [Palette, 'Appearance'], [SlidersHorizontal, 'Performance'], [Cuboid, 'Minecraft'], [Rocket, 'Launcher'], [Shield, 'Privacy'], [TerminalSquare, 'Advanced']] as const;
 
-function EmptySlot({ title = 'Empty slot', sub = 'Create an instance to get started' }: { title?: string; sub?: string }) {
-  return <div className="empty-slot"><span className="empty-plus">＋</span><div><strong>{title}</strong><p>{sub}</p></div></div>;
+function EmptySlot({ title = 'Empty slot', sub = 'Create an instance to get started' }: { title?: string; sub?: string }) { return <div className="empty-slot"><span className="empty-plus">＋</span><div><strong>{title}</strong><p>{sub}</p></div></div>; }
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) { const ref = useRef<HTMLSpanElement>(null); const change = () => { const next = !value; onChange(next); if (ref.current) animate(ref.current, { translateX: next ? 16 : 0, duration: 220, ease: 'out(3)' }); }; return <button className={'toggle ' + (value ? 'on' : '')} onClick={change} aria-pressed={value}><span ref={ref} /></button>; }
+function Select({ value, options, onChange }: { value: string; options: string[]; onChange: (v: string) => void }) { return <label className="select-wrap"><select value={value} onChange={e => onChange(e.target.value)}>{options.map(option => <option key={option}>{option}</option>)}</select><ChevronDown size={15} /></label>; }
+function SettingRow({ title, description, children }: { title: string; description: string; children: ReactNode }) { return <div className="setting-row"><div><b>{title}</b><p>{description}</p></div>{children}</div>; }
+
+function SettingsPage({ settings, setSettings }: { settings: SettingsState; setSettings: (s: SettingsState) => void }) {
+  const update = <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => setSettings({ ...settings, [key]: value });
+  return <div className="settings-page"><div className="settings-heading"><h1>Settings</h1><p>Configure Bloom Client to your liking.</p></div><div className="settings-layout"><aside className="settings-tabs">{settingTabs.map(([Icon, label], i) => <button className={i === 0 ? 'selected' : ''} key={label}><Icon size={18} />{label}</button>)}</aside><div className="settings-content"><h2>General</h2><p className="section-subtitle">Basic settings for Bloom Client.</p><div className="settings-card"><SettingRow title="Language" description="Choose your preferred language."><Select value="English (US)" options={['English (US)', 'Spanish', 'French', 'German']} onChange={() => {}} /></SettingRow><SettingRow title="Startup Behavior" description="Choose what happens when Bloom Client starts."><Select value="Open Home" options={['Open Home', 'Open Settings', 'Remember last page']} onChange={() => {}} /></SettingRow><SettingRow title="Minimize to System Tray" description="Close button will minimize Bloom Client to your system tray."><Toggle value={settings.tray} onChange={v => update('tray', v)} /></SettingRow><SettingRow title="Check for Updates" description="Automatically check for updates on startup."><Toggle value={settings.updates} onChange={v => update('updates', v)} /></SettingRow></div><h2>Appearance</h2><p className="section-subtitle">Customize how Bloom Client looks.</p><div className="settings-card"><SettingRow title="Theme" description="Choose your preferred theme."><Select value={settings.theme === 'dark' ? 'Dark' : settings.theme === 'oled' ? 'OLED Dark' : 'Dusk'} options={['Dark', 'OLED Dark', 'Dusk']} onChange={v => update('theme', v === 'OLED Dark' ? 'oled' : v === 'Dusk' ? 'dusk' : 'dark')} /></SettingRow><SettingRow title="Accent Color" description="Choose the accent color for the client."><div className="accent-picks">{['#8ee365','#5d9dff','#a56bff','#e957ad','#f4a340','#f05454'].map(color => <button key={color} className={settings.accent === color ? 'picked' : ''} style={{ background: color }} onClick={() => update('accent', color)} aria-label={color} />)}</div></SettingRow><SettingRow title="Show Animations" description="Enable subtle animations throughout the client."><Toggle value={settings.animations} onChange={v => update('animations', v)} /></SettingRow></div><h2>Performance</h2><p className="section-subtitle">Optimize performance and resource usage.</p><div className="settings-card"><SettingRow title="Memory Allocation" description="Set how much RAM Minecraft can use."><Select value={settings.memory} options={['2048 MB', '4096 MB', '6144 MB', '8192 MB']} onChange={v => update('memory', v)} /></SettingRow><SettingRow title="Java Runtime" description="Choose which Java installation launches Minecraft."><Select value={settings.java} options={['Automatic', 'Java 8', 'Java 17', 'Java 21']} onChange={v => update('java', v)} /></SettingRow><SettingRow title="Java Arguments" description="Advanced JVM arguments for Minecraft launches."><input className="text-input" placeholder="-XX:+UseG1GC" /></SettingRow></div><h2>Minecraft</h2><p className="section-subtitle">Minecraft-specific defaults for future instances.</p><div className="settings-card"><SettingRow title="Default Game Version" description="Used when creating a new instance."><Select value="Latest release" options={['Latest release', '1.21.1', '1.20.4', '1.8.9']} onChange={() => {}} /></SettingRow><SettingRow title="Default Mod Loader" description="The loader selected for new instances."><Select value="Fabric" options={['Fabric', 'Quilt', 'Forge', 'Vanilla']} onChange={() => {}} /></SettingRow></div></div></div></div>;
 }
 
 function App() {
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const hideContextMenu = () => setContextMenu(null);
-  const handleContextMenu = (event: MouseEvent) => {
-    event.preventDefault();
-    setContextMenu({ x: event.clientX, y: event.clientY });
-  };
-  const handleKeyDown = (event: KeyboardEvent) => {
-    const blocked = event.key === 'F12' || (event.ctrlKey && event.shiftKey && ['i', 'j', 'c'].includes(event.key.toLowerCase())) || (event.ctrlKey && event.key.toLowerCase() === 'u');
-    if (blocked) event.preventDefault();
-  };
-
-  return <div className="app-shell" onContextMenu={handleContextMenu} onClick={hideContextMenu} onKeyDown={handleKeyDown} tabIndex={-1}>
-    <aside className="sidebar">
-      <div className="brand"><img src="/bloom-logo.png" alt="Bloom logo" /><div><b>Bloom Client</b><span>Minecraft Client</span></div></div>
-      <button className="new-instance"><CirclePlus size={18} /> <span>New instance</span></button>
-      <nav>{nav.map(([Icon, label], index) => <button className={index === 0 ? 'active' : ''} key={label as string}><Icon size={17} strokeWidth={2} />{label as string}</button>)}</nav>
-      <div className="sidebar-rule" />
-      <p className="section-label">INSTANCES</p>
-      <div className="instance-list"><EmptySlot title="No instances yet" sub="Your instances will appear here" /></div>
-      <button className="add-instance"><CirclePlus size={16} /> <span>Add instance</span></button>
-      <div className="sidebar-spacer" />
-      <button className="sidebar-link"><Download size={17} />Downloads</button><button className="sidebar-link"><TerminalSquare size={17} />Logs</button>
-      <div className="profile"><div className="avatar">P</div><div><b>Parks</b><span><em /> Online</span></div><button><Settings size={16} /></button></div>
-    </aside>
-    <main className="content">
-      <header className="topbar" />
-      <section className="hero"><div><h1>Welcome back, <span>Parks</span></h1><p>Ready to play? Launch an instance or get started below.</p></div><div className="hero-card"><div className="hero-glow" /><div><b>Make something new</b><span>Create an instance to start playing</span></div><button>＋ Create</button></div></section>
-      <div className="rule" />
-      <section><h2>Quick Actions</h2><div className="quick-grid">{quickActions.map(([Icon, title, desc, color]) => <button className="quick-card" key={title as string}><span className={'quick-icon ' + color}><Icon size={25} strokeWidth={1.8} /></span><span><b>{title as string}</b><small>{desc as string}</small></span></button>)}</div></section>
-      <div className="columns"><section className="recent"><div className="section-heading"><h2>Recent Instances</h2><button>View all <ChevronRight size={15} /></button></div>{[1,2,3,4].map(i => <EmptySlot key={i} />)}<button className="view-all">View all instances <ChevronRight size={16} /></button></section><section className="whats-new"><div className="section-heading"><h2>What's New</h2><button>View all <ChevronRight size={15} /></button></div>{[1,2,3].map(i => <EmptySlot key={i} title="Nothing new yet" sub="Updates and news will appear here" />)}</section></div>
-    </main>
-    {contextMenu && <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={hideContextMenu}><div className="context-menu-title">Quick actions</div><button>Coming soon</button><button>Coming soon</button><button>Coming soon</button></div>}
-  </div>;
+  const [page, setPage] = useState<'home' | 'settings'>('home'); const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null); const [settings, setSettings] = useState<SettingsState>(() => { try { return { ...defaults, ...JSON.parse(localStorage.getItem('bloom-settings') || '{}') }; } catch { return defaults; } });
+  useEffect(() => { localStorage.setItem('bloom-settings', JSON.stringify(settings)); document.documentElement.style.setProperty('--accent', settings.accent); document.documentElement.dataset.theme = settings.theme; }, [settings]);
+  const handleContextMenu = (event: MouseEvent) => { event.preventDefault(); setContextMenu({ x: event.clientX, y: event.clientY }); }; const handleKeyDown = (event: KeyboardEvent) => { if (event.key === 'F12' || (event.ctrlKey && event.shiftKey) || (event.ctrlKey && event.key.toLowerCase() === 'u')) event.preventDefault(); };
+  return <div className="app-shell" onContextMenu={handleContextMenu} onClick={() => setContextMenu(null)} onKeyDown={handleKeyDown} tabIndex={-1}><aside className="sidebar"><div className="brand"><img src="/bloom-logo.png" alt="Bloom logo" /><div><b>Bloom Client</b><span>Minecraft Client</span></div></div><button className="new-instance"><CirclePlus size={18} /><span>New instance</span></button><nav>{nav.map(([Icon, label], index) => <button className={(page === 'home' && index === 0) || (page === 'settings' && label === 'Settings') ? 'active' : ''} key={label} onClick={() => label === 'Settings' ? setPage('settings') : setPage('home')}><Icon size={17} />{label}</button>)}</nav><div className="sidebar-rule" /><p className="section-label">INSTANCES</p><div className="instance-list"><EmptySlot title="No instances yet" sub="Your instances will appear here" /></div><button className="add-instance"><CirclePlus size={16} /><span>Add instance</span></button><div className="sidebar-spacer" /><button className="sidebar-link"><Download size={17} />Downloads</button><button className="sidebar-link"><TerminalSquare size={17} />Logs</button><div className="profile"><div className="avatar">P</div><div><b>Parks</b><span><em /> Online</span></div><button><SettingsIcon size={16} /></button></div></aside><main className="content">{page === 'settings' ? <SettingsPage settings={settings} setSettings={setSettings} /> : <><header className="topbar" /><section className="hero"><div><h1>Welcome back, <span>Parks</span></h1><p>Ready to play? Launch an instance or get started below.</p></div><div className="hero-card"><div className="hero-glow" /><div><b>Make something new</b><span>Create an instance to start playing</span></div><button>＋ Create</button></div></section><div className="rule" /><section><h2>Quick Actions</h2><div className="quick-grid">{quickActions.map(([Icon, title, desc, color]) => <button className="quick-card" key={title}><span className={'quick-icon ' + color}><Icon size={25} /></span><span><b>{title}</b><small>{desc}</small></span></button>)}</div></section><div className="columns"><section className="recent"><div className="section-heading"><h2>Recent Instances</h2><button>View all <ChevronRight size={15} /></button></div>{[1,2,3,4].map(i => <EmptySlot key={i} />)}<button className="view-all">View all instances <ChevronRight size={16} /></button></section><section className="whats-new"><div className="section-heading"><h2>What's New</h2><button>View all <ChevronRight size={15} /></button></div>{[1,2,3].map(i => <EmptySlot key={i} title="Nothing new yet" sub="Updates and news will appear here" />)}</section></div></>}</main>{contextMenu && <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={() => setContextMenu(null)}><div className="context-menu-title">Quick actions</div><button>Coming soon</button><button>Coming soon</button><button>Coming soon</button></div>}</div>;
 }
-
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
