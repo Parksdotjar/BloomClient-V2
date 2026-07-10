@@ -119,3 +119,8 @@ html,body,.app-shell{background:var(--page);color:#f1f4f1}.sidebar{background:li
 /* Lift the copy confirmation farther above the card */
 .copy-toast{top:-42px;animation:copy-pill-from-under-higher 2s cubic-bezier(.22,1,.36,1) both}@keyframes copy-pill-from-under-higher{0%{opacity:0;transform:translate(-50%,60px)}18%,72%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-18px)}}
 
+
+/* Guided sign-in handoff */
+.next-step-cue{position:relative;z-index:4;display:flex;align-items:center;justify-content:center;gap:3px;margin:7px 0 -3px;color:var(--accent);font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;animation:next-step-rise 260ms cubic-bezier(.22,1,.36,1)}.microsoft-button.ready{position:relative;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent),0 0 22px color-mix(in srgb,var(--accent) 25%,transparent);animation:next-button-pulse 1.8s ease-in-out infinite}.microsoft-button.ready::after{content:"";position:absolute;inset:-6px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:12px;opacity:0;animation:next-ring 1.8s ease-out infinite;pointer-events:none}@keyframes next-step-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes next-button-pulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.08)}}@keyframes next-ring{0%{opacity:.7;transform:scale(.96)}100%{opacity:0;transform:scale(1.08)}}
+
+
