@@ -30,6 +30,8 @@ button {
   color: inherit;
   cursor: pointer;
 }
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 2px; }
 .sidebar {
   width: 280px;
   flex-shrink: 0;
@@ -952,7 +954,8 @@ body,
   --panel: #181f21;
   --panel-strong: #1b2224;
   --rail: #111617;
-  --line: #30393b;
+  --line: #252d2f;
+  --border: #252d2f;
   --muted: #9da7a9;
   --control: #1a2022;
   --scroll-track: #111617;
@@ -964,7 +967,8 @@ body,
   --panel: #111718;
   --panel-strong: #151c1d;
   --rail: #050707;
-  --line: #202a2c;
+  --line: #14191a;
+  --border: #14191a;
   --muted: #899596;
   --control: #101617;
   --scroll-track: #050707;
@@ -976,7 +980,8 @@ body,
   --panel: #1a2530;
   --panel-strong: #202d39;
   --rail: #141d29;
-  --line: #304151;
+  --line: #273644;
+  --border: #273644;
   --muted: #a3b2c0;
   --control: #1c2834;
   --scroll-track: #111925;
@@ -1055,7 +1060,7 @@ body,
 }
 .ad-placeholder {
   background: linear-gradient(145deg, var(--panel), var(--rail));
-  border-color: color-mix(in srgb, var(--line) 130%, #fff);
+  border-color: color-mix(in srgb, var(--line) 88%, var(--panel-strong));
 }
 .sidebar-rule,
 .rule,
@@ -1082,6 +1087,7 @@ body,
   --panel-strong: #121516;
   --rail: #050606;
   --line: #1b1f20;
+  --border: #1b1f20;
   --muted: #858b8c;
   --control: #0b0e0f;
   --scroll-track: #050606;
@@ -1125,6 +1131,7 @@ body,
   --panel-strong: #0c0e0f;
   --rail: #020303;
   --line: #111313;
+  --border: #111313;
   --muted: #737879;
   --control: #060808;
   --scroll-track: #020303;
@@ -2216,7 +2223,7 @@ body,
 .instance-tabs { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 26px; border-top: 1px solid var(--border); }
 .instance-tabs > button { min-height: 78px; display: flex; align-items: center; gap: 13px; padding: 13px 16px; border: 1px solid transparent; border-right-color: var(--border); background: transparent; text-align: left; }
 .instance-tabs > button:last-child { border-right-color: transparent; }
-.instance-tabs > button.selected { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.instance-tabs > button.selected { border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .instance-tabs > button > span { width: 41px; height: 41px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px; color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--control)); }
 .instance-tabs b, .instance-tabs small { display: block; }.instance-tabs b { font-size: 13px; }.instance-tabs small { margin-top: 5px; color: var(--muted); font-size: 11px; }
 .instance-manager { margin-top: 16px; padding: 22px; }

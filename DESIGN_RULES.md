@@ -20,6 +20,13 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Keep navigation icons and labels aligned on one consistent grid.
 - Use the same spacing rhythm and card treatment across settings, home, and future screens.
 
+## Borders and separators
+
+- Never use bright white borders, focus rings, dividers, or selection outlines.
+- Structural horizontal and vertical separators use the theme's low-contrast border token, only slightly lighter than the surrounding surface.
+- Selected outlines use a dark, muted mix of the active accent color and the theme border—not the full-strength accent and never white.
+- Focus-visible states use a restrained translucent accent ring so keyboard navigation remains clear without introducing bright lines.
+
 ## Controls and interaction
 
 - Never use native browser dropdown menus. Use the Bloom custom dropdown component so the open menu matches the client.
