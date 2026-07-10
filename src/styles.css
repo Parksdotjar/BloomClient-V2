@@ -1390,7 +1390,7 @@ body,
 .theme-mini-picker { display: flex; gap: 6px; padding: 3px 8px 9px; }
 .theme-mini-picker button { width: 34px; height: 30px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 7px; background: var(--control); color: var(--muted); }
 .theme-mini-picker button:hover, .theme-mini-picker button.picked { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--control)); }
-.profile-popover-rule { height: 1px; margin: 5px 0; background: var(--border); }
+.profile-popover-rule { height: 1px; margin: 7px 12px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--border) 90%, transparent) 18%, color-mix(in srgb, var(--border) 90%, transparent) 82%, transparent); }
 .profile-popover .profile-logout { color: #f37b7b; }
 @keyframes profile-popover-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .profile-settings-card { min-height: 82px; display: flex; align-items: center; gap: 13px; padding: 14px 18px; }
