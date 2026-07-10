@@ -902,6 +902,7 @@ function App() {
     state: "idle",
     message: "",
   });
+  const [ringProgress, setRingProgress] = useState(0);
   const [gameRunning, setGameRunning] = useState(false);
   const [toast, setToast] = useState("");
   const [signInOpen, setSignInOpen] = useState(false);
@@ -957,7 +958,6 @@ function App() {
         }
         if (next.state === "running") {
           setGameRunning(true);
-          window.setTimeout(() => setDownload(current => ({ ...current, active: false })), 1800);
         }
         if (next.state === "idle") {
           setGameRunning(false);
@@ -978,6 +978,28 @@ function App() {
     });
     return () => unlisten?.();
   }, []);
+  useEffect(() => {
+    if (!download.active) {
+      if (download.state === "idle") setRingProgress(0);
+      return;
+    }
+    let frame = 0;
+    const draw = () => {
+      setRingProgress(current => {
+        const target = Math.max(1, download.progress);
+        if (current >= target) return current;
+        frame = window.requestAnimationFrame(draw);
+        return Math.min(target, current + Math.max(1, (target - current) * 0.1));
+      });
+    };
+    frame = window.requestAnimationFrame(draw);
+    return () => window.cancelAnimationFrame(frame);
+  }, [download.active, download.progress, download.state]);
+  useEffect(() => {
+    if (download.state !== "running" || ringProgress < 99) return;
+    const timer = window.setTimeout(() => setDownload(current => ({ ...current, active: false })), 1250);
+    return () => window.clearTimeout(timer);
+  }, [download.state, ringProgress]);
   useEffect(() => {
     const poll = window.setInterval(() => {
       void invoke<{ state: string; progress: number; message: string }>("get_minecraft_launch_status").then((status) => {
@@ -1098,7 +1120,7 @@ function App() {
         <div className="sidebar-spacer" />
         <button className="sidebar-link downloads-link">
           <Download size={17} />
-          Downloads {download.active && <span className={`download-ring ${download.state}`} style={{ "--download-progress": `${download.progress}%` } as CSSProperties}>{download.state === "running" && <Check size={12} />}</span>}
+          Downloads {download.active && <span className={`download-ring ${download.state === "running" && ringProgress >= 99 ? "complete" : ""}`} style={{ "--download-progress": `${ringProgress}%` } as CSSProperties}>{download.state === "running" && ringProgress >= 99 && <Check size={12} />}</span>}
         </button>
         <button className="sidebar-link">
           <TerminalSquare size={17} />

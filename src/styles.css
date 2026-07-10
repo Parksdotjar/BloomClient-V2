@@ -2070,9 +2070,11 @@ body,
   background: var(--sidebar);
 }
 .download-ring svg { position: relative; z-index: 1; color: var(--accent); }
-.download-ring.running { animation: download-complete 500ms ease both; }
+.download-ring.complete { animation: download-complete 420ms ease both; }
+.download-ring.complete svg { animation: check-in 260ms 110ms ease both; }
 .play-instance:disabled { opacity: .5; cursor: wait; transform: scale(.9); }
 .launch-toast { position: fixed; z-index: 100; top: 18px; left: 50%; transform: translateX(-50%); min-width: 280px; max-width: 520px; padding: 12px 15px; display: flex; gap: 9px; border: 1px solid color-mix(in srgb, #f05454 60%, var(--border)); border-radius: 12px; background: color-mix(in srgb, var(--surface) 94%, #f05454); box-shadow: 0 14px 35px #0008; animation: toast-drop .28s ease both; }
 .launch-toast span { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@keyframes download-complete { 55% { transform: scale(1.28); } 100% { transform: scale(1); } }
+@keyframes download-complete { 45% { transform: scale(1.34); opacity: .42; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes check-in { from { opacity: 0; transform: scale(.45); } to { opacity: 1; transform: scale(1); } }
 @keyframes toast-drop { from { opacity: 0; transform: translate(-50%, -16px); } to { opacity: 1; transform: translate(-50%, 0); } }
