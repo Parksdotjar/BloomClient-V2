@@ -919,8 +919,8 @@ function DownloadsPage({ download, instances, completed, onClear, onCancel }: { 
       {download.active ? <div className="download-task active-task">
         <span className="download-task-icon"><Cuboid size={24} /></span>
         <div className="download-task-main"><div className="download-task-title"><div><b>{activeInstance?.name || "Minecraft"}</b><small>{activeInstance ? `${activeInstance.version} • Vanilla` : "Preparing instance"}</small></div><span>{Math.round(download.progress)}%</span></div><div className="download-linear"><i style={{ width: `${download.progress}%` }} /></div></div>
-        <div className="download-metrics"><span>{download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Preparing"}</span><small>{download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : download.message || "Preparing files"}</small></div>
-        <div className="download-task-status"><b>{status}</b><small>{download.message || "Preparing files"}</small></div><button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>
+        <div className="download-metrics"><span>{download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Scanning files"}</span><small>{download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : "Calculating speed"}</small></div>
+        <div className="download-task-status"><b>{status}</b><small>{download.message || "Preparing files"}{download.message === "Loading assets" && <i className="loading-dots" />}</small></div><button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>
       </div> : <div className="downloads-empty"><Download size={20} /><div><b>No active downloads</b><span>New Minecraft installations will appear here.</span></div></div>}
     </section>
     <section className="download-section completed-section"><h2>Completed</h2>

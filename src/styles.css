@@ -2122,6 +2122,10 @@ body,
 .download-metrics { width: 155px; text-align: right; font-size: 12px; color: var(--text); }
 .download-task-status { width: 145px; }
 .download-task-status b { color: var(--accent); font-size: 13px; }
+.download-task-status small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loading-dots { display: inline; font-style: normal; }
+.loading-dots::after { content: ""; animation: loading-dot-cycle 1.25s steps(1, end) infinite; }
+@keyframes loading-dot-cycle { 0%, 100% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
 .cancel-download { width: 36px; height: 36px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px; background: var(--control); color: var(--muted); font-size: 21px; line-height: 1; }
 .cancel-download:hover { color: #f16a6a; border-color: color-mix(in srgb, #f16a6a 50%, var(--border)); }
 .downloads-empty { min-height: 78px; display: flex; align-items: center; gap: 13px; padding: 16px 18px; border: 1px dashed var(--border); border-radius: 11px; color: var(--muted); background: color-mix(in srgb, var(--panel) 65%, transparent); }

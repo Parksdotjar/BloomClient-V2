@@ -243,6 +243,7 @@ async fn launch_minecraft(app: tauri::AppHandle, state: tauri::State<'_, Launche
         let mut last_label = String::new();
         let mut last_received = 0u64;
         let mut last_sample = std::time::Instant::now();
+        let mut loading_assets = false;
         let app_for_progress = app.clone();
         let id_for_progress = instance_id.clone();
         let install = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| launcher.install_with_progress(mc_launcher_core::install::InstallRequest::vanilla(&config.version), &mut move |event| {
@@ -251,10 +252,11 @@ async fn launch_minecraft(app: tauri::AppHandle, state: tauri::State<'_, Launche
             match event {
                 ProgressEvent::StageStarted { stage } => {
                     use mc_launcher_core::progress::InstallStage;
+                    loading_assets = matches!(&stage, InstallStage::DownloadAssets);
                     let message = match stage { InstallStage::ResolveVersion => "Checking Minecraft version", InstallStage::DownloadLibraries => "Downloading libraries", InstallStage::DownloadAssets => "Downloading game assets", InstallStage::InstallRuntime => "Preparing Java runtime", InstallStage::ExtractNatives => "Extracting native files", InstallStage::LoaderInstall => "Installing loader", InstallStage::Verify => "Verifying downloaded files" };
                     emit_launch(&app_for_progress, &id_for_progress, "installing", 4, message);
                 }
-                ProgressEvent::TaskFinished { label } | ProgressEvent::TaskSkipped { label, .. } => { finished_tasks = finished_tasks.saturating_add(1); let progress = 5 + finished_tasks.saturating_mul(2).min(88); emit_launch(&app_for_progress, &id_for_progress, "installing", progress, label); }
+                ProgressEvent::TaskFinished { label } | ProgressEvent::TaskSkipped { label, .. } => { finished_tasks = finished_tasks.saturating_add(1); let progress = 5 + finished_tasks.saturating_mul(2).min(88); emit_launch(&app_for_progress, &id_for_progress, "installing", progress, if loading_assets { "Loading assets".to_string() } else { label }); }
                 ProgressEvent::BytesReceived { label, received, total } => {
                     if label != last_label { last_label = label.clone(); last_received = 0; last_sample = std::time::Instant::now(); }
                     let elapsed = last_sample.elapsed().as_secs_f64();
@@ -262,7 +264,7 @@ async fn launch_minecraft(app: tauri::AppHandle, state: tauri::State<'_, Launche
                     if elapsed > 0.15 { last_received = received; last_sample = std::time::Instant::now(); }
                     let fraction = total.filter(|value| *value > 0).map(|value| received.saturating_mul(100) / value).unwrap_or(0) as u8;
                     let progress = (5 + finished_tasks.saturating_mul(2) + fraction / 50).min(93);
-                    emit_download(&app_for_progress, &id_for_progress, progress, label, received, total.unwrap_or(0), speed);
+                    emit_download(&app_for_progress, &id_for_progress, progress, if loading_assets { "Loading assets".to_string() } else { label }, received, total.unwrap_or(0), speed);
                 }
                 _ => {}
             }
