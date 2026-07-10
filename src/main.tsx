@@ -1,4 +1,5 @@
 import { StrictMode, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { createRoot } from 'react-dom/client';
 import { animate } from 'animejs';
 import { ChevronDown, ChevronRight, CirclePlus, Cuboid, Download, FolderOpen, House, Layers3, PackageOpen, Palette, Puzzle, Rocket, Settings as SettingsIcon, Shield, SlidersHorizontal, TerminalSquare, WandSparkles } from 'lucide-react';
 import './styles.css';
