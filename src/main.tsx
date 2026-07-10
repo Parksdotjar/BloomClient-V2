@@ -297,6 +297,8 @@ function SettingsPage({
   setSettings,
   onSignOut,
   profile,
+  profileIcon,
+  onProfileIconChange,
   initialTab,
   navigationKey,
 }: {
@@ -304,6 +306,8 @@ function SettingsPage({
   setSettings: (s: SettingsState) => void;
   onSignOut: () => void;
   profile: MinecraftProfile | null;
+  profileIcon: string | null;
+  onProfileIconChange: (icon: string) => void;
   initialTab?: string;
   navigationKey: number;
 }) {
@@ -312,6 +316,8 @@ function SettingsPage({
     value: SettingsState[K],
   ) => setSettings({ ...settings, [key]: value });
   const [activeTab, setActiveTab] = useState("General");
+  const [profileMessage, setProfileMessage] = useState("");
+  const profileIconInput = useRef<HTMLInputElement>(null);
   const sections = useRef<Record<string, HTMLDivElement | null>>({});
   const jumpTo = (label: string) => {
     const target = sections.current[label];
@@ -332,6 +338,14 @@ function SettingsPage({
       sections.current[label] = node;
     },
   });
+  const chooseProfileIcon = (file?: File) => {
+    if (!file) return;
+    if (!profile) { setProfileMessage("Sign in before choosing a profile picture."); return; }
+    if (!["image/png", "image/jpeg"].includes(file.type) || file.size > 2_500_000) { setProfileMessage("Choose a PNG or JPEG smaller than 2.5 MB."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { onProfileIconChange(String(reader.result)); setProfileMessage("Profile picture updated."); };
+    reader.readAsDataURL(file);
+  };
   return (
     <div className="settings-page">
       <div className="settings-heading">
@@ -608,8 +622,9 @@ function SettingsPage({
             <h2>My Profile</h2>
             <p className="section-subtitle">Your connected Minecraft account.</p>
             <div className="settings-card profile-settings-card">
-              <div className="profile-settings-avatar">{profile?.name.slice(0, 1).toUpperCase() || "?"}</div>
-              <div><b>{profile?.name || "Not signed in"}</b><span>{profile ? "Microsoft account connected" : "Connect a Microsoft account from the sidebar."}</span></div>
+              <button className="profile-settings-avatar" disabled={!profile} onClick={() => profileIconInput.current?.click()} aria-label="Change profile picture">{profileIcon ? <img src={profileIcon} alt="" /> : profile?.name.slice(0, 1).toUpperCase() || "?"}<i><ImagePlus size={13} /></i></button>
+              <input ref={profileIconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseProfileIcon(event.target.files?.[0])} />
+              <div><b>{profile?.name || "Not signed in"}</b><span>{profile ? "Click your picture to choose a new one." : "Connect a Microsoft account from the sidebar."}</span>{profileMessage && <small>{profileMessage}</small>}</div>
             </div>
           </div>
           <div className="settings-section" {...section("Advanced")}>
@@ -1032,6 +1047,7 @@ function App() {
       return null;
     }
   });
+  const [profileIcon, setProfileIcon] = useState<string | null>(() => localStorage.getItem("bloom-profile-icon"));
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [settingsTarget, setSettingsTarget] = useState("General");
   const [settingsNavigationKey, setSettingsNavigationKey] = useState(0);
@@ -1058,6 +1074,10 @@ function App() {
     if (profile) localStorage.setItem("bloom-profile", JSON.stringify(profile));
     else localStorage.removeItem("bloom-profile");
   }, [profile]);
+  useEffect(() => {
+    if (profileIcon) localStorage.setItem("bloom-profile-icon", profileIcon);
+    else localStorage.removeItem("bloom-profile-icon");
+  }, [profileIcon]);
   useEffect(() => {
     void invoke<MinecraftProfile | null>("get_saved_minecraft_profile")
       .then((savedProfile) => setProfile(savedProfile))
@@ -1192,7 +1212,7 @@ function App() {
   };
   const selectedInstance = instances.find(instance => instance.id === selectedInstanceId);
   const mostRecentInstance = instances[0];
-  const signOut = () => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setSignInOpen(false); setProfileMenuOpen(false); }); };
+  const signOut = () => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setProfileIcon(null); setSignInOpen(false); setProfileMenuOpen(false); }); };
   const openSettings = (target = "General") => { setSettingsTarget(target); setSettingsNavigationKey(value => value + 1); setPage("settings"); };
   return (
     <div
@@ -1280,7 +1300,7 @@ function App() {
           {profile ? (
             <div className="signed-in">
               <button className="profile-trigger" onClick={(event) => { event.stopPropagation(); setProfileMenuOpen(value => !value); }}>
-                <div className="avatar">{profile.name.slice(0, 1).toUpperCase()}</div>
+                <div className="avatar">{profileIcon ? <img src={profileIcon} alt="" /> : profile.name.slice(0, 1).toUpperCase()}</div>
                 <div className="signed-in-name"><b>{profile.name}</b></div>
               </button>
               <button onClick={() => openSettings()}>
@@ -1321,7 +1341,7 @@ function App() {
         ) : page === "downloads" ? (
           <DownloadsPage download={download} instances={instances} completed={completedDownloads} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} />
         ) : page === "settings" ? (
-          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} initialTab={settingsTarget} navigationKey={settingsNavigationKey} />
+          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} initialTab={settingsTarget} navigationKey={settingsNavigationKey} />
         ) : page === "new-instance" ? (
           <NewInstancePage
             onCancel={() => setPage("home")}

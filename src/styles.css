@@ -184,7 +184,9 @@ nav button i,
   background: linear-gradient(145deg, #7ea657, #415a3b);
   font-weight: 800;
   color: #f0f6ec;
+  overflow: hidden;
 }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
 .profile b {
   font-size: 13px;
 }
@@ -1390,8 +1392,11 @@ body,
 .profile-popover .profile-logout { color: #f37b7b; }
 @keyframes profile-popover-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .profile-settings-card { min-height: 82px; display: flex; align-items: center; gap: 13px; padding: 14px 18px; }
-.profile-settings-avatar { width: 47px; height: 47px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--accent) 35%, var(--control)); color: #fff; font-size: 18px; font-weight: 800; }
-.profile-settings-card b, .profile-settings-card span { display: block; }.profile-settings-card b { font-size: 14px; }.profile-settings-card span { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.profile-settings-avatar { position: relative; width: 47px; height: 47px; flex: 0 0 auto; display: grid; place-items: center; overflow: visible; padding: 0; border: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 35%, var(--control)); color: #fff; font-size: 18px; font-weight: 800; }
+.profile-settings-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+.profile-settings-avatar i { position: absolute; right: -5px; bottom: -5px; width: 23px; height: 23px; display: grid; place-items: center; border: 2px solid var(--panel); border-radius: 7px; background: var(--control); color: var(--accent); font-style: normal; }
+.profile-settings-avatar:disabled i { display: none; }
+.profile-settings-card b, .profile-settings-card span, .profile-settings-card small { display: block; }.profile-settings-card b { font-size: 14px; }.profile-settings-card span { margin-top: 5px; color: var(--muted); font-size: 12px; }.profile-settings-card small { margin-top: 6px; color: var(--accent); font-size: 10px; }
 
 /* Expanded Microsoft sign-in overlay */
 .signin-panel {
