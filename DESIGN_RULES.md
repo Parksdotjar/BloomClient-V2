@@ -37,6 +37,8 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Use Anime.js for purposeful UI motion, including toggle thumb movement and subtle state transitions. Respect the Show Animations setting.
 - Do not expose browser context menus or browser-looking actions inside the client.
 - Desktop window controls use Bloom's custom dim icon buttons inside a transparent draggable region; close uses a restrained red hover state, and the native operating-system title bar remains disabled.
+- Compact filters belong behind a recognizable filter icon when showing every option inline would clutter a toolbar; the active filter is indicated with a muted accent state.
+- Dropdown menus render through a document-level overlay with a top-layer stack order so cards, scroll regions, and parent overflow can never cover or clip them.
 - File imports must use a clearly labeled accent-colored action and report genuine native progress through Downloads; never simulate import progress.
 
 ## Large collections
@@ -48,6 +50,7 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Catalog installation uses the accent-filled plus action and reports genuine byte progress through Downloads; returning to the installed list uses a compact red Back action with a rounded left-arrow icon.
 - Instance collection search and filters live in a taller, narrower floating surface overlapping the collection's bottom edge by roughly half its height; its icon, text, and filter scale together, and pagination sits beneath it while the list scrolls independently.
 - The full instance library uses a responsive card grid with direct Play and folder actions, while the sidebar remains a short recent-access list rather than duplicating the entire library.
+- Avoid decorative accent streaks on repeated cards; depth comes from restrained borders, surface contrast, and hover lift rather than AI-like glowing lines.
 
 ## Scrollbars
 

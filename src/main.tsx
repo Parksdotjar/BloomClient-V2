@@ -9,6 +9,7 @@
   type ReactNode,
 } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -155,24 +156,44 @@ function Select({
   value,
   options,
   onChange,
+  variant = "default",
 }: {
   value: string;
   options: string[];
   onChange: (v: string) => void;
+  variant?: "default" | "filter";
 }) {
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 184 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const bounds = triggerRef.current?.getBoundingClientRect();
+      if (bounds) setMenuPosition({ top: bounds.bottom + 6, left: Math.min(bounds.left, window.innerWidth - Math.max(bounds.width, 150) - 8), width: Math.max(bounds.width, 150) });
+    };
+    const closeOutside = (event: PointerEvent) => { const target = event.target as Node; if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false); };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    document.addEventListener("pointerdown", closeOutside);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", closeOutside); };
+  }, [open]);
   return (
-    <div className="select-wrap">
+    <div className={`select-wrap ${variant === "filter" ? `filter-select ${value !== "All" ? "filtered" : ""}` : ""}`}>
       <button
+        ref={triggerRef}
         className="select-trigger"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
+        aria-label={variant === "filter" ? `Filter instances: ${value}` : undefined}
+        title={variant === "filter" ? `Filter: ${value}` : undefined}
       >
-        {value}
-        <ChevronDown size={15} className={open ? "rotated" : ""} />
+        {variant === "filter" ? <SlidersHorizontal size={17} /> : <>{value}<ChevronDown size={15} className={open ? "rotated" : ""} /></>}
       </button>
-      {open && (
-        <div className="select-menu">
+      {open && createPortal(
+        <div ref={menuRef} className="select-menu select-menu-portal" style={{ position: "fixed", top: menuPosition.top, left: menuPosition.left, right: "auto", width: menuPosition.width }}>
           {options.map((option) => (
             <button
               className={option === value ? "chosen" : ""}
@@ -185,7 +206,7 @@ function Select({
               {option}
             </button>
           ))}
-        </div>
+        </div>, document.body
       )}
     </div>
   );
@@ -1037,9 +1058,8 @@ function InstancesPage({ instances, busy, onOpen, onPlay, onCreate }: { instance
   const loaders = ["All", ...Array.from(new Set(instances.map((instance) => instance.loader)))];
   return <div className="instances-page">
     <header className="instances-page-heading"><div><span className="instances-eyebrow">YOUR LIBRARY</span><h1>All Instances</h1><p>Every world, pack, and client setup in one place.</p></div><button className="instances-create" onClick={onCreate}><CirclePlus size={17} />New instance</button></header>
-    <section className="instances-toolbar"><div className="instances-search"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your instances..." /></div><div className="loader-filters">{loaders.map((item) => <button key={item} className={loader === item ? "selected" : ""} onClick={() => setLoader(item)}>{item}</button>)}</div><span className="instances-count">{visible.length} {visible.length === 1 ? "instance" : "instances"}</span></section>
+    <section className="instances-toolbar"><div className="instances-search"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your instances..." /></div><Select value={loader} options={loaders} onChange={setLoader} variant="filter" /><span className="instances-count">{visible.length} {visible.length === 1 ? "instance" : "instances"}</span></section>
     {visible.length ? <div className="instances-grid">{visible.map((instance) => <article className="instance-library-card" key={instance.id} onClick={() => onOpen(instance)}>
-      <div className="library-card-accent" />
       <div className="library-card-top"><span className="library-instance-icon">{instance.icon ? <img src={instance.icon} alt="" /> : <span aria-hidden="true">?</span>}</span><span className="library-loader">{instance.loader}</span></div>
       <div className="library-card-copy"><h2>{instance.name}</h2><p>Minecraft {instance.version}</p><small title={instance.directory}>{instance.directory}</small></div>
       <div className="library-card-actions"><button className="library-play" disabled={busy} onClick={(event) => { event.stopPropagation(); onPlay(instance); }}><Play size={15} fill="currentColor" />Play</button><button className="library-folder" onClick={(event) => { event.stopPropagation(); void invoke("open_instance_folder", { instanceId: instance.id }); }}><FolderOpen size={16} /></button></div>
