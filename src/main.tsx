@@ -1454,7 +1454,6 @@ function App() {
           />
         ) : (
           <>
-            <header className="topbar" />
             <section className="hero">
               <div>
                 <h1>
