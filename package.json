@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "version:sync": "node scripts/sync-version.mjs"
+    "version:sync": "node scripts/sync-version.mjs",
+    "release:manager": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/release-manager/Launch-ReleaseManager.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",

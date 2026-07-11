@@ -5,6 +5,9 @@ src-tauri/target/
 src-tauri/gen/
 *.log
 *.tsbuildinfo
+tools/release-manager/bin/
+tools/release-manager/obj/
+tools/release-manager/publish/
 .env
 .env.*
 !.env.example
