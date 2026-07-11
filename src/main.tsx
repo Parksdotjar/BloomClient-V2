@@ -234,6 +234,52 @@ function SettingRow({
   );
 }
 
+type ManagedJavaRuntime = {
+  majorVersion: number;
+  architecture: string;
+  provider: string;
+  javaPath: string;
+};
+
+function ManagedJavaControl() {
+  const [runtimes, setRuntimes] = useState<ManagedJavaRuntime[]>([]);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [message, setMessage] = useState("");
+  const refresh = async () => {
+    try {
+      setRuntimes(await invoke<ManagedJavaRuntime[]>("list_managed_java_runtimes"));
+    } catch (error) {
+      setMessage(String(error));
+    }
+  };
+  useEffect(() => { void refresh(); }, []);
+  const remove = async (majorVersion: number) => {
+    setBusy(majorVersion);
+    setMessage("");
+    try {
+      await invoke("remove_managed_java_runtime", { majorVersion });
+      await refresh();
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="managed-java-control">
+      {runtimes.length ? runtimes.map((runtime) => (
+        <span key={`${runtime.majorVersion}-${runtime.architecture}`}>
+          Java {runtime.majorVersion}
+          <button disabled={busy !== null} onClick={() => void remove(runtime.majorVersion)} aria-label={`Remove Bloom-managed Java ${runtime.majorVersion}`}>
+            <Trash2 size={13} />
+          </button>
+        </span>
+      )) : <small>Installed automatically when needed</small>}
+      {message && <small className="managed-java-error">{message}</small>}
+    </div>
+  );
+}
+
 // Temporary: Prism's recognized public client ID. Replace with Bloom's approved ID via VITE_MICROSOFT_CLIENT_ID later.
 const MICROSOFT_CLIENT_ID =
   import.meta.env.VITE_MICROSOFT_CLIENT_ID ||
@@ -526,13 +572,19 @@ function SettingsPage({
               </SettingRow>
               <SettingRow
                 title="Java Runtime"
-                description="Choose which Java installation launches Minecraft."
+                description="Automatic detects or securely installs the exact Java Minecraft needs."
               >
                 <Select
                   value={settings.java}
                   options={["Automatic", "Java 8", "Java 17", "Java 21"]}
                   onChange={(v) => update("java", v)}
                 />
+              </SettingRow>
+              <SettingRow
+                title="Bloom-managed Java"
+                description="Private runtimes downloaded by Bloom. They do not change Windows or your PATH."
+              >
+                <ManagedJavaControl />
               </SettingRow>
               <SettingRow
                 title="Java Arguments"

@@ -1467,6 +1467,12 @@ body,
 .settings-update-button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); color: var(--accent); }
 .settings-update-button.available { border: 0; background: var(--accent); color: #101510; box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 16%, transparent); }
 .settings-update-button:disabled { opacity: .65; cursor: wait; }
+.managed-java-control { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; max-width: 360px; }
+.managed-java-control > span { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 5px 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--control); color: var(--text); font-size: 10px; font-weight: 750; }
+.managed-java-control button { width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
+.managed-java-control button:hover:not(:disabled) { background: color-mix(in srgb, #f05454 12%, transparent); color: #f05454; }
+.managed-java-control > small { color: var(--muted); font-size: 10px; }
+.managed-java-control .managed-java-error { flex-basis: 100%; color: #f06a6a; text-align: right; }
 
 /* Expanded Microsoft sign-in overlay */
 .signin-panel {

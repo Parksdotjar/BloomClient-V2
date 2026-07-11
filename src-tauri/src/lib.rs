@@ -675,6 +675,276 @@ struct JavaInstallation {
     usable: bool,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ManagedJavaRuntime {
+    major_version: u32,
+    architecture: String,
+    provider: String,
+    java_path: String,
+}
+
+fn managed_java_root() -> Result<std::path::PathBuf, String> {
+    let root = bloom_data_dir()?.join("runtimes").join("java");
+    std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    Ok(root)
+}
+
+fn managed_java_runtimes() -> Vec<ManagedJavaRuntime> {
+    let Ok(root) = managed_java_root() else {
+        return Vec::new();
+    };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| std::fs::read(entry.path().join("runtime.json")).ok())
+        .filter_map(|bytes| serde_json::from_slice::<ManagedJavaRuntime>(&bytes).ok())
+        .filter(|runtime| std::path::Path::new(&runtime.java_path).is_file())
+        .collect()
+}
+
+#[tauri::command]
+fn list_managed_java_runtimes() -> Vec<ManagedJavaRuntime> {
+    managed_java_runtimes()
+}
+
+#[tauri::command]
+fn remove_managed_java_runtime(
+    state: tauri::State<'_, LauncherState>,
+    major_version: u32,
+) -> Result<(), String> {
+    if *state
+        .launch_active
+        .lock()
+        .map_err(|_| "The launcher is busy.")?
+    {
+        return Err("Close Minecraft and wait for current downloads before removing Java.".into());
+    }
+    let architecture = adoptium_architecture()?;
+    let folder = managed_java_root()?.join(format!("temurin-{major_version}-{architecture}"));
+    if folder.exists() {
+        std::fs::remove_dir_all(folder)
+            .map_err(|error| format!("Java {major_version} could not be removed: {error}"))?;
+    }
+    Ok(())
+}
+
+fn adoptium_architecture() -> Result<&'static str, String> {
+    match std::env::consts::ARCH {
+        "x86_64" => Ok("x64"),
+        "aarch64" => Ok("aarch64"),
+        architecture => Err(format!(
+            "Automatic Java installation is not available for {architecture} Windows yet."
+        )),
+    }
+}
+
+fn find_java_executable(folder: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut pending = vec![folder.to_path_buf()];
+    while let Some(current) = pending.pop() {
+        let entries = std::fs::read_dir(current).ok()?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.eq_ignore_ascii_case("javaw.exe"))
+            {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+fn download_managed_java(
+    app: &tauri::AppHandle,
+    instance_id: &str,
+    major: u32,
+    cancel: &AtomicBool,
+) -> Result<std::path::PathBuf, String> {
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Write};
+
+    let architecture = adoptium_architecture()?;
+    let root = managed_java_root()?;
+    let destination = root.join(format!("temurin-{major}-{architecture}"));
+    let manifest_path = destination.join("runtime.json");
+    if let Ok(bytes) = std::fs::read(&manifest_path) {
+        if let Ok(runtime) = serde_json::from_slice::<ManagedJavaRuntime>(&bytes) {
+            let java = std::path::PathBuf::from(runtime.java_path);
+            if java.is_file() {
+                return Ok(java);
+            }
+        }
+    }
+
+    emit_download(
+        app,
+        instance_id,
+        89,
+        format!("Finding Java {major}"),
+        0,
+        0,
+        0,
+    );
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("BloomClient/1.0 (https://bloomclient.org)")
+        .build()
+        .map_err(|error| error.to_string())?;
+    let mut package = None;
+    for image in ["jre", "jdk"] {
+        let url = format!("https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture={architecture}&heap_size=normal&image_type={image}&jvm_impl=hotspot&os=windows&project=jdk&vendor=eclipse");
+        let assets: serde_json::Value = client
+            .get(url)
+            .send()
+            .map_err(|error| format!("Java provider could not be reached: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("Java provider rejected the request: {error}"))?
+            .json()
+            .map_err(|error| format!("Java provider returned invalid data: {error}"))?;
+        package = assets
+            .as_array()
+            .and_then(|items| items.first())
+            .and_then(|asset| asset.get("binary"))
+            .and_then(|binary| binary.get("package"))
+            .cloned();
+        if package.is_some() {
+            break;
+        }
+    }
+    let package = package.ok_or_else(|| format!("No supported Windows Java {major} runtime is currently available from Eclipse Adoptium."))?;
+    let url = package["link"]
+        .as_str()
+        .ok_or("The Java provider response did not include a download link.")?;
+    let expected = package["checksum"]
+        .as_str()
+        .ok_or("The Java provider response did not include a SHA-256 checksum.")?
+        .to_ascii_lowercase();
+    let total = package["size"].as_u64().unwrap_or(0);
+    let archive = root.join(format!("temurin-{major}-{architecture}.zip"));
+    let partial = archive.with_extension("zip.part");
+    let mut response = client
+        .get(url)
+        .send()
+        .map_err(|error| format!("Java download failed: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Java download failed: {error}"))?;
+    let total = response.content_length().unwrap_or(total);
+    let mut output = std::fs::File::create(&partial).map_err(|error| error.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 65536];
+    let mut received = 0u64;
+    let started = std::time::Instant::now();
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            let _ = std::fs::remove_file(&partial);
+            return Err("__cancelled__".into());
+        }
+        let count = response
+            .read(&mut buffer)
+            .map_err(|error| error.to_string())?;
+        if count == 0 {
+            break;
+        }
+        output
+            .write_all(&buffer[..count])
+            .map_err(|error| error.to_string())?;
+        hasher.update(&buffer[..count]);
+        received += count as u64;
+        let fraction = if total > 0 {
+            received as f64 / total as f64
+        } else {
+            0.0
+        };
+        emit_download(
+            app,
+            instance_id,
+            (89.0 + fraction * 5.0).round() as u8,
+            format!("Downloading Java {major}"),
+            received,
+            total,
+            (received as f64 / started.elapsed().as_secs_f64().max(0.1)) as u64,
+        );
+    }
+    drop(output);
+    let actual = format!("{:x}", hasher.finalize());
+    if actual != expected {
+        let _ = std::fs::remove_file(&partial);
+        return Err("The downloaded Java runtime failed its SHA-256 security check.".into());
+    }
+    if archive.exists() {
+        std::fs::remove_file(&archive).map_err(|error| error.to_string())?;
+    }
+    std::fs::rename(&partial, &archive).map_err(|error| error.to_string())?;
+
+    emit_download(
+        app,
+        instance_id,
+        95,
+        format!("Installing Java {major}"),
+        received,
+        total,
+        0,
+    );
+    let staging = root.join(format!(".temurin-{major}-{architecture}-installing"));
+    if staging.exists() {
+        std::fs::remove_dir_all(&staging).map_err(|error| error.to_string())?;
+    }
+    std::fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
+    let file = std::fs::File::open(&archive).map_err(|error| error.to_string())?;
+    let mut zip = zip::ZipArchive::new(file)
+        .map_err(|error| format!("Java archive could not be opened: {error}"))?;
+    for index in 0..zip.len() {
+        if cancel.load(Ordering::SeqCst) {
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err("__cancelled__".into());
+        }
+        let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
+        let relative = entry
+            .enclosed_name()
+            .ok_or("The Java archive contained an unsafe path.")?;
+        let target = staging.join(relative);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
+        } else {
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            let mut file = std::fs::File::create(target).map_err(|error| error.to_string())?;
+            std::io::copy(&mut entry, &mut file).map_err(|error| error.to_string())?;
+        }
+    }
+    let staged_java = find_java_executable(&staging)
+        .ok_or("The installed Java package did not contain javaw.exe.")?;
+    let relative_java = staged_java
+        .strip_prefix(&staging)
+        .map_err(|error| error.to_string())?
+        .to_path_buf();
+    if destination.exists() {
+        std::fs::remove_dir_all(&destination).map_err(|error| error.to_string())?;
+    }
+    std::fs::rename(&staging, &destination).map_err(|error| error.to_string())?;
+    let java = destination.join(relative_java);
+    let runtime = ManagedJavaRuntime {
+        major_version: major,
+        architecture: architecture.into(),
+        provider: "Eclipse Temurin".into(),
+        java_path: java.to_string_lossy().into_owned(),
+    };
+    std::fs::write(
+        destination.join("runtime.json"),
+        serde_json::to_vec_pretty(&runtime).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    let _ = std::fs::remove_file(archive);
+    Ok(java)
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WindowsHardware {
@@ -1010,6 +1280,12 @@ fn java_major(path: &str) -> Option<u32> {
 #[tauri::command]
 fn detect_java_installations() -> Vec<JavaInstallation> {
     let mut candidates: Vec<String> = Vec::new();
+    let managed = managed_java_runtimes();
+    let known_managed = managed
+        .iter()
+        .map(|runtime| (runtime.java_path.clone(), runtime.major_version))
+        .collect::<std::collections::HashMap<_, _>>();
+    candidates.extend(managed.into_iter().map(|runtime| runtime.java_path));
     if let Ok(path) = std::env::var("PATH") {
         for entry in std::env::split_paths(&path) {
             let java = entry.join("java.exe");
@@ -1038,7 +1314,10 @@ fn detect_java_installations() -> Vec<JavaInstallation> {
     candidates
         .into_iter()
         .map(|path| {
-            let major_version = java_major(&path);
+            let major_version = known_managed
+                .get(&path)
+                .copied()
+                .or_else(|| java_major(&path));
             JavaInstallation {
                 path,
                 usable: major_version.is_some(),
@@ -2338,7 +2617,13 @@ fn install_instance_files(
     Ok(version_id)
 }
 
-fn selected_java(config: &InstanceConfig, required: u32) -> Result<std::path::PathBuf, String> {
+fn selected_java(
+    app: &tauri::AppHandle,
+    instance_id: &str,
+    config: &InstanceConfig,
+    required: u32,
+    cancel: &AtomicBool,
+) -> Result<std::path::PathBuf, String> {
     if !config.java.to_ascii_lowercase().starts_with("automatic") && !config.java.trim().is_empty()
     {
         let configured_path = config
@@ -2351,13 +2636,25 @@ fn selected_java(config: &InstanceConfig, required: u32) -> Result<std::path::Pa
         if found < required {
             return Err(format!("Minecraft {} needs Java {required} or newer, but this instance is set to Java {found}.", config.version));
         }
-        return Ok(configured_path.into());
+        let path = std::path::PathBuf::from(configured_path);
+        let javaw = path.with_file_name("javaw.exe");
+        return Ok(if javaw.is_file() { javaw } else { path });
     }
-    detect_java_installations().into_iter()
+    if let Some(java) = detect_java_installations()
+        .into_iter()
         .filter(|java| java.usable && java.major_version.unwrap_or(0) >= required)
-        .max_by_key(|java| java.major_version.unwrap_or(0))
-        .map(|java| java.path.into())
-        .ok_or_else(|| format!("Minecraft {} needs Java {required} or newer. Install that Java version, then launch again.", config.version))
+        .min_by_key(|java| {
+            (
+                java.major_version.unwrap_or(u32::MAX) != required,
+                java.major_version.unwrap_or(u32::MAX),
+            )
+        })
+    {
+        let path = std::path::PathBuf::from(java.path);
+        let javaw = path.with_file_name("javaw.exe");
+        return Ok(if javaw.is_file() { javaw } else { path });
+    }
+    download_managed_java(app, instance_id, required, cancel)
 }
 
 #[tauri::command]
@@ -2445,7 +2742,7 @@ async fn launch_minecraft(
             &shared_minecraft,
             &cancel_requested,
             0,
-            100,
+            88,
         ) {
             Ok(version) => version,
             Err(error) if error == "__cancelled__" => {
@@ -2478,12 +2775,18 @@ async fn launch_minecraft(
                 .as_ref()
                 .map(|value| value.major_version.max(8) as u32)
                 .unwrap_or(8);
-            let java = selected_java(&config, required_java)?;
+            let java = selected_java(
+                &app,
+                &instance_id,
+                &config,
+                required_java,
+                &cancel_requested,
+            )?;
             emit_launch(
                 &app,
                 &instance_id,
                 "launching",
-                94,
+                97,
                 format!("Launching with Java {required_java}"),
             );
             let account = mc_launcher_core::account::Account::Microsoft {
@@ -2691,6 +2994,8 @@ pub fn run() {
             request_microsoft_device_code,
             complete_microsoft_login,
             detect_java_installations,
+            list_managed_java_runtimes,
+            remove_managed_java_runtime,
             detect_hardware_report,
             apply_autotune_profile,
             get_minecraft_releases,
