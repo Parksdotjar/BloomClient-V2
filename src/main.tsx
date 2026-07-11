@@ -81,17 +81,6 @@ const nav = [
   [Layers3, "Instances"],
   [SettingsIcon, "Settings"],
 ] as const;
-const quickActions = [
-  [Puzzle, "Browse Mods", "Find and install mods\nfrom Modrinth", "green"],
-  [
-    FolderOpen,
-    "Resource Packs",
-    "Browse and manage\nyour resource packs",
-    "gold",
-  ],
-  [Cuboid, "Shaders", "Manage your\nshader packs", "blue"],
-  [SettingsIcon, "Settings", "Configure client\npreferences", "slate"],
-] as const;
 const settingTabs = [
   [SettingsIcon, "General"],
   [Palette, "Appearance"],
@@ -1305,6 +1294,35 @@ function App() {
   const mostRecentInstance = instances[0];
   const signOut = () => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setProfileIcon(null); setSignInOpen(false); setProfileMenuOpen(false); }); };
   const openSettings = (target = "General") => { setSettingsTarget(target); setSettingsNavigationKey(value => value + 1); setPage("settings"); };
+  const showToolMessage = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 4000);
+  };
+  const importModpack = async () => {
+    if (download.active || gameRunning) return showToolMessage("Another download or game launch is already active.");
+    try {
+      const instanceId = await invoke<string | null>("import_fabric_modpack");
+      if (!instanceId) return;
+      setDownload({ active: true, progress: 1, state: "installing", message: "Preparing Fabric modpack", instanceId, taskKind: "game" });
+      setPage("downloads");
+      void invoke<InstanceDraft[]>("list_instances").then(setInstances);
+    } catch (error) { showToolMessage(String(error)); }
+  };
+  const showJavaStatus = async () => {
+    try {
+      const installations = await invoke<JavaInstallation[]>("detect_java_installations");
+      const usable = installations.filter(java => java.usable);
+      showToolMessage(usable.length ? `${usable.length} usable Java runtime${usable.length === 1 ? "" : "s"} detected. Automatic selection is ready.` : "No usable Java runtime was detected. Open Settings to review Java setup.");
+    } catch (error) { showToolMessage(String(error)); }
+  };
+  const repairInstallation = async () => {
+    if (!mostRecentInstance) return showToolMessage("Create an instance before repairing Minecraft files.");
+    if (download.active || gameRunning) return showToolMessage("Another download or game launch is already active.");
+    setDownload({ active: true, progress: 1, state: "installing", message: "Verifying Minecraft files", instanceId: mostRecentInstance.id, taskKind: "game" });
+    setPage("downloads");
+    try { await invoke("repair_minecraft_installation", { instanceId: mostRecentInstance.id }); }
+    catch (error) { setDownload({ active: false, progress: 0, state: "idle", message: "" }); showToolMessage(String(error)); }
+  };
   return (
     <div
       className="app-shell"
@@ -1479,12 +1497,17 @@ function App() {
             </section>
             <div className="rule" />
             <section>
-              <h2>Quick Actions</h2>
+              <h2>Launcher Tools</h2>
               <div className="quick-grid">
-                {quickActions.map(([Icon, title, desc, color]) => (
-                  <button className="quick-card" key={title}>
+                {[
+                  { Icon: PackageOpen, title: "Import Modpack", desc: "Import a Fabric .mrpack or ZIP", color: "green", action: importModpack },
+                  { Icon: FolderOpen, title: "Open Game Folder", desc: "Browse shared Minecraft files", color: "gold", action: () => void invoke("open_game_folder").catch(error => showToolMessage(String(error))) },
+                  { Icon: TerminalSquare, title: "Java Status", desc: "Check detected Java runtimes", color: "blue", action: showJavaStatus },
+                  { Icon: Shield, title: "Repair Installation", desc: "Verify the latest instance files", color: "slate", action: repairInstallation },
+                ].map(({ Icon, title, desc, color, action }) => (
+                  <button className="quick-card launcher-tool" key={title} onClick={() => void action()}>
                     <span className={"quick-icon " + color}>
-                      <Icon size={25} />
+                      <Icon size={21} />
                     </span>
                     <span>
                       <b>{title}</b>

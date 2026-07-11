@@ -914,6 +914,17 @@ fn open_instance_folder(instance_id: String, category: Option<String>) -> Result
     Ok(())
 }
 
+#[tauri::command]
+fn open_game_folder() -> Result<(), String> {
+    let target = bloom_data_dir()?.join("minecraft");
+    std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
+    std::process::Command::new("explorer.exe")
+        .arg(target)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn safe_pack_path(raw: &str) -> Result<std::path::PathBuf, String> {
     use std::path::Component;
     let path = std::path::Path::new(raw);
@@ -1950,6 +1961,60 @@ async fn launch_minecraft(
     Ok(())
 }
 
+#[tauri::command]
+fn repair_minecraft_installation(
+    app: tauri::AppHandle,
+    instance_id: String,
+    state: tauri::State<'_, LauncherState>,
+) -> Result<(), String> {
+    let config = load_instance(&instance_id)?;
+    {
+        let mut active = state
+            .launch_active
+            .lock()
+            .map_err(|_| "The task manager is busy.")?;
+        if *active {
+            return Err("Another download or game launch is already active.".into());
+        }
+        *active = true;
+    }
+    state.cancel_requested.store(false, Ordering::SeqCst);
+    let active = state.launch_active.clone();
+    let cancel = state.cancel_requested.clone();
+    std::thread::spawn(move || {
+        emit_launch(
+            &app,
+            &instance_id,
+            "installing",
+            1,
+            "Verifying Minecraft files",
+        );
+        let result = bloom_data_dir()
+            .map(|path| path.join("minecraft"))
+            .and_then(|shared| {
+                install_instance_files(&app, &instance_id, &config, &shared, &cancel, 1, 100)
+                    .map(|_| ())
+            });
+        match result {
+            Ok(()) => emit_launch(
+                &app,
+                &instance_id,
+                "complete",
+                100,
+                "Minecraft files verified",
+            ),
+            Err(error) if error == "__cancelled__" => {
+                emit_launch(&app, &instance_id, "cancelled", 0, "Repair cancelled")
+            }
+            Err(error) => emit_launch(&app, &instance_id, "error", 0, error),
+        }
+        if let Ok(mut value) = active.lock() {
+            *value = false;
+        }
+    });
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1970,11 +2035,13 @@ pub fn run() {
             set_instance_icon,
             update_instance_settings,
             open_instance_folder,
+            open_game_folder,
             import_fabric_modpack,
             install_modrinth_mod,
             launch_minecraft,
             get_minecraft_launch_status,
             cancel_minecraft_launch,
+            repair_minecraft_installation,
             sign_out_minecraft,
             get_saved_minecraft_profile
         ])
