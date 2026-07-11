@@ -488,6 +488,99 @@ struct JavaInstallation {
     usable: bool,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsHardware {
+    cpu: String,
+    cores: u32,
+    threads: u32,
+    ram_bytes: u64,
+    gpus: Vec<String>,
+    refresh_rate: Option<u32>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HardwareReport {
+    cpu: String,
+    cores: u32,
+    threads: u32,
+    ram_bytes: u64,
+    gpus: Vec<String>,
+    refresh_rate: Option<u32>,
+    java_versions: Vec<u32>,
+    recommended_memory_mb: u32,
+    recommended_render_distance: u32,
+    recommended_simulation_distance: u32,
+    recommended_graphics: String,
+}
+
+#[tauri::command]
+fn detect_hardware_report() -> Result<HardwareReport, String> {
+    let script = r#"$cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $system=Get-CimInstance Win32_ComputerSystem; $video=@(Get-CimInstance Win32_VideoController); [pscustomobject]@{cpu=[string]$cpu.Name;cores=[uint32]$cpu.NumberOfCores;threads=[uint32]$cpu.NumberOfLogicalProcessors;ramBytes=[uint64]$system.TotalPhysicalMemory;gpus=@($video | ForEach-Object {[string]$_.Name});refreshRate=[uint32](($video | Measure-Object CurrentRefreshRate -Maximum).Maximum)} | ConvertTo-Json -Compress"#;
+    let output = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .output()
+        .map_err(|error| format!("Hardware scan could not start: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Hardware scan failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let hardware: WindowsHardware = serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("Hardware scan returned invalid data: {error}"))?;
+    let ram_gb = hardware.ram_bytes / 1_073_741_824;
+    let recommended_memory_mb = match ram_gb {
+        0..=7 => 2048,
+        8..=15 => 4096,
+        16..=31 => 6144,
+        _ => 8192,
+    };
+    let has_dedicated_gpu = hardware.gpus.iter().any(|gpu| {
+        let name = gpu.to_ascii_lowercase();
+        name.contains("nvidia") || name.contains("radeon") || name.contains("arc")
+    });
+    let recommended_render_distance = if has_dedicated_gpu && hardware.cores >= 8 {
+        16
+    } else if hardware.cores >= 6 {
+        12
+    } else {
+        8
+    };
+    let recommended_simulation_distance = if hardware.cores >= 8 {
+        10
+    } else if hardware.cores >= 6 {
+        8
+    } else {
+        6
+    };
+    let mut java_versions = detect_java_installations()
+        .into_iter()
+        .filter(|java| java.usable)
+        .filter_map(|java| java.major_version)
+        .collect::<Vec<_>>();
+    java_versions.sort_unstable();
+    java_versions.dedup();
+    Ok(HardwareReport {
+        cpu: hardware.cpu.trim().to_string(),
+        cores: hardware.cores,
+        threads: hardware.threads,
+        ram_bytes: hardware.ram_bytes,
+        gpus: hardware.gpus,
+        refresh_rate: hardware.refresh_rate,
+        java_versions,
+        recommended_memory_mb,
+        recommended_render_distance,
+        recommended_simulation_distance,
+        recommended_graphics: if has_dedicated_gpu && ram_gb >= 16 {
+            "High".into()
+        } else {
+            "Balanced".into()
+        },
+    })
+}
+
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct InstanceConfig {
@@ -2047,6 +2140,7 @@ pub fn run() {
             request_microsoft_device_code,
             complete_microsoft_login,
             detect_java_installations,
+            detect_hardware_report,
             get_minecraft_releases,
             save_instance,
             list_instances,

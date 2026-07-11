@@ -22,6 +22,7 @@ import {
   ChevronRight,
   CirclePlus,
   Clipboard,
+  Cpu,
   Cuboid,
   Download,
   FolderOpen,
@@ -30,12 +31,15 @@ import {
   ImagePlus,
   MoreHorizontal,
   Minus,
+  Monitor,
+  MemoryStick,
   PackageOpen,
   Palette,
   Play,
   Plus,
   Puzzle,
   Rocket,
+  RotateCw,
   Search,
   Settings as SettingsIcon,
   Shield,
@@ -44,6 +48,8 @@ import {
   TriangleAlert,
   Trash2,
   UserRound,
+  WandSparkles,
+  LockKeyhole,
   ArrowLeft as X,
   Square,
   X as CloseIcon,
@@ -81,6 +87,7 @@ const defaults: SettingsState = {
 const nav = [
   [House, "Home"],
   [Layers3, "Instances"],
+  [WandSparkles, "AutoTune"],
   [SettingsIcon, "Settings"],
 ] as const;
 const settingTabs = [
@@ -1043,6 +1050,19 @@ function InstancePage({ instance, busy, onPlay, onChanged, onInstallMod }: { ins
   </div>;
 }
 
+type HardwareReport = { cpu: string; cores: number; threads: number; ramBytes: number; gpus: string[]; refreshRate?: number; javaVersions: number[]; recommendedMemoryMb: number; recommendedRenderDistance: number; recommendedSimulationDistance: number; recommendedGraphics: string };
+
+function AutoTunePage() {
+  const [accepted, setAccepted] = useState(() => localStorage.getItem("bloom-autotune-accepted") === "true");
+  const [report, setReport] = useState<HardwareReport | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState("");
+  const scan = async () => { setScanning(true); setError(""); try { setReport(await invoke<HardwareReport>("detect_hardware_report")); } catch (reason) { setError(String(reason)); } finally { setScanning(false); } };
+  useEffect(() => { if (accepted && !report && !scanning) void scan(); }, [accepted]);
+  if (!accepted) return <div className="autotune-page consent-view"><header className="autotune-heading"><span><WandSparkles size={22} /></span><div><em>Bloom Labs</em><h1>Meet AutoTune</h1><p>A hardware-aware optimization system built around your computer—not generic recommendations.</p></div></header><section className="autotune-consent"><div className="consent-scroll"><h2>Before we scan</h2><p>AutoTune needs permission to read basic hardware information from this computer. Phase 1 does not run Minecraft, upload results, or modify an instance.</p><div className="consent-point"><Cpu size={18} /><div><b>What Bloom reads</b><span>CPU model and core count, graphics adapters, installed memory, monitor refresh rate, and detected Java versions.</span></div></div><div className="consent-point"><Shield size={18} /><div><b>Your data stays local</b><span>The report is created on this device. Bloom does not send hardware details to the backend during this phase.</span></div></div><div className="consent-point"><SlidersHorizontal size={18} /><div><b>Recommendations are reversible</b><span>Phase 1 only proposes memory, graphics, render-distance, and simulation-distance defaults. Nothing is applied automatically.</span></div></div><div className="consent-point"><LockKeyhole size={18} /><div><b>Future benchmark permission</b><span>A later phase may launch a temporary benchmark world. Bloom will request separate confirmation before that happens.</span></div></div><p className="consent-fineprint">By continuing, you allow Bloom Client to query Windows for the hardware details listed above. You can revisit or clear AutoTune data later.</p></div><button className="autotune-accept" onClick={() => { localStorage.setItem("bloom-autotune-accepted", "true"); setAccepted(true); }}><WandSparkles size={17} />Accept and scan hardware</button></section></div>;
+  return <div className="autotune-page"><header className="autotune-dashboard-heading"><div><em>Bloom AutoTune</em><h1>Optimization Center</h1><p>Hardware scan and personalized Minecraft recommendations.</p></div><button disabled={scanning} onClick={() => void scan()}><RotateCw size={15} className={scanning ? "spinning" : ""} />{scanning ? "Scanning" : "Scan again"}</button></header><div className="autotune-phases">{[["01", "Hardware", "Ready"], ["02", "Benchmark", "Planned"], ["03", "Tune", "Planned"], ["04", "Apply", "Planned"]].map(([number, label, status], index) => <div className={index === 0 ? "active" : "locked"} key={number}><span>{index === 0 ? <Check size={14} /> : number}</span><div><b>{label}</b><small>{status}</small></div></div>)}</div>{scanning ? <section className="hardware-scanning"><span><Cpu size={26} /></span><b>Reading your hardware</b><p>Checking Windows devices, memory, displays, and Java runtimes…</p><i /></section> : error ? <section className="hardware-error"><TriangleAlert size={20} /><div><b>Hardware scan failed</b><span>{error}</span></div><button onClick={() => void scan()}>Try again</button></section> : report && <><section className="hardware-grid"><div><span><Cpu size={19} /></span><small>Processor</small><b title={report.cpu}>{report.cpu}</b><em>{report.cores} cores • {report.threads} threads</em></div><div><span><Monitor size={19} /></span><small>Graphics</small><b title={report.gpus.join(", ")}>{report.gpus[0] || "Unknown GPU"}</b><em>{report.refreshRate ? `${report.refreshRate} Hz display` : "Refresh rate unavailable"}</em></div><div><span><MemoryStick size={19} /></span><small>System memory</small><b>{Math.round(report.ramBytes / 1073741824)} GB RAM</b><em>{report.recommendedMemoryMb / 1024} GB recommended for Minecraft</em></div><div><span><TerminalSquare size={19} /></span><small>Java runtimes</small><b>{report.javaVersions.length ? report.javaVersions.map(version => `Java ${version}`).join(", ") : "None detected"}</b><em>Automatic runtime selection</em></div></section><section className="recommendation-panel"><div className="recommendation-copy"><em>Phase 1 recommendation</em><h2>Your baseline profile</h2><p>This is a hardware-based starting point. The future benchmark phase will test and refine it using real frame-time data.</p><span>Confidence: Preliminary</span></div><div className="recommendation-values"><div><small>Memory</small><b>{report.recommendedMemoryMb / 1024} GB</b></div><div><small>Graphics</small><b>{report.recommendedGraphics}</b></div><div><small>Render distance</small><b>{report.recommendedRenderDistance} chunks</b></div><div><small>Simulation</small><b>{report.recommendedSimulationDistance} chunks</b></div></div></section><section className="benchmark-preview"><div className="benchmark-icon"><LockKeyhole size={22} /></div><div><em>Phase 2 • Coming next</em><h2>Measured performance benchmark</h2><p>A controlled temporary world will measure average FPS, 1% lows, and frame-time stability before AutoTune changes anything.</p></div><button disabled>Not available yet</button></section></>}</div>;
+}
+
 type DownloadViewState = { active: boolean; progress: number; state: string; message: string; instanceId?: string; downloadedBytes?: number; totalBytes?: number; bytesPerSecond?: number; taskName?: string; taskVersion?: string; taskKind?: "mod" | "game" };
 type LogEntry = { id: string; instanceId: string; instanceName: string; stream: string; level: "info" | "warn" | "error"; message: string; timestamp: number };
 
@@ -1119,7 +1139,7 @@ function DownloadsPage({ download, instances, completed, onClear, onCancel }: { 
 }
 
 function App() {
-  const [page, setPage] = useState<"home" | "settings" | "new-instance" | "downloads" | "logs" | "instance" | "instances">(
+  const [page, setPage] = useState<"home" | "settings" | "autotune" | "new-instance" | "downloads" | "logs" | "instance" | "instances">(
     "home",
   );
   const [instances, setInstances] = useState<InstanceDraft[]>([]);
@@ -1434,13 +1454,14 @@ function App() {
               className={
                 (page === "home" && index === 0) ||
                 (page === "instances" && label === "Instances") ||
+                (page === "autotune" && label === "AutoTune") ||
                 (page === "settings" && label === "Settings")
                   ? "active"
                   : ""
               }
               key={label}
               onClick={() =>
-                label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : setPage("home")
+                label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "AutoTune" ? setPage("autotune") : setPage("home")
               }
             >
               <Icon size={17} />
@@ -1525,6 +1546,8 @@ function App() {
           <InstancePage instance={selectedInstance} busy={download.active || gameRunning} onPlay={() => void launch(selectedInstance)} onInstallMod={(mod) => void installMod(selectedInstance, mod)} onChanged={(changed) => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} />
         ) : page === "logs" ? (
           <LogsPage entries={logs} running={gameRunning || download.state === "launching"} onClear={() => setLogs([])} />
+        ) : page === "autotune" ? (
+          <AutoTunePage />
         ) : page === "instances" ? (
           <InstancesPage instances={instances} busy={download.active || gameRunning} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onOpen={(instance) => { setSelectedInstanceId(instance.id); setPage("instance"); }} />
         ) : page === "downloads" ? (
