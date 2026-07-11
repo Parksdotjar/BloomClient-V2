@@ -28,6 +28,7 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Structural horizontal and vertical separators use the theme's low-contrast border token, only slightly lighter than the surrounding surface.
 - Selected outlines use a dark, muted mix of the active accent color and the theme border—not the full-strength accent and never white.
 - Focus-visible states use a restrained translucent accent ring so keyboard navigation remains clear without introducing bright lines.
+- Never add a thick accent strip to only one edge of a card, banner, notification, or panel; borders remain consistently thin on every side.
 
 ## Controls and interaction
 

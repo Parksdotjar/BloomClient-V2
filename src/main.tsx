@@ -17,6 +17,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { animate } from "animejs";
 import {
   Check,
+  Bell,
   ChevronDown,
   ChevronRight,
   CirclePlus,
@@ -1095,6 +1096,7 @@ function App() {
   const [ringProgress, setRingProgress] = useState(0);
   const [gameRunning, setGameRunning] = useState(false);
   const [toast, setToast] = useState("");
+  const [toastKind, setToastKind] = useState<"notification" | "error">("notification");
   const [signInOpen, setSignInOpen] = useState(false);
   const [profile, setProfile] = useState<MinecraftProfile | null>(() => {
     try {
@@ -1167,6 +1169,7 @@ function App() {
         }));
         if (next.state === "error") {
           setGameRunning(false);
+          setToastKind("error");
           setToast(next.message);
           window.setTimeout(() => setToast(""), 5000);
         }
@@ -1240,6 +1243,7 @@ function App() {
   }, []);
   const launch = async (instance: InstanceDraft) => {
     if (download.active || gameRunning) {
+      setToastKind("notification");
       setToast("Something is already downloading or running. Please wait.");
       window.setTimeout(() => setToast(""), 3500);
       return;
@@ -1256,6 +1260,7 @@ function App() {
       await invoke("launch_minecraft", { instanceId: instance.id });
     } catch (error) {
       const message = String(error);
+      setToastKind("error");
       if (message.includes("Sign in with Microsoft")) {
         setSignInOpen(true);
         setToast("Your saved profile needs a quick Microsoft reconnect before launching.");
@@ -1266,6 +1271,7 @@ function App() {
   };
   const installMod = async (instance: InstanceDraft, mod: CatalogMod) => {
     if (download.active || gameRunning) {
+      setToastKind("notification");
       setToast("Something is already downloading or running. Please wait.");
       window.setTimeout(() => setToast(""), 3500);
       return;
@@ -1274,6 +1280,7 @@ function App() {
     try {
       await invoke("install_modrinth_mod", { instanceId: instance.id, projectId: mod.projectId });
     } catch (error) {
+      setToastKind("error");
       setToast(String(error));
       setDownload({ active: false, progress: 0, state: "idle", message: "" });
       window.setTimeout(() => setToast(""), 5000);
@@ -1295,7 +1302,8 @@ function App() {
   const mostRecentInstance = instances[0];
   const signOut = () => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setProfileIcon(null); setSignInOpen(false); setProfileMenuOpen(false); }); };
   const openSettings = (target = "General") => { setSettingsTarget(target); setSettingsNavigationKey(value => value + 1); setPage("settings"); };
-  const showToolMessage = (message: string) => {
+  const showToolMessage = (message: string, kind: "notification" | "error" = "notification") => {
+    setToastKind(kind);
     setToast(message);
     window.setTimeout(() => setToast(""), 4000);
   };
@@ -1307,14 +1315,14 @@ function App() {
       setDownload({ active: true, progress: 1, state: "installing", message: "Preparing Fabric modpack", instanceId, taskKind: "game" });
       setPage("downloads");
       void invoke<InstanceDraft[]>("list_instances").then(setInstances);
-    } catch (error) { showToolMessage(String(error)); }
+    } catch (error) { showToolMessage(String(error), "error"); }
   };
   const showJavaStatus = async () => {
     try {
       const installations = await invoke<JavaInstallation[]>("detect_java_installations");
       const usable = installations.filter(java => java.usable);
       showToolMessage(usable.length ? `${usable.length} usable Java runtime${usable.length === 1 ? "" : "s"} detected. Automatic selection is ready.` : "No usable Java runtime was detected. Open Settings to review Java setup.");
-    } catch (error) { showToolMessage(String(error)); }
+    } catch (error) { showToolMessage(String(error), "error"); }
   };
   const repairInstallation = async () => {
     if (!mostRecentInstance) return showToolMessage("Create an instance before repairing Minecraft files.");
@@ -1322,7 +1330,7 @@ function App() {
     setDownload({ active: true, progress: 1, state: "installing", message: "Verifying Minecraft files", instanceId: mostRecentInstance.id, taskKind: "game" });
     setPage("downloads");
     try { await invoke("repair_minecraft_installation", { instanceId: mostRecentInstance.id }); }
-    catch (error) { setDownload({ active: false, progress: 0, state: "idle", message: "" }); showToolMessage(String(error)); }
+    catch (error) { setDownload({ active: false, progress: 0, state: "idle", message: "" }); showToolMessage(String(error), "error"); }
   };
   return (
     <div
@@ -1502,7 +1510,7 @@ function App() {
               <div className="quick-grid">
                 {[
                   { Icon: PackageOpen, title: "Import Modpack", desc: "Import a Fabric .mrpack or ZIP", color: "green", action: importModpack },
-                  { Icon: FolderOpen, title: "Open Game Folder", desc: "Browse shared Minecraft files", color: "gold", action: () => void invoke("open_game_folder").catch(error => showToolMessage(String(error))) },
+                  { Icon: FolderOpen, title: "Open Game Folder", desc: "Browse shared Minecraft files", color: "gold", action: () => void invoke("open_game_folder").catch(error => showToolMessage(String(error), "error")) },
                   { Icon: TerminalSquare, title: "Java Status", desc: "Check detected Java runtimes", color: "blue", action: showJavaStatus },
                   { Icon: Shield, title: "Repair Installation", desc: "Verify the latest instance files", color: "slate", action: repairInstallation },
                 ].map(({ Icon, title, desc, color, action }) => (
@@ -1587,8 +1595,8 @@ function App() {
           <button>Coming soon</button>
         </div>
       )}
-      {toast && <div className="launch-toast" role="status">
-        <div className="launch-toast-title"><TriangleAlert size={17} /><b>Launch issue</b></div>
+      {toast && <div className={`launch-toast ${toastKind}`} role="status">
+        <div className="launch-toast-title">{toastKind === "error" ? <TriangleAlert size={17} /> : <Bell size={17} />}<b>{toastKind === "error" ? "Launch issue" : "Notification"}</b></div>
         <span>{toast}</span>
       </div>}
     </div>
