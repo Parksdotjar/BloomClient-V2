@@ -18,6 +18,8 @@ import { animate } from "animejs";
 import {
   Check,
   Bell,
+  Activity,
+  BarChart3,
   ChevronDown,
   ChevronRight,
   CirclePlus,
@@ -45,6 +47,7 @@ import {
   Shield,
   SlidersHorizontal,
   TerminalSquare,
+  Timer,
   TriangleAlert,
   Trash2,
   UserRound,
@@ -1063,6 +1066,46 @@ function AutoTunePage() {
   return <div className="autotune-page"><header className="autotune-dashboard-heading"><div><em>Bloom AutoTune</em><h1>Optimization Center</h1><p>Hardware scan and personalized Minecraft recommendations.</p></div><button disabled={scanning} onClick={() => void scan()}><RotateCw size={15} className={scanning ? "spinning" : ""} />{scanning ? "Scanning" : "Scan again"}</button></header><div className="autotune-phases">{[["01", "Hardware", "Ready"], ["02", "Benchmark", "Planned"], ["03", "Tune", "Planned"], ["04", "Apply", "Planned"]].map(([number, label, status], index) => <div className={index === 0 ? "active" : "locked"} key={number}><span>{index === 0 ? <Check size={14} /> : number}</span><div><b>{label}</b><small>{status}</small></div></div>)}</div>{scanning ? <section className="hardware-scanning"><span><Cpu size={26} /></span><b>Reading your hardware</b><p>Checking Windows devices, memory, displays, and Java runtimes…</p><i /></section> : error ? <section className="hardware-error"><TriangleAlert size={20} /><div><b>Hardware scan failed</b><span>{error}</span></div><button onClick={() => void scan()}>Try again</button></section> : report && <><section className="hardware-grid"><div><span><Cpu size={19} /></span><small>Processor</small><b title={report.cpu}>{report.cpu}</b><em>{report.cores} cores • {report.threads} threads</em></div><div><span><Monitor size={19} /></span><small>Graphics</small><b title={report.gpus.join(", ")}>{report.gpus[0] || "Unknown GPU"}</b><em>{report.refreshRate ? `${report.refreshRate} Hz display` : "Refresh rate unavailable"}</em></div><div><span><MemoryStick size={19} /></span><small>System memory</small><b>{Math.round(report.ramBytes / 1073741824)} GB RAM</b><em>{report.recommendedMemoryMb / 1024} GB recommended for Minecraft</em></div><div><span><TerminalSquare size={19} /></span><small>Java runtimes</small><b>{report.javaVersions.length ? report.javaVersions.map(version => `Java ${version}`).join(", ") : "None detected"}</b><em>Automatic runtime selection</em></div></section><section className="recommendation-panel"><div className="recommendation-copy"><em>Phase 1 recommendation</em><h2>Your baseline profile</h2><p>This is a hardware-based starting point. The future benchmark phase will test and refine it using real frame-time data.</p><span>Confidence: Preliminary</span></div><div className="recommendation-values"><div><small>Memory</small><b>{report.recommendedMemoryMb / 1024} GB</b></div><div><small>Graphics</small><b>{report.recommendedGraphics}</b></div><div><small>Render distance</small><b>{report.recommendedRenderDistance} chunks</b></div><div><small>Simulation</small><b>{report.recommendedSimulationDistance} chunks</b></div></div></section><section className="benchmark-preview"><div className="benchmark-icon"><LockKeyhole size={22} /></div><div><em>Phase 2 • Coming next</em><h2>Measured performance benchmark</h2><p>A controlled temporary world will measure average FPS, 1% lows, and frame-time stability before AutoTune changes anything.</p></div><button disabled>Not available yet</button></section></>}</div>;
 }
 
+type BenchmarkResult = { averageFps: number; onePercentLow: number; averageFrameTime: number; stability: number; score: number; completedAt: number };
+
+function AutoTuneBenchmark() {
+  const [allowed, setAllowed] = useState(() => localStorage.getItem("bloom-autotune-accepted") === "true");
+  const [stage, setStage] = useState<"idle" | "consent" | "running" | "result">(() => localStorage.getItem("bloom-autotune-benchmark") ? "result" : "idle");
+  const [result, setResult] = useState<BenchmarkResult | null>(() => { try { return JSON.parse(localStorage.getItem("bloom-autotune-benchmark") || "null"); } catch { return null; } });
+  const [progress, setProgress] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef = useRef(0);
+  const benchmarkRef = useRef({ start: 0, previous: 0, frames: [] as number[] });
+  const stopBenchmark = () => { cancelAnimationFrame(frameRef.current); setProgress(0); setStage(result ? "result" : "idle"); };
+  const runBenchmark = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) { setStage("running"); window.setTimeout(runBenchmark, 0); return; }
+    setStage("running"); setProgress(0);
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) { setStage("idle"); return; }
+    const width = Math.max(600, canvas.clientWidth); const height = Math.max(280, canvas.clientHeight); const ratio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio); context.scale(ratio, ratio);
+    benchmarkRef.current = { start: performance.now(), previous: performance.now(), frames: [] };
+    const duration = 30_000;
+    const draw = (now: number) => {
+      const state = benchmarkRef.current; const elapsed = now - state.start; const delta = now - state.previous; state.previous = now;
+      if (delta > 0 && delta < 250) state.frames.push(delta);
+      setProgress(Math.min(100, elapsed / duration * 100));
+      const t = elapsed / 1000; const gradient = context.createLinearGradient(0, 0, width, height); gradient.addColorStop(0, "#07100c"); gradient.addColorStop(1, "#111b23"); context.fillStyle = gradient; context.fillRect(0, 0, width, height);
+      for (let i = 0; i < 1800; i += 1) { const size = 3 + (i % 7); const x = (i * 47 + t * (18 + i % 11)) % (width + 40) - 20; const y = (i * 83 + Math.sin(t * 1.7 + i) * 35 + height) % height; const hue = 105 + (i % 65); context.fillStyle = `hsla(${hue}, 62%, ${30 + i % 28}%, ${.18 + (i % 5) * .08})`; context.fillRect(x, y, size, size); }
+      for (let layer = 0; layer < 22; layer += 1) { const depth = layer / 22; const block = 18 + depth * 34; const x = width / 2 + Math.sin(t * (.4 + depth) + layer) * width * .42; const y = height * .18 + depth * height * .68; context.fillStyle = `hsl(${112 + layer * 2}, ${38 + layer}%, ${16 + depth * 34}%)`; context.fillRect(x - block / 2, y - block / 2, block, block); context.strokeStyle = `rgba(180,255,190,${.08 + depth * .2})`; context.strokeRect(x - block / 2, y - block / 2, block, block); }
+      if (elapsed < duration) frameRef.current = requestAnimationFrame(draw); else {
+        const frames = state.frames.slice(5).sort((a, b) => a - b); const totalSeconds = elapsed / 1000; const averageFps = frames.length / totalSeconds; const worst = frames.slice(Math.floor(frames.length * .99)); const onePercentLow = worst.length ? 1000 / (worst.reduce((sum, value) => sum + value, 0) / worst.length) : 0; const averageFrameTime = frames.reduce((sum, value) => sum + value, 0) / Math.max(1, frames.length); const stability = frames.filter(value => value <= averageFrameTime * 1.5).length / Math.max(1, frames.length) * 100; const next = { averageFps, onePercentLow, averageFrameTime, stability, score: Math.round(onePercentLow * .65 + averageFps * .35), completedAt: Date.now() }; localStorage.setItem("bloom-autotune-benchmark", JSON.stringify(next)); setResult(next); setProgress(100); setStage("result");
+      }
+    };
+    frameRef.current = requestAnimationFrame(draw);
+  };
+  useEffect(() => () => cancelAnimationFrame(frameRef.current), []);
+  useEffect(() => { if (allowed) return; const timer = window.setInterval(() => setAllowed(localStorage.getItem("bloom-autotune-accepted") === "true"), 250); return () => window.clearInterval(timer); }, [allowed]);
+  if (!allowed) return null;
+  return <section className="autotune-benchmark-live"><div className="benchmark-live-heading"><div><em>Phase 2 • Measured locally</em><h2>Bloom graphics benchmark</h2><p>A consistent 30-second rendered workload measures frame throughput and frame-time stability on this device.</p></div><span className="phase-two-badge">02</span></div>{stage === "idle" && <div className="benchmark-start"><BarChart3 size={28} /><div><b>Ready to establish a performance baseline</b><span>Close heavy applications and keep Bloom visible during the test for the cleanest result.</span></div><button onClick={() => setStage("consent")}>Start benchmark</button></div>}{stage === "consent" && <div className="benchmark-consent"><Activity size={22} /><div><b>Performance test confirmation</b><span>Bloom will render a demanding animated scene for 30 seconds. Fans may briefly speed up. No files are changed and no result leaves this computer.</span></div><button className="benchmark-cancel" onClick={() => setStage(result ? "result" : "idle")}>Cancel</button><button onClick={runBenchmark}>Begin test</button></div>}{stage === "running" && <div className="benchmark-running"><canvas ref={canvasRef} /><div className="benchmark-overlay"><span><Activity size={15} />Benchmark running</span><b>{Math.ceil((100 - progress) * .3)}s</b></div><div className="benchmark-progress"><i style={{ width: `${progress}%` }} /></div><button onClick={stopBenchmark}>Stop test</button></div>}{stage === "result" && result && <div className="benchmark-results"><div className="benchmark-score"><small>Bloom score</small><b>{result.score}</b><span>{result.stability >= 95 ? "Excellent stability" : result.stability >= 88 ? "Good stability" : "Variable frame times"}</span></div><div className="benchmark-metrics"><div><small>Average FPS</small><b>{result.averageFps.toFixed(1)}</b></div><div><small>1% low</small><b>{result.onePercentLow.toFixed(1)}</b></div><div><small>Frame time</small><b>{result.averageFrameTime.toFixed(2)} ms</b></div><div><small>Stability</small><b>{result.stability.toFixed(1)}%</b></div></div><div className="benchmark-result-actions"><span><Timer size={14} />Completed {new Date(result.completedAt).toLocaleDateString()}</span><button onClick={() => setStage("consent")}><RotateCw size={14} />Run again</button></div></div>}<p className="benchmark-accuracy"><Shield size={13} />This measures Bloom’s representative graphics workload, not Minecraft FPS. In-game validation will arrive with the dedicated benchmark mod.</p></section>;
+}
+
 type DownloadViewState = { active: boolean; progress: number; state: string; message: string; instanceId?: string; downloadedBytes?: number; totalBytes?: number; bytesPerSecond?: number; taskName?: string; taskVersion?: string; taskKind?: "mod" | "game" };
 type LogEntry = { id: string; instanceId: string; instanceName: string; stream: string; level: "info" | "warn" | "error"; message: string; timestamp: number };
 
@@ -1547,7 +1590,7 @@ function App() {
         ) : page === "logs" ? (
           <LogsPage entries={logs} running={gameRunning || download.state === "launching"} onClear={() => setLogs([])} />
         ) : page === "autotune" ? (
-          <AutoTunePage />
+          <><AutoTunePage /><AutoTuneBenchmark /></>
         ) : page === "instances" ? (
           <InstancesPage instances={instances} busy={download.active || gameRunning} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onOpen={(instance) => { setSelectedInstanceId(instance.id); setPage("instance"); }} />
         ) : page === "downloads" ? (

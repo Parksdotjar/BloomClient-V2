@@ -22,6 +22,7 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Sidebar branding and account areas use separate, slightly darker theme-aware surface zones, divided from navigation by short faded separators rather than full-width rules.
 - Global sidebar navigation stays focused on Home, Instances, AutoTune, and Settings; mods, resource packs, and shaders belong inside their owning instance rather than as duplicate global destinations.
 - AutoTune must clearly distinguish measured results, hardware-based estimates, and future/mock capabilities. Never present an estimate or unfinished benchmark as a completed optimization.
+- AutoTune benchmark reports must name the workload they actually measured. A Bloom/WebView graphics test must never be labeled as measured Minecraft FPS; in-game claims require the dedicated Minecraft benchmark instrumentation.
 
 ## Borders and separators
 
