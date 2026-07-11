@@ -2171,8 +2171,54 @@ body,
 .download-ring.complete { animation: download-complete 420ms ease both; }
 .download-ring.complete svg { animation: check-in 260ms 110ms ease both; }
 .play-instance:disabled { opacity: .5; cursor: wait; transform: scale(.9); }
-.launch-toast { position: fixed; z-index: 100; top: 18px; left: 50%; transform: translateX(-50%); min-width: 280px; max-width: 520px; padding: 12px 15px; display: flex; gap: 9px; border: 1px solid color-mix(in srgb, #f05454 60%, var(--border)); border-radius: 12px; background: color-mix(in srgb, var(--surface) 94%, #f05454); box-shadow: 0 14px 35px #0008; animation: toast-drop .28s ease both; }
-.launch-toast span { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.launch-toast {
+  position: fixed;
+  z-index: 700;
+  top: 18px;
+  left: 50%;
+  width: min(720px, calc(100vw - 72px));
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 142px minmax(0, 1fr);
+  align-items: start;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, #ef5656 46%, var(--border));
+  border-radius: 13px;
+  background: color-mix(in srgb, #ef5656 10%, var(--panel-strong));
+  box-shadow: 0 18px 42px #000b, 0 0 0 1px #ffffff06 inset;
+  animation: toast-drop .3s cubic-bezier(.22, .85, .3, 1) both;
+}
+.launch-toast::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: #ef5656;
+}
+.launch-toast-title {
+  align-self: stretch;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 15px 16px 15px 18px;
+  border-right: 1px solid color-mix(in srgb, #ef5656 22%, var(--border));
+  color: #ff7474;
+  white-space: nowrap;
+}
+.launch-toast-title b { font-size: 13px; }
+.launch-toast > span {
+  min-width: 0;
+  max-height: 150px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 15px 18px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 .signin-error { margin: 8px 4px 0; color: #f28a8a; font-size: 11px; line-height: 1.35; }
 @keyframes download-complete { 45% { transform: scale(1.34); opacity: .42; } 100% { transform: scale(1); opacity: 1; } }
 @keyframes check-in { from { opacity: 0; transform: scale(.45); } to { opacity: 1; transform: scale(1); } }

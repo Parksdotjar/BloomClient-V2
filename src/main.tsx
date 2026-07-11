@@ -40,6 +40,7 @@ import {
   Shield,
   SlidersHorizontal,
   TerminalSquare,
+  TriangleAlert,
   Trash2,
   UserRound,
   ArrowLeft as X,
@@ -1586,7 +1587,10 @@ function App() {
           <button>Coming soon</button>
         </div>
       )}
-      {toast && <div className="launch-toast" role="status"><b>Launch issue</b><span>{toast}</span></div>}
+      {toast && <div className="launch-toast" role="status">
+        <div className="launch-toast-title"><TriangleAlert size={17} /><b>Launch issue</b></div>
+        <span>{toast}</span>
+      </div>}
     </div>
   );
 }
