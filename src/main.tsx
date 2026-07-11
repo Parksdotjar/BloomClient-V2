@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { animate } from "animejs";
 import {
   Check,
@@ -26,6 +27,7 @@ import {
   Layers3,
   ImagePlus,
   MoreHorizontal,
+  Minus,
   PackageOpen,
   Palette,
   Play,
@@ -40,6 +42,8 @@ import {
   Trash2,
   UserRound,
   ArrowLeft as X,
+  Square,
+  X as CloseIcon,
 } from "lucide-react";
 import "./styles.css";
 import { monitorBackend } from "./services/backend";
@@ -1273,6 +1277,13 @@ function App() {
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
+      <div className="window-drag-region" data-tauri-drag-region>
+        <div className="window-controls">
+          <button className="window-control" onClick={() => void getCurrentWindow().minimize()} aria-label="Minimize Bloom Client"><Minus size={15} /></button>
+          <button className="window-control" onClick={() => void getCurrentWindow().toggleMaximize()} aria-label="Maximize or restore Bloom Client"><Square size={12} /></button>
+          <button className="window-control window-close" onClick={() => void getCurrentWindow().close()} aria-label="Close Bloom Client"><CloseIcon size={15} /></button>
+        </div>
+      </div>
       <aside className="sidebar">
         <div className="brand">
           <img src="/bloom-logo.png" alt="Bloom logo" />

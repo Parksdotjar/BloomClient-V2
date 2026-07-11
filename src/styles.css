@@ -25,6 +25,11 @@ body {
   min-height: 100vh;
   background: radial-gradient(ellipse at 70% 0%, #1b2222 0, #0e1113 38%);
 }
+.window-drag-region { position: fixed; z-index: 500; top: 0; left: 0; right: 0; height: 34px; background: transparent; }
+.window-controls { position: absolute; top: 6px; right: 7px; display: flex; align-items: center; gap: 5px; }
+.window-control { width: 34px; height: 25px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 7px; background: color-mix(in srgb, var(--control) 58%, transparent); color: var(--muted); }
+.window-control:hover { border-color: var(--border); background: var(--control); color: var(--text); }
+.window-control.window-close:hover { border-color: color-mix(in srgb, #ef5656 35%, var(--border)); background: color-mix(in srgb, #ef5656 72%, var(--control)); color: #fff; }
 button {
   font: inherit;
   color: inherit;

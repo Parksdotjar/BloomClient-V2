@@ -36,6 +36,7 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Interactive controls need hover, focus, and pressed states.
 - Use Anime.js for purposeful UI motion, including toggle thumb movement and subtle state transitions. Respect the Show Animations setting.
 - Do not expose browser context menus or browser-looking actions inside the client.
+- Desktop window controls use Bloom's custom dim icon buttons inside a transparent draggable region; close uses a restrained red hover state, and the native operating-system title bar remains disabled.
 - File imports must use a clearly labeled accent-colored action and report genuine native progress through Downloads; never simulate import progress.
 
 ## Large collections
