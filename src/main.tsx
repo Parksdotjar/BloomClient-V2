@@ -240,6 +240,7 @@ const MICROSOFT_CLIENT_ID =
   "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
 
 type MinecraftProfile = { id: string; name: string };
+type MinecraftAccountList = { activeId: string | null; accounts: MinecraftProfile[] };
 
 function SignInPanel({
   onClose,
@@ -1386,6 +1387,9 @@ function App() {
   });
   const [profileIcon, setProfileIcon] = useState<string | null>(() => localStorage.getItem("bloom-profile-icon"));
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [accounts, setAccounts] = useState<MinecraftProfile[]>([]);
+  const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
+  const [switchingAccount, setSwitchingAccount] = useState(false);
   const [settingsTarget, setSettingsTarget] = useState("General");
   const [settingsNavigationKey, setSettingsNavigationKey] = useState(0);
   const [contextMenu, setContextMenu] = useState<{
@@ -1479,9 +1483,15 @@ function App() {
     if (profileIcon) localStorage.setItem("bloom-profile-icon", profileIcon);
     else localStorage.removeItem("bloom-profile-icon");
   }, [profileIcon]);
+  const refreshAccounts = async () => {
+    const list = await invoke<MinecraftAccountList>("list_minecraft_accounts");
+    setAccounts(list.accounts);
+    const active = await invoke<MinecraftProfile | null>("get_saved_minecraft_profile");
+    setProfile(active);
+    return active;
+  };
   useEffect(() => {
-    void invoke<MinecraftProfile | null>("get_saved_minecraft_profile")
-      .then((savedProfile) => setProfile(savedProfile))
+    void refreshAccounts()
       .catch(() => {});
   }, []);
   useEffect(() => {
@@ -1613,7 +1623,7 @@ function App() {
     } catch (error) {
       const message = String(error);
       setToastKind("error");
-      if (message.includes("Sign in with Microsoft")) {
+      if (message.includes("Sign in with Microsoft") || message.toLowerCase().includes("needs to reconnect")) {
         setSignInOpen(true);
         setToast("Your saved profile needs a quick Microsoft reconnect before launching.");
       } else setToast(message);
@@ -1653,7 +1663,18 @@ function App() {
   };
   const selectedInstance = instances.find(instance => instance.id === selectedInstanceId);
   const mostRecentInstance = instances[0];
-  const signOut = () => { void invoke("sign_out_minecraft").finally(() => { setProfile(null); setProfileIcon(null); setSignInOpen(false); setProfileMenuOpen(false); }); };
+  const signOut = () => { void invoke<MinecraftProfile | null>("sign_out_minecraft").then((next) => { setProfile(next); setProfileIcon(null); return refreshAccounts(); }).catch(error => showToolMessage(String(error), "error")).finally(() => { setSignInOpen(false); setProfileMenuOpen(false); setPendingAccountId(null); }); };
+  const switchAccount = async (account: MinecraftProfile) => {
+    if (switchingAccount) return;
+    setSwitchingAccount(true);
+    try {
+      const next = await invoke<MinecraftProfile>("switch_minecraft_account", { accountId: account.id });
+      setProfile(next); setProfileIcon(null); setPendingAccountId(null); setProfileMenuOpen(false);
+      await refreshAccounts();
+      showToolMessage(`Switched to ${next.name}.`);
+    } catch (error) { showToolMessage(String(error), "error"); }
+    finally { setSwitchingAccount(false); }
+  };
   const openSettings = (target = "General") => { setSettingsTarget(target); setSettingsNavigationKey(value => value + 1); setPage("settings"); };
   const showToolMessage = (message: string, kind: "notification" | "error" = "notification") => {
     setToastKind(kind);
@@ -1798,8 +1819,17 @@ function App() {
               </button>
               {profileMenuOpen && <div className="profile-popover" onClick={event => event.stopPropagation()}>
                 <button onClick={() => { setProfileMenuOpen(false); openSettings("My Profile"); }}>My profile</button>
-                <div className="profile-popover-rule" />
                 <button className="profile-logout" onClick={signOut}>Log out</button>
+                <div className="profile-popover-rule" />
+                <div className="saved-account-list">
+                  {accounts.filter(account => account.id !== profile.id).map(account => <div className={`saved-account-row ${pendingAccountId === account.id ? "confirming" : ""}`} key={account.id}>
+                    <button className="saved-account-main" disabled={switchingAccount} onClick={() => setPendingAccountId(current => current === account.id ? null : account.id)}>
+                      <span>{account.name.slice(0, 1).toUpperCase()}</span><b>{account.name}</b>
+                    </button>
+                    {pendingAccountId === account.id && <button className="account-confirm" disabled={switchingAccount} onClick={() => void switchAccount(account)}>{switchingAccount ? "Switching…" : "Confirm"}</button>}
+                  </div>)}
+                </div>
+                <button className="add-minecraft-account" onClick={() => { setProfileMenuOpen(false); setPendingAccountId(null); setSignInOpen(true); }}><CirclePlus size={15} />Add account</button>
               </div>}
             </div>
           ) : (
@@ -1820,6 +1850,7 @@ function App() {
               onSignedIn={(nextProfile) => {
                 setProfile(nextProfile);
                 setSignInOpen(false);
+                void refreshAccounts();
               }}
             />
           )}

@@ -16,7 +16,7 @@ V2 is a ground-up rebuild of the original Bloom Client. It is designed around sp
 - Configure memory allocation, JVM arguments, resolution, and launch behavior
 - Track real installation and launch progress from the Downloads page
 - View live Minecraft output and launch failures from the Logs page
-- Sign in with a Microsoft Minecraft account and keep the session securely available between launches
+- Save multiple Microsoft Minecraft accounts securely, switch between them, and keep the active session available between launches
 - Personalize the client with multiple themes and accent colors
 
 ## Bloom AutoTune

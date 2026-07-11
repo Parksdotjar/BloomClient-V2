@@ -129,6 +129,27 @@ struct MinecraftSession {
     client_id: String,
 }
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MinecraftAccountProfile {
+    id: String,
+    name: String,
+}
+
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MinecraftAccountStore {
+    active_id: Option<String>,
+    accounts: Vec<MinecraftAccountProfile>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MinecraftAccountList {
+    active_id: Option<String>,
+    accounts: Vec<MinecraftAccountProfile>,
+}
+
 #[derive(Default)]
 struct LauncherState {
     session: Mutex<Option<MinecraftSession>>,
@@ -250,7 +271,7 @@ fn cancel_minecraft_launch(state: tauri::State<'_, LauncherState>) {
     state.cancel_requested.store(true, Ordering::SeqCst);
 }
 
-fn saved_session() -> Option<MinecraftSession> {
+fn legacy_saved_session() -> Option<MinecraftSession> {
     let profile_entry = keyring::Entry::new("Bloom Client", "minecraft-profile").ok()?;
     let profile: serde_json::Value =
         serde_json::from_str(&profile_entry.get_password().ok()?).ok()?;
@@ -271,29 +292,72 @@ fn saved_session() -> Option<MinecraftSession> {
     })
 }
 
-fn save_session(session: &MinecraftSession) -> Result<(), String> {
-    let profile = serde_json::json!({ "username": session.username, "uuid": session.uuid, "clientId": session.client_id }).to_string();
-    for (name, value) in [
-        ("minecraft-profile", profile.as_str()),
-        ("minecraft-access-token", session.access_token.as_str()),
-        ("microsoft-refresh-token", session.refresh_token.as_str()),
-    ] {
-        let entry = keyring::Entry::new("Bloom Client", name).map_err(|error| {
-            format!("Windows could not prepare secure account storage: {error}")
-        })?;
-        entry
-            .set_password(value)
-            .map_err(|error| format!("Windows could not save your sign-in securely: {error}"))?;
-    }
-    Ok(())
+fn account_store_path() -> Result<std::path::PathBuf, String> {
+    Ok(bloom_data_dir()?.join("minecraft-accounts.json"))
 }
 
-#[tauri::command]
-fn sign_out_minecraft(state: tauri::State<'_, LauncherState>) -> Result<(), String> {
-    *state
-        .session
-        .lock()
-        .map_err(|_| "Unable to clear the Minecraft sign-in session.")? = None;
+fn read_account_store() -> MinecraftAccountStore {
+    account_store_path()
+        .ok()
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn write_account_store(store: &MinecraftAccountStore) -> Result<(), String> {
+    let path = account_store_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(
+        path,
+        serde_json::to_vec_pretty(store).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn account_credential_name(uuid: &str) -> String {
+    format!(
+        "minecraft-account-{}",
+        uuid.chars()
+            .filter(|value| value.is_ascii_alphanumeric())
+            .collect::<String>()
+    )
+}
+
+fn load_account_session(uuid: &str) -> Option<MinecraftSession> {
+    let value = keyring::Entry::new("Bloom Client", &account_credential_name(uuid))
+        .ok()?
+        .get_password()
+        .ok()?;
+    serde_json::from_str(&value).ok()
+}
+
+fn save_account_session(session: &MinecraftSession, make_active: bool) -> Result<(), String> {
+    keyring::Entry::new("Bloom Client", &account_credential_name(&session.uuid))
+        .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+        .set_password(&serde_json::to_string(session).map_err(|error| error.to_string())?)
+        .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    let mut store = read_account_store();
+    if let Some(account) = store
+        .accounts
+        .iter_mut()
+        .find(|account| account.id == session.uuid)
+    {
+        account.name = session.username.clone();
+    } else {
+        store.accounts.push(MinecraftAccountProfile {
+            id: session.uuid.clone(),
+            name: session.username.clone(),
+        });
+    }
+    if make_active {
+        store.active_id = Some(session.uuid.clone());
+    }
+    write_account_store(&store)
+}
+
+fn delete_legacy_session() -> Result<(), String> {
     for name in [
         "minecraft-profile",
         "minecraft-access-token",
@@ -311,6 +375,62 @@ fn sign_out_minecraft(state: tauri::State<'_, LauncherState>) -> Result<(), Stri
         }
     }
     Ok(())
+}
+
+fn ensure_account_store() -> Result<MinecraftAccountStore, String> {
+    let store = read_account_store();
+    if !store.accounts.is_empty() {
+        return Ok(store);
+    }
+    if let Some(session) = legacy_saved_session() {
+        save_account_session(&session, true)?;
+        delete_legacy_session()?;
+        return Ok(read_account_store());
+    }
+    Ok(store)
+}
+
+fn saved_session() -> Option<MinecraftSession> {
+    let store = ensure_account_store().ok()?;
+    load_account_session(store.active_id.as_deref()?)
+}
+
+#[tauri::command]
+fn list_minecraft_accounts() -> Result<MinecraftAccountList, String> {
+    let store = ensure_account_store()?;
+    Ok(MinecraftAccountList {
+        active_id: store.active_id,
+        accounts: store.accounts,
+    })
+}
+
+#[tauri::command]
+fn sign_out_minecraft(
+    state: tauri::State<'_, LauncherState>,
+) -> Result<Option<serde_json::Value>, String> {
+    let mut store = ensure_account_store()?;
+    let Some(active_id) = store.active_id.clone() else {
+        return Ok(None);
+    };
+    let entry = keyring::Entry::new("Bloom Client", &account_credential_name(&active_id))
+        .map_err(|error| error.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => {}
+        Err(error) => {
+            return Err(format!(
+                "Windows could not remove the saved account: {error}"
+            ))
+        }
+    }
+    store.accounts.retain(|account| account.id != active_id);
+    store.active_id = store.accounts.first().map(|account| account.id.clone());
+    write_account_store(&store)?;
+    let next = store.active_id.as_deref().and_then(load_account_session);
+    *state
+        .session
+        .lock()
+        .map_err(|_| "Unable to clear the Minecraft sign-in session.")? = next.clone();
+    Ok(next.map(|session| serde_json::json!({ "id": session.uuid, "name": session.username })))
 }
 
 #[tauri::command]
@@ -361,6 +481,94 @@ async fn read_auth_response(
         ));
     }
     Ok(body)
+}
+
+async fn minecraft_session_from_microsoft(
+    client: &reqwest::Client,
+    client_id: String,
+    microsoft_access_token: String,
+    refresh_token: String,
+) -> Result<MinecraftSession, String> {
+    let xbl_response = client.post("https://user.auth.xboxlive.com/user/authenticate").json(&serde_json::json!({"Properties":{"AuthMethod":"RPS","SiteName":"user.auth.xboxlive.com","RpsTicket":format!("d={microsoft_access_token}")},"RelyingParty":"http://auth.xboxlive.com","TokenType":"JWT"})).send().await.map_err(|error| error.to_string())?;
+    let xbl = read_auth_response(xbl_response, "Xbox Live").await?;
+    let xsts_response = client.post("https://xsts.auth.xboxlive.com/xsts/authorize").json(&serde_json::json!({"Properties":{"SandboxId":"RETAIL","UserTokens":[xbl["Token"]]},"RelyingParty":"rp://api.minecraftservices.com/","TokenType":"JWT"})).send().await.map_err(|error| error.to_string())?;
+    let xsts = read_auth_response(xsts_response, "Xbox security").await?;
+    let identity = xsts["DisplayClaims"]["xui"][0]["uhs"]
+        .as_str()
+        .ok_or("Xbox authentication did not return a user identity.")?;
+    let xsts_token = xsts["Token"]
+        .as_str()
+        .ok_or("Xbox authentication did not return an XSTS token.")?;
+    let minecraft_response = client
+        .post("https://api.minecraftservices.com/authentication/login_with_xbox")
+        .json(&serde_json::json!({"identityToken":format!("XBL3.0 x={identity};{xsts_token}")}))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let minecraft = read_auth_response(minecraft_response, "Minecraft services").await?;
+    let minecraft_token = minecraft["access_token"].as_str().ok_or(
+        "Minecraft services login failed. Make sure this Microsoft account owns Minecraft.",
+    )?;
+    let profile_response = client
+        .get("https://api.minecraftservices.com/minecraft/profile")
+        .bearer_auth(minecraft_token)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let profile = read_auth_response(profile_response, "Minecraft profile").await?;
+    let username = profile
+        .get("name")
+        .and_then(|value| value.as_str())
+        .ok_or("No Minecraft profile was found on this account.")?
+        .to_string();
+    let uuid = profile
+        .get("id")
+        .and_then(|value| value.as_str())
+        .ok_or("No Minecraft profile was found on this account.")?
+        .to_string();
+    Ok(MinecraftSession {
+        username,
+        uuid,
+        access_token: minecraft_token.to_string(),
+        refresh_token,
+        client_id,
+    })
+}
+
+async fn refresh_minecraft_session(session: &MinecraftSession) -> Result<MinecraftSession, String> {
+    if session.refresh_token.is_empty() {
+        return Err("This saved account needs to reconnect with Microsoft.".into());
+    }
+    let client = reqwest::Client::new();
+    let response = client
+        .post("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
+        .form(&[
+            ("client_id", session.client_id.clone()),
+            ("grant_type", "refresh_token".to_string()),
+            ("refresh_token", session.refresh_token.clone()),
+            ("scope", "XboxLive.signin offline_access".to_string()),
+        ])
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let tokens = read_auth_response(response, "Microsoft sign-in refresh").await?;
+    let access_token = tokens
+        .get("access_token")
+        .and_then(|value| value.as_str())
+        .ok_or("Microsoft did not return a refreshed access token.")?
+        .to_string();
+    let refresh_token = tokens
+        .get("refresh_token")
+        .and_then(|value| value.as_str())
+        .unwrap_or(&session.refresh_token)
+        .to_string();
+    minecraft_session_from_microsoft(
+        &client,
+        session.client_id.clone(),
+        access_token,
+        refresh_token,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -419,53 +627,32 @@ async fn complete_microsoft_login(
         .as_str()
         .unwrap_or_default()
         .to_string();
-    let xbl_response = client.post("https://user.auth.xboxlive.com/user/authenticate").json(&serde_json::json!({"Properties":{"AuthMethod":"RPS","SiteName":"user.auth.xboxlive.com","RpsTicket":format!("d={access_token}")},"RelyingParty":"http://auth.xboxlive.com","TokenType":"JWT"})).send().await.map_err(|error| error.to_string())?;
-    let xbl = read_auth_response(xbl_response, "Xbox Live").await?;
-    let xsts_response = client.post("https://xsts.auth.xboxlive.com/xsts/authorize").json(&serde_json::json!({"Properties":{"SandboxId":"RETAIL","UserTokens":[xbl["Token"]]},"RelyingParty":"rp://api.minecraftservices.com/","TokenType":"JWT"})).send().await.map_err(|error| error.to_string())?;
-    let xsts = read_auth_response(xsts_response, "Xbox security").await?;
-    let identity = xsts["DisplayClaims"]["xui"][0]["uhs"]
-        .as_str()
-        .ok_or("Xbox authentication did not return a user identity.")?;
-    let xsts_token = xsts["Token"]
-        .as_str()
-        .ok_or("Xbox authentication did not return an XSTS token.")?;
-    let minecraft_response = client
-        .post("https://api.minecraftservices.com/authentication/login_with_xbox")
-        .json(&serde_json::json!({"identityToken":format!("XBL3.0 x={identity};{xsts_token}")}))
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-    let minecraft = read_auth_response(minecraft_response, "Minecraft services").await?;
-    let minecraft_token = minecraft["access_token"].as_str().ok_or(
-        "Minecraft services login failed. Make sure this Microsoft account owns Minecraft.",
-    )?;
-    let profile_response = client
-        .get("https://api.minecraftservices.com/minecraft/profile")
-        .bearer_auth(minecraft_token)
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-    let profile = read_auth_response(profile_response, "Minecraft profile").await?;
-    if profile.get("id").and_then(|v| v.as_str()).is_none()
-        || profile.get("name").and_then(|v| v.as_str()).is_none()
-    {
-        return Err("No Minecraft profile was found on this account.".into());
-    }
-    let username = profile["name"].as_str().unwrap_or_default().to_string();
-    let uuid = profile["id"].as_str().unwrap_or_default().to_string();
-    let session = MinecraftSession {
-        username,
-        uuid,
-        access_token: minecraft_token.to_string(),
-        refresh_token,
-        client_id,
-    };
-    save_session(&session)?;
+    let session =
+        minecraft_session_from_microsoft(&client, client_id, access_token, refresh_token).await?;
+    save_account_session(&session, true)?;
     *state
         .session
         .lock()
-        .map_err(|_| "Unable to save the Minecraft sign-in session.")? = Some(session);
-    Ok(profile)
+        .map_err(|_| "Unable to save the Minecraft sign-in session.")? = Some(session.clone());
+    Ok(serde_json::json!({ "id": session.uuid, "name": session.username }))
+}
+
+#[tauri::command]
+async fn switch_minecraft_account(
+    state: tauri::State<'_, LauncherState>,
+    account_id: String,
+) -> Result<serde_json::Value, String> {
+    let stored =
+        load_account_session(&account_id).ok_or("This saved account could not be found.")?;
+    let session = refresh_minecraft_session(&stored)
+        .await
+        .map_err(|error| format!("This account needs to reconnect: {error}"))?;
+    save_account_session(&session, true)?;
+    *state
+        .session
+        .lock()
+        .map_err(|_| "Unable to switch the Minecraft account.")? = Some(session.clone());
+    Ok(serde_json::json!({ "id": session.uuid, "name": session.username }))
 }
 
 #[tauri::command]
@@ -2190,7 +2377,7 @@ async fn launch_minecraft(
         *active = true;
     }
     state.cancel_requested.store(false, Ordering::SeqCst);
-    let session = state
+    let stored_session = state
         .session
         .lock()
         .map_err(|_| "Unable to read the Minecraft sign-in session.")?
@@ -2202,6 +2389,24 @@ async fn launch_minecraft(
             }
             "Sign in with Microsoft before launching Minecraft.".to_string()
         })?;
+    let session = refresh_minecraft_session(&stored_session)
+        .await
+        .map_err(|error| {
+            if let Ok(mut active) = state.launch_active.lock() {
+                *active = false;
+            }
+            format!("The selected Microsoft account needs to reconnect: {error}")
+        })?;
+    save_account_session(&session, true).map_err(|error| {
+        if let Ok(mut active) = state.launch_active.lock() {
+            *active = false;
+        }
+        error
+    })?;
+    *state
+        .session
+        .lock()
+        .map_err(|_| "Unable to refresh the active account.")? = Some(session.clone());
     let active = Arc::new(state.launch_active.clone());
     let cancel_requested = state.cancel_requested.clone();
     std::thread::spawn(move || {
@@ -2507,7 +2712,9 @@ pub fn run() {
             cancel_minecraft_launch,
             repair_minecraft_installation,
             sign_out_minecraft,
-            get_saved_minecraft_profile
+            get_saved_minecraft_profile,
+            list_minecraft_accounts,
+            switch_minecraft_account
         ])
         .run(tauri::generate_context!())
         .expect("error while running Bloom Client");
@@ -2515,7 +2722,19 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{allowed_pack_download, patch_options, safe_pack_path};
+    use super::{account_credential_name, allowed_pack_download, patch_options, safe_pack_path};
+
+    #[test]
+    fn account_credentials_are_scoped_by_minecraft_uuid() {
+        assert_eq!(
+            account_credential_name("abc-123"),
+            "minecraft-account-abc123"
+        );
+        assert_ne!(
+            account_credential_name("abc-123"),
+            account_credential_name("def-456")
+        );
+    }
 
     #[test]
     fn modpack_paths_stay_inside_the_instance() {

@@ -1440,11 +1440,21 @@ body,
 .sidebar-update-button i { position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 7px var(--accent); }
 .sidebar-update-button:hover { background: color-mix(in srgb, var(--accent) 18%, var(--control)); transform: translateY(-1px); }
 .profile-trigger .avatar { flex: 0 0 auto; }
-.profile-popover { position: absolute; z-index: 30; bottom: calc(100% + 10px); left: 0; width: 226px; padding: 7px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel-strong); box-shadow: 0 16px 38px #000a; animation: profile-popover-in 160ms ease both; }
+.profile-popover { position: absolute; z-index: 30; bottom: calc(100% + 10px); left: 0; width: 226px; padding: 7px; overflow: visible; border: 1px solid var(--border); border-radius: 14px; background: var(--panel-strong); box-shadow: 0 16px 38px #000a; animation: profile-popover-in 160ms ease both; }
 .profile-popover > button { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; text-align: left; color: var(--text); font-size: 14px; }
 .profile-popover > button:hover { background: var(--control); }
 .profile-popover-rule { height: 1px; margin: 2px 12px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--border) 90%, transparent) 18%, color-mix(in srgb, var(--border) 90%, transparent) 82%, transparent); }
 .profile-popover .profile-logout { color: #f37b7b; }
+.saved-account-list { display: grid; gap: 3px; }
+.saved-account-row { position: relative; display: flex; align-items: center; gap: 5px; border-radius: 8px; }
+.saved-account-main { min-width: 0; min-height: 38px; display: flex !important; flex: 1; align-items: center !important; justify-content: flex-start !important; gap: 9px; padding: 5px 8px !important; }
+.saved-account-main > span { width: 27px; height: 27px; display: grid; place-items: center; flex: 0 0 auto; margin: 0; border-radius: 7px; background: color-mix(in srgb, var(--accent) 16%, var(--control)); color: var(--accent); font-size: 11px; font-weight: 800; }
+.saved-account-main > b { min-width: 0; overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.saved-account-row.confirming { background: color-mix(in srgb, var(--accent) 7%, var(--control)); }
+.account-confirm { min-height: 30px; padding: 0 8px !important; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)) !important; border-radius: 999px !important; background: var(--accent) !important; color: #101510 !important; font-size: 8px !important; font-weight: 800; white-space: nowrap; box-shadow: 0 8px 18px #0006; animation: account-confirm-in 180ms cubic-bezier(.2,.85,.25,1) both; }
+.profile-popover .add-minecraft-account { justify-content: flex-start; gap: 8px; color: var(--accent); }
+.add-minecraft-account svg { flex: 0 0 auto; }
+@keyframes account-confirm-in { from { opacity: 0; transform: translateY(6px) scale(.96); } }
 @keyframes profile-popover-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .profile-settings-card { min-height: 82px; display: flex; align-items: center; gap: 13px; padding: 14px 18px; }
 .profile-settings-avatar { position: relative; width: 47px; height: 47px; flex: 0 0 auto; display: grid; place-items: center; overflow: visible; padding: 0; border: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 35%, var(--control)); color: #fff; font-size: 18px; font-weight: 800; }
