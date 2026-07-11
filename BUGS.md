@@ -18,6 +18,7 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 | BLIM-004 | Fixed | Launcher | Download completed before Minecraft was actually ready |
 | BLIM-005 | Fixed | Fabric | Fabric profile installed without its Maven libraries |
 | BLOOM-006 | Fixed | Packaging | Production client opened with a terminal window |
+| BLOOM-007 | Fixed | Accounts | Microsoft session exceeded Windows' 2,560-character credential limit |
 
 ---
 
@@ -69,6 +70,14 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 - **Root cause:** The Rust executable used Windows' console subsystem in release builds, making the terminal the owner of the application process.
 - **Fix:** Production builds now use the Windows GUI subsystem. Debug builds keep their console output for development diagnostics.
 - **Verification:** Build Bloom in release mode and confirm the PE subsystem is `Windows GUI`; launching the installed client must not create a terminal window.
+
+## BLOOM-007 — Microsoft session exceeded Windows credential limit
+
+- **Status:** Fixed
+- **Symptom:** Microsoft sign-in completed, but Bloom displayed `Attribute 'password' encoded as UTF-16 is longer than platform limit of 2560 chars` and could not persist the account.
+- **Root cause:** The profile, Minecraft access token, and Microsoft refresh token were serialized into one Windows Credential Manager password value. Refreshed token payloads can make that combined value exceed Windows' per-credential limit.
+- **Fix:** Bloom stores the small account profile separately and splits each sensitive token into bounded secure credential chunks. Existing single-entry accounts remain readable and migrate automatically after refresh. Signing out deletes both formats.
+- **Verification:** Rust tests reconstruct a 7,001-character token exactly from chunks no larger than 1,200 characters; the complete native test suite and `cargo check` pass.
 
 ## How to add a bug
 

@@ -325,7 +325,104 @@ fn account_credential_name(uuid: &str) -> String {
     )
 }
 
+fn account_credential_part(uuid: &str, part: &str) -> String {
+    format!("{}-{part}", account_credential_name(uuid))
+}
+
+fn split_credential_secret(value: &str) -> Vec<String> {
+    const CHUNK_CHARACTERS: usize = 1200;
+    let characters = value.chars().collect::<Vec<_>>();
+    characters
+        .chunks(CHUNK_CHARACTERS)
+        .map(|chunk| chunk.iter().collect())
+        .collect()
+}
+
+fn save_chunked_credential(uuid: &str, kind: &str, value: &str) -> Result<(), String> {
+    let chunks = split_credential_secret(value);
+    for (index, chunk) in chunks.iter().enumerate() {
+        keyring::Entry::new(
+            "Bloom Client",
+            &account_credential_part(uuid, &format!("{kind}-{index}")),
+        )
+        .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+        .set_password(chunk)
+        .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    }
+    keyring::Entry::new(
+        "Bloom Client",
+        &account_credential_part(uuid, &format!("{kind}-count")),
+    )
+    .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+    .set_password(&chunks.len().to_string())
+    .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    for index in chunks.len()..32 {
+        delete_credential_entry(&account_credential_part(uuid, &format!("{kind}-{index}")))?;
+    }
+    Ok(())
+}
+
+fn load_chunked_credential(uuid: &str, kind: &str) -> Option<String> {
+    let count = keyring::Entry::new(
+        "Bloom Client",
+        &account_credential_part(uuid, &format!("{kind}-count")),
+    )
+    .ok()?
+    .get_password()
+    .ok()?
+    .parse::<usize>()
+    .ok()?;
+    if count > 32 {
+        return None;
+    }
+    let mut value = String::new();
+    for index in 0..count {
+        value.push_str(
+            &keyring::Entry::new(
+                "Bloom Client",
+                &account_credential_part(uuid, &format!("{kind}-{index}")),
+            )
+            .ok()?
+            .get_password()
+            .ok()?,
+        );
+    }
+    Some(value)
+}
+
+fn delete_credential_entry(name: &str) -> Result<(), String> {
+    let entry = keyring::Entry::new("Bloom Client", name).map_err(|error| error.to_string())?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn delete_account_credentials(uuid: &str) -> Result<(), String> {
+    delete_credential_entry(&account_credential_name(uuid))?;
+    delete_credential_entry(&account_credential_part(uuid, "profile"))?;
+    for kind in ["access", "refresh"] {
+        delete_credential_entry(&account_credential_part(uuid, &format!("{kind}-count")))?;
+        for index in 0..32 {
+            delete_credential_entry(&account_credential_part(uuid, &format!("{kind}-{index}")))?;
+        }
+    }
+    Ok(())
+}
+
 fn load_account_session(uuid: &str) -> Option<MinecraftSession> {
+    let profile_name = account_credential_part(uuid, "profile");
+    if let Ok(entry) = keyring::Entry::new("Bloom Client", &profile_name) {
+        if let Ok(value) = entry.get_password() {
+            if let Ok(profile) = serde_json::from_str::<MinecraftSession>(&value) {
+                return Some(MinecraftSession {
+                    access_token: load_chunked_credential(uuid, "access")?,
+                    refresh_token: load_chunked_credential(uuid, "refresh")?,
+                    ..profile
+                });
+            }
+        }
+    }
     let value = keyring::Entry::new("Bloom Client", &account_credential_name(uuid))
         .ok()?
         .get_password()
@@ -334,10 +431,23 @@ fn load_account_session(uuid: &str) -> Option<MinecraftSession> {
 }
 
 fn save_account_session(session: &MinecraftSession, make_active: bool) -> Result<(), String> {
-    keyring::Entry::new("Bloom Client", &account_credential_name(&session.uuid))
-        .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
-        .set_password(&serde_json::to_string(session).map_err(|error| error.to_string())?)
-        .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    save_chunked_credential(&session.uuid, "access", &session.access_token)?;
+    save_chunked_credential(&session.uuid, "refresh", &session.refresh_token)?;
+    let profile = MinecraftSession {
+        username: session.username.clone(),
+        uuid: session.uuid.clone(),
+        client_id: session.client_id.clone(),
+        access_token: String::new(),
+        refresh_token: String::new(),
+    };
+    keyring::Entry::new(
+        "Bloom Client",
+        &account_credential_part(&session.uuid, "profile"),
+    )
+    .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+    .set_password(&serde_json::to_string(&profile).map_err(|error| error.to_string())?)
+    .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    delete_credential_entry(&account_credential_name(&session.uuid))?;
     let mut store = read_account_store();
     if let Some(account) = store
         .accounts
@@ -412,16 +522,8 @@ fn sign_out_minecraft(
     let Some(active_id) = store.active_id.clone() else {
         return Ok(None);
     };
-    let entry = keyring::Entry::new("Bloom Client", &account_credential_name(&active_id))
-        .map_err(|error| error.to_string())?;
-    match entry.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => {}
-        Err(error) => {
-            return Err(format!(
-                "Windows could not remove the saved account: {error}"
-            ))
-        }
-    }
+    delete_account_credentials(&active_id)
+        .map_err(|error| format!("Windows could not remove the saved account: {error}"))?;
     store.accounts.retain(|account| account.id != active_id);
     store.active_id = store.accounts.first().map(|account| account.id.clone());
     write_account_store(&store)?;
@@ -3027,7 +3129,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{account_credential_name, allowed_pack_download, patch_options, safe_pack_path};
+    use super::{
+        account_credential_name, allowed_pack_download, patch_options, safe_pack_path,
+        split_credential_secret,
+    };
 
     #[test]
     fn account_credentials_are_scoped_by_minecraft_uuid() {
@@ -3039,6 +3144,15 @@ mod tests {
             account_credential_name("abc-123"),
             account_credential_name("def-456")
         );
+    }
+
+    #[test]
+    fn long_account_tokens_are_split_below_windows_limits() {
+        let token = "x".repeat(7_001);
+        let chunks = split_credential_secret(&token);
+        assert!(chunks.len() > 1);
+        assert!(chunks.iter().all(|chunk| chunk.chars().count() <= 1_200));
+        assert_eq!(chunks.concat(), token);
     }
 
     #[test]
