@@ -1077,15 +1077,16 @@ function InstancePage({ instance, busy, onPlay, onChanged, onInstallMod }: { ins
 
 type HardwareReport = { cpu: string; cores: number; threads: number; ramBytes: number; gpus: string[]; refreshRate?: number; javaVersions: number[]; recommendedMemoryMb: number; recommendedRenderDistance: number; recommendedSimulationDistance: number; recommendedGraphics: string };
 
-function AutoTunePage() {
+function AutoTunePage({ onComplete }: { onComplete: () => void }) {
   const [accepted, setAccepted] = useState(() => localStorage.getItem("bloom-autotune-accepted") === "true");
-  const [report, setReport] = useState<HardwareReport | null>(null);
+  const [report, setReport] = useState<HardwareReport | null>(() => { try { return JSON.parse(localStorage.getItem("bloom-autotune-hardware") || "null"); } catch { return null; } });
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState("");
-  const scan = async () => { setScanning(true); setError(""); try { setReport(await invoke<HardwareReport>("detect_hardware_report")); } catch (reason) { setError(String(reason)); } finally { setScanning(false); } };
+  const scan = async () => { setScanning(true); setError(""); try { const next = await invoke<HardwareReport>("detect_hardware_report"); setReport(next); localStorage.setItem("bloom-autotune-hardware", JSON.stringify(next)); onComplete(); } catch (reason) { setError(String(reason)); } finally { setScanning(false); } };
+  useEffect(() => { if (report) onComplete(); }, []);
   useEffect(() => { if (accepted && !report && !scanning) void scan(); }, [accepted]);
   if (!accepted) return <div className="autotune-page consent-view"><header className="autotune-heading"><span><WandSparkles size={22} /></span><div><em>Bloom Labs</em><h1>Meet AutoTune</h1><p>A hardware-aware optimization system built around your computer—not generic recommendations.</p></div></header><section className="autotune-consent"><div className="consent-scroll"><h2>Before we scan</h2><p>AutoTune needs permission to read basic hardware information from this computer. Phase 1 does not run Minecraft, upload results, or modify an instance.</p><div className="consent-point"><Cpu size={18} /><div><b>What Bloom reads</b><span>CPU model and core count, graphics adapters, installed memory, monitor refresh rate, and detected Java versions.</span></div></div><div className="consent-point"><Shield size={18} /><div><b>Your data stays local</b><span>The report is created on this device. Bloom does not send hardware details to the backend during this phase.</span></div></div><div className="consent-point"><SlidersHorizontal size={18} /><div><b>Recommendations are reversible</b><span>Phase 1 only proposes memory, graphics, render-distance, and simulation-distance defaults. Nothing is applied automatically.</span></div></div><div className="consent-point"><LockKeyhole size={18} /><div><b>Future benchmark permission</b><span>A later phase may launch a temporary benchmark world. Bloom will request separate confirmation before that happens.</span></div></div><p className="consent-fineprint">By continuing, you allow Bloom Client to query Windows for the hardware details listed above. You can revisit or clear AutoTune data later.</p></div><button className="autotune-accept" onClick={() => { localStorage.setItem("bloom-autotune-accepted", "true"); setAccepted(true); }}><WandSparkles size={17} />Accept and scan hardware</button></section></div>;
-  return <div className="autotune-page"><header className="autotune-dashboard-heading"><div><em>Bloom AutoTune</em><h1>Optimization Center</h1><p>Hardware scan and personalized Minecraft recommendations.</p></div><button disabled={scanning} onClick={() => void scan()}><RotateCw size={15} className={scanning ? "spinning" : ""} />{scanning ? "Scanning" : "Scan again"}</button></header><div className="autotune-phases">{[["01", "Hardware", "Ready"], ["02", "Benchmark", "Planned"], ["03", "Tune", "Planned"], ["04", "Apply", "Planned"]].map(([number, label, status], index) => <div className={index === 0 ? "active" : "locked"} key={number}><span>{index === 0 ? <Check size={14} /> : number}</span><div><b>{label}</b><small>{status}</small></div></div>)}</div>{scanning ? <section className="hardware-scanning"><span><Cpu size={26} /></span><b>Reading your hardware</b><p>Checking Windows devices, memory, displays, and Java runtimes…</p><i /></section> : error ? <section className="hardware-error"><TriangleAlert size={20} /><div><b>Hardware scan failed</b><span>{error}</span></div><button onClick={() => void scan()}>Try again</button></section> : report && <><section className="hardware-grid"><div><span><Cpu size={19} /></span><small>Processor</small><b title={report.cpu}>{report.cpu}</b><em>{report.cores} cores • {report.threads} threads</em></div><div><span><Monitor size={19} /></span><small>Graphics</small><b title={report.gpus.join(", ")}>{report.gpus[0] || "Unknown GPU"}</b><em>{report.refreshRate ? `${report.refreshRate} Hz display` : "Refresh rate unavailable"}</em></div><div><span><MemoryStick size={19} /></span><small>System memory</small><b>{Math.round(report.ramBytes / 1073741824)} GB RAM</b><em>{report.recommendedMemoryMb / 1024} GB recommended for Minecraft</em></div><div><span><TerminalSquare size={19} /></span><small>Java runtimes</small><b>{report.javaVersions.length ? report.javaVersions.map(version => `Java ${version}`).join(", ") : "None detected"}</b><em>Automatic runtime selection</em></div></section><section className="recommendation-panel"><div className="recommendation-copy"><em>Phase 1 recommendation</em><h2>Your baseline profile</h2><p>This is a hardware-based starting point. The future benchmark phase will test and refine it using real frame-time data.</p><span>Confidence: Preliminary</span></div><div className="recommendation-values"><div><small>Memory</small><b>{report.recommendedMemoryMb / 1024} GB</b></div><div><small>Graphics</small><b>{report.recommendedGraphics}</b></div><div><small>Render distance</small><b>{report.recommendedRenderDistance} chunks</b></div><div><small>Simulation</small><b>{report.recommendedSimulationDistance} chunks</b></div></div></section><section className="benchmark-preview"><div className="benchmark-icon"><LockKeyhole size={22} /></div><div><em>Phase 2 • Coming next</em><h2>Measured performance benchmark</h2><p>A controlled temporary world will measure average FPS, 1% lows, and frame-time stability before AutoTune changes anything.</p></div><button disabled>Not available yet</button></section></>}</div>;
+  return <div className="autotune-page"><header className="autotune-dashboard-heading"><div><em>Phase 1 • Hardware</em><h1>Optimization Center</h1><p>Hardware scan and personalized Minecraft recommendations.</p></div><button disabled={scanning} onClick={() => void scan()}><RotateCw size={15} className={scanning ? "spinning" : ""} />{scanning ? "Scanning" : "Scan again"}</button></header>{scanning ? <section className="hardware-scanning"><span><Cpu size={26} /></span><b>Reading your hardware</b><p>Checking Windows devices, memory, displays, and Java runtimes…</p><i /></section> : error ? <section className="hardware-error"><TriangleAlert size={20} /><div><b>Hardware scan failed</b><span>{error}</span></div><button onClick={() => void scan()}>Try again</button></section> : report && <><section className="hardware-grid"><div><span><Cpu size={19} /></span><small>Processor</small><b title={report.cpu}>{report.cpu}</b><em>{report.cores} cores • {report.threads} threads</em></div><div><span><Monitor size={19} /></span><small>Graphics</small><b title={report.gpus.join(", ")}>{report.gpus[0] || "Unknown GPU"}</b><em>{report.refreshRate ? `${report.refreshRate} Hz display` : "Refresh rate unavailable"}</em></div><div><span><MemoryStick size={19} /></span><small>System memory</small><b>{Math.round(report.ramBytes / 1073741824)} GB RAM</b><em>{report.recommendedMemoryMb / 1024} GB recommended for Minecraft</em></div><div><span><TerminalSquare size={19} /></span><small>Java runtimes</small><b>{report.javaVersions.length ? report.javaVersions.map(version => `Java ${version}`).join(", ") : "None detected"}</b><em>Automatic runtime selection</em></div></section><section className="recommendation-panel"><div className="recommendation-copy"><em>Phase 1 recommendation</em><h2>Your baseline profile</h2><p>This is a hardware-based starting point. The benchmark phase will test and refine it using real frame-time data.</p><span>Confidence: Preliminary</span></div><div className="recommendation-values"><div><small>Memory</small><b>{report.recommendedMemoryMb / 1024} GB</b></div><div><small>Graphics</small><b>{report.recommendedGraphics}</b></div><div><small>Render distance</small><b>{report.recommendedRenderDistance} chunks</b></div><div><small>Simulation</small><b>{report.recommendedSimulationDistance} chunks</b></div></div></section></>}</div>;
 }
 
 type BenchmarkResult = { averageFps: number; onePercentLow: number; averageFrameTime: number; stability: number; score: number; completedAt: number };
@@ -1144,7 +1145,7 @@ type MinecraftBenchmarkResult = {
   completedAt: number;
 };
 
-function AutoTuneMinecraftBenchmark() {
+function AutoTuneMinecraftBenchmark({ onComplete, onReset }: { onComplete: () => void; onReset: () => void }) {
   const [allowed, setAllowed] = useState(() => localStorage.getItem("bloom-autotune-accepted") === "true");
   const [stage, setStage] = useState<"permission" | "installing" | "ready" | "running" | "result" | "error">("permission");
   const [progress, setProgress] = useState(0);
@@ -1152,7 +1153,7 @@ function AutoTuneMinecraftBenchmark() {
   const [result, setResult] = useState<MinecraftBenchmarkResult | null>(null);
   useEffect(() => {
     localStorage.removeItem("bloom-autotune-benchmark");
-    if (allowed) void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(value => { if (value) { setResult(value); setStage("result"); } }).catch(() => {});
+    if (allowed) void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(value => { if (value) { setResult(value); setStage("result"); localStorage.setItem("bloom-autotune-minecraft-complete", String(value.completedAt)); onComplete(); } }).catch(() => {});
   }, [allowed]);
   useEffect(() => { if (allowed) return; const timer = window.setInterval(() => setAllowed(localStorage.getItem("bloom-autotune-accepted") === "true"), 250); return () => clearInterval(timer); }, [allowed]);
   useEffect(() => {
@@ -1171,13 +1172,14 @@ function AutoTuneMinecraftBenchmark() {
       void invoke<{ state: string; progress: number; message: string } | null>("get_autotune_benchmark_status").then(next => {
         if (!next) return; setProgress(next.progress); setStatus(next.message);
         if (next.state === "error") { setStage("error"); return; }
-        if (next.state === "complete") void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(value => { if (value) { setResult(value); setStage("result"); } });
+        if (next.state === "complete") void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(value => { if (value) { setResult(value); setStage("result"); localStorage.setItem("bloom-autotune-minecraft-complete", String(value.completedAt)); onComplete(); } });
       }).catch(() => {});
     }, 500);
     return () => clearInterval(timer);
   }, [stage]);
   if (!allowed) return null;
   const install = async () => {
+    onReset(); localStorage.removeItem("bloom-autotune-profile"); localStorage.removeItem("bloom-autotune-minecraft-complete");
     setStage("installing"); setProgress(1); setStatus("Preparing the private benchmark instance");
     try { await invoke("install_autotune_benchmark"); } catch (error) { setStatus(String(error)); setStage("error"); }
   };
@@ -1211,11 +1213,12 @@ type AutoTuneProfile = {
   reasons: Array<{ title: string; detail: string; tone: "good" | "warn" | "info" }>;
 };
 
-function AutoTuneTuner() {
+function AutoTuneTuner({ onComplete, onReset }: { onComplete: () => void; onReset: () => void }) {
   const [profile, setProfile] = useState<AutoTuneProfile | null>(() => { try { return JSON.parse(localStorage.getItem("bloom-autotune-profile") || "null"); } catch { return null; } });
   const [tuning, setTuning] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { if (!profile) return; void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(benchmark => { if (benchmark && benchmark.completedAt !== profile.benchmarkCompletedAt) { localStorage.removeItem("bloom-autotune-profile"); setProfile(null); } }).catch(() => {}); }, []);
+  useEffect(() => { if (!profile) return; void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(benchmark => { if (benchmark && benchmark.completedAt !== profile.benchmarkCompletedAt) { localStorage.removeItem("bloom-autotune-profile"); setProfile(null); onReset(); } }).catch(() => {}); }, []);
+  useEffect(() => { if (profile) onComplete(); }, []);
   const tune = async () => {
     setTuning(true); setError("");
     try {
@@ -1240,7 +1243,7 @@ function AutoTuneTuner() {
         { title: "Runtime behavior", detail: `${jvmProfile} JVM tuning selected from measured frame consistency; aggressive Overdrive flags are never applied automatically.`, tone: jvmProfile === "Performance" ? "warn" : "good" },
       ];
       const next: AutoTuneProfile = { targetFps, memoryMb, jvmProfile, graphics, renderDistance, simulationDistance, averageFps: benchmark.averageFps, onePercentLow: benchmark.onePercentLow, lowRatio, confidence: severeStutter ? "Measured with caution" : "Measured", benchmarkCompletedAt: benchmark.completedAt, reasons };
-      localStorage.setItem("bloom-autotune-profile", JSON.stringify(next)); setProfile(next);
+      localStorage.setItem("bloom-autotune-profile", JSON.stringify(next)); setProfile(next); onComplete();
     } catch (reason) { setError(String(reason)); } finally { setTuning(false); }
   };
   return <section className="autotune-tuner"><div className="tuner-heading"><div><em>Phase 3 • Decision engine</em><h2>Build your tuned profile</h2><p>Turn the hardware scan and measured Minecraft results into specific settings with transparent reasoning.</p></div><span>03</span></div>{!profile ? <div className="tuner-empty"><div className="tuner-orbit"><WandSparkles size={24} /></div><div><b>{tuning ? "Analyzing benchmark data" : "Ready to calculate your profile"}</b><span>{tuning ? "Comparing throughput, 1% lows, memory pressure, CPU capacity, and display refresh…" : "Bloom will calculate recommendations locally. Nothing is applied to your instances during this phase."}</span>{tuning && <i><small /></i>}</div><button disabled={tuning} onClick={() => void tune()}>{tuning ? "Tuning…" : "Tune my settings"}</button></div> : <div className="tuner-profile"><div className="tuner-summary"><div><small>Profile confidence</small><b>{profile.confidence}</b><span>Based on Minecraft benchmark #{String(profile.benchmarkCompletedAt).slice(-6)}</span></div><button disabled={tuning} onClick={() => void tune()}><RotateCw size={14} />Recalculate</button></div><div className="tuned-values"><div><small>Memory</small><b>{profile.memoryMb / 1024} GB</b><span>Measured heap</span></div><div><small>JVM profile</small><b>{profile.jvmProfile}</b><span>Frame pacing</span></div><div><small>Graphics</small><b>{profile.graphics}</b><span>{profile.targetFps} FPS target</span></div><div><small>Render distance</small><b>{profile.renderDistance} chunks</b><span>Visual range</span></div><div><small>Simulation</small><b>{profile.simulationDistance} chunks</b><span>CPU load</span></div></div><div className="tuning-reasons">{profile.reasons.map(reason => <div className={reason.tone} key={reason.title}><span>{reason.tone === "good" ? <Check size={14} /> : reason.tone === "warn" ? <TriangleAlert size={14} /> : <Activity size={14} />}</span><div><b>{reason.title}</b><p>{reason.detail}</p></div></div>)}</div><div className="tuner-next"><div><em>Next: Phase 4</em><b>Review and apply</b><span>Choose which instances receive this profile and preview every file change before Bloom writes anything.</span></div><button disabled>Apply coming next</button></div></div>}{error && <div className="tuner-error"><TriangleAlert size={15} /><span>{error}</span></div>}</section>;
@@ -1256,6 +1259,19 @@ function AutoTuneApply() {
   useEffect(() => { const timer = window.setInterval(() => { try { setProfile(JSON.parse(localStorage.getItem("bloom-autotune-profile") || "null")); } catch {} }, 400); void invoke<InstanceDraft[]>("list_instances").then(items => setInstanceCount(items.length)); return () => clearInterval(timer); }, []);
   const apply = async () => { if (!profile) return; setApplying(true); setError(""); try { const count = await invoke<number>("apply_autotune_profile", { profile }); setAppliedCount(count); setConfirming(false); } catch (reason) { setError(String(reason)); } finally { setApplying(false); } };
   return <section className="autotune-apply"><div className="apply-heading"><div><em>Phase 4 • Persistent profile</em><h2>Apply AutoTune</h2><p>Write the measured profile to current instances and make it the default for every future instance.</p></div><span>04</span></div>{!profile ? <div className="apply-locked"><LockKeyhole size={20} /><div><b>Generate a Phase 3 profile first</b><span>Phase 4 unlocks after Bloom has benchmark data and a calculated tuning profile.</span></div></div> : appliedCount !== null ? <div className="apply-success"><span><Check size={22} /></span><div><b>AutoTune is active</b><p>Updated {appliedCount} existing instance{appliedCount === 1 ? "" : "s"}. New instances and imported modpacks will automatically inherit this profile.</p></div><button onClick={() => { setAppliedCount(null); setConfirming(false); }}>Review profile</button></div> : <><div className="apply-profile-row"><div><small>Memory</small><b>{profile.memoryMb / 1024} GB</b></div><div><small>JVM</small><b>{profile.jvmProfile}</b></div><div><small>Graphics</small><b>{profile.graphics}</b></div><div><small>World distances</small><b>{profile.renderDistance} / {profile.simulationDistance}</b></div><div className="future-default"><span><Check size={13} /></span><div><b>Future instances</b><small>Automatically inherit AutoTune</small></div></div></div>{confirming ? <div className="apply-confirm"><TriangleAlert size={18} /><div><b>Apply this profile to {instanceCount} existing instance{instanceCount === 1 ? "" : "s"}?</b><span>Bloom will update memory and JVM settings and patch graphics, render distance, and simulation distance in each options.txt. Unrelated Minecraft settings remain untouched.</span></div><button className="apply-cancel" onClick={() => setConfirming(false)}>Cancel</button><button disabled={applying} onClick={() => void apply()}>{applying ? "Applying…" : "Apply now"}</button></div> : <div className="apply-action"><div><Shield size={16} /><span>Stored locally and reversible by changing an instance’s settings later.</span></div><button onClick={() => setConfirming(true)}>Review and apply</button></div>}</>}{error && <div className="tuner-error"><TriangleAlert size={15} /><span>{error}</span></div>}</section>;
+}
+
+function AutoTuneFlow() {
+  const [hardwareComplete, setHardwareComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-hardware")));
+  const [benchmarkComplete, setBenchmarkComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-minecraft-complete")));
+  const [profileComplete, setProfileComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-profile")));
+  const resetBenchmarkProgress = () => { setBenchmarkComplete(false); setProfileComplete(false); };
+  return <>
+    <AutoTunePage onComplete={() => setHardwareComplete(true)} />
+    {hardwareComplete && <AutoTuneMinecraftBenchmark onComplete={() => setBenchmarkComplete(true)} onReset={resetBenchmarkProgress} />}
+    {hardwareComplete && benchmarkComplete && <AutoTuneTuner onComplete={() => setProfileComplete(true)} onReset={() => setProfileComplete(false)} />}
+    {hardwareComplete && benchmarkComplete && profileComplete && <AutoTuneApply />}
+  </>;
 }
 
 type DownloadViewState = { active: boolean; progress: number; state: string; message: string; instanceId?: string; downloadedBytes?: number; totalBytes?: number; bytesPerSecond?: number; taskName?: string; taskVersion?: string; taskKind?: "mod" | "game" };
@@ -1815,7 +1831,7 @@ function App() {
         ) : page === "logs" ? (
           <LogsPage entries={logs} running={gameRunning || download.state === "launching"} onClear={() => setLogs([])} />
         ) : page === "autotune" ? (
-          <><AutoTunePage /><AutoTuneMinecraftBenchmark /><AutoTuneTuner /><AutoTuneApply /></>
+          <AutoTuneFlow />
         ) : page === "instances" ? (
           <InstancesPage instances={instances} busy={download.active || gameRunning} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onOpen={(instance) => { setSelectedInstanceId(instance.id); setPage("instance"); }} />
         ) : page === "downloads" ? (
