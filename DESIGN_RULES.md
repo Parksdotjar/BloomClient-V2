@@ -23,6 +23,8 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Global sidebar navigation stays focused on Home, Instances, AutoTune, and Settings; mods, resource packs, and shaders belong inside their owning instance rather than as duplicate global destinations.
 - AutoTune must clearly distinguish measured results, hardware-based estimates, and future/mock capabilities. Never present an estimate or unfinished benchmark as a completed optimization.
 - AutoTune benchmark reports must name the workload they actually measured. A Bloom/WebView graphics test must never be labeled as measured Minecraft FPS; in-game claims require the dedicated Minecraft benchmark instrumentation.
+- Real AutoTune comparisons use the same Minecraft, Fabric Loader, Fabric API, benchmark-mod version, seed, world settings, warm-up duration, measurement duration, and camera path. Benchmark instances remain private and hidden from the normal instance library.
+- AutoTune Phase 3 decisions combine measured Minecraft throughput, 1% lows, frame-time percentiles, peak Java memory, display refresh rate, and hardware limits. Every recommendation must include a plain-language reason and remain local until Phase 4 receives explicit apply confirmation.
 
 ## Borders and separators
 

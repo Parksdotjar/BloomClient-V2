@@ -630,6 +630,165 @@ fn bloom_data_dir() -> Result<std::path::PathBuf, String> {
     Ok(path)
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct AutoTuneProfile {
+    target_fps: u32,
+    memory_mb: u32,
+    jvm_profile: String,
+    graphics: String,
+    render_distance: u32,
+    simulation_distance: u32,
+    average_fps: f64,
+    one_percent_low: f64,
+    low_ratio: f64,
+    confidence: String,
+    benchmark_completed_at: u64,
+    #[serde(default)]
+    reasons: Vec<serde_json::Value>,
+}
+
+fn saved_autotune_profile() -> Option<AutoTuneProfile> {
+    let path = bloom_data_dir().ok()?.join("autotune-profile.json");
+    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+}
+
+fn autotune_jvm_arguments(profile: &str) -> String {
+    if profile.eq_ignore_ascii_case("performance") {
+        "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+DisableExplicitGC -XX:MaxGCPauseMillis=50"
+            .into()
+    } else {
+        String::new()
+    }
+}
+
+fn patch_options(path: &std::path::Path, updates: &[(&str, String)]) -> Result<(), String> {
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let mut handled = std::collections::HashSet::new();
+    let mut output = Vec::new();
+    for line in existing.lines() {
+        let Some((key, _)) = line.split_once(':') else {
+            output.push(line.to_string());
+            continue;
+        };
+        if let Some((_, value)) = updates.iter().find(|(candidate, _)| *candidate == key) {
+            output.push(format!("{key}:{value}"));
+            handled.insert(key.to_string());
+        } else {
+            output.push(line.to_string());
+        }
+    }
+    for (key, value) in updates {
+        if !handled.contains(*key) {
+            output.push(format!("{key}:{value}"));
+        }
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(path, format!("{}\n", output.join("\n"))).map_err(|error| error.to_string())
+}
+
+fn apply_autotune_to_config(
+    config: &mut InstanceConfig,
+    profile: &AutoTuneProfile,
+) -> Result<(), String> {
+    config.memory = profile.memory_mb.clamp(1024, 16384);
+    config.jvm_arguments = autotune_jvm_arguments(&profile.jvm_profile);
+    let preset = match profile.graphics.to_ascii_lowercase().as_str() {
+        "fast" => "fast",
+        "high" => "fabulous",
+        _ => "fancy",
+    };
+    let (
+        ao,
+        blend,
+        updates,
+        particles,
+        mipmaps,
+        shadows,
+        entity_scale,
+        blur,
+        cloud_range,
+        leaves,
+        transparency,
+        weather,
+        anisotropy,
+        filtering,
+    ) = match preset {
+        "fast" => (
+            "false", "1", "0", "1", "2", "false", "0.75", "2", "32", "false", "false", "5", "1",
+            "0",
+        ),
+        "fabulous" => (
+            "true", "2", "1", "0", "4", "true", "1.25", "5", "128", "true", "true", "10", "2", "2",
+        ),
+        _ => (
+            "true", "2", "1", "0", "4", "true", "1.0", "5", "64", "true", "false", "10", "1", "1",
+        ),
+    };
+    patch_options(
+        &std::path::PathBuf::from(&config.directory).join("options.txt"),
+        &[
+            ("graphicsPreset", format!("\"{preset}\"")),
+            ("ao", ao.into()),
+            ("biomeBlendRadius", blend.into()),
+            ("prioritizeChunkUpdates", updates.into()),
+            ("particles", particles.into()),
+            ("mipmapLevels", mipmaps.into()),
+            ("entityShadows", shadows.into()),
+            ("entityDistanceScaling", entity_scale.into()),
+            ("menuBackgroundBlurriness", blur.into()),
+            ("cloudRange", cloud_range.into()),
+            ("cutoutLeaves", leaves.into()),
+            ("improvedTransparency", transparency.into()),
+            ("weatherRadius", weather.into()),
+            ("maxAnisotropyBit", anisotropy.into()),
+            ("textureFiltering", filtering.into()),
+            (
+                "renderDistance",
+                profile.render_distance.clamp(2, 32).to_string(),
+            ),
+            (
+                "simulationDistance",
+                profile.simulation_distance.clamp(5, 32).to_string(),
+            ),
+        ],
+    )
+}
+
+#[tauri::command]
+fn apply_autotune_profile(profile: AutoTuneProfile) -> Result<usize, String> {
+    let data = bloom_data_dir()?;
+    std::fs::write(
+        data.join("autotune-profile.json"),
+        serde_json::to_vec_pretty(&profile).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    let folder = data.join("instances");
+    let mut applied = 0;
+    for entry in std::fs::read_dir(folder)
+        .map_err(|error| error.to_string())?
+        .flatten()
+    {
+        if entry.path().extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(mut config) = serde_json::from_slice::<InstanceConfig>(
+            &std::fs::read(entry.path()).unwrap_or_default(),
+        ) else {
+            continue;
+        };
+        if !config.visible || config.id == AUTOTUNE_INSTANCE_ID {
+            continue;
+        }
+        apply_autotune_to_config(&mut config, &profile)?;
+        write_instance(&config)?;
+        applied += 1;
+    }
+    Ok(applied)
+}
+
 fn java_major(path: &str) -> Option<u32> {
     let output = std::process::Command::new(path)
         .arg("-version")
@@ -766,6 +925,11 @@ fn save_instance(config: InstanceConfig) -> Result<InstanceConfig, String> {
         }
     }
     config.directory = target.to_string_lossy().to_string();
+    if config.visible {
+        if let Some(profile) = saved_autotune_profile() {
+            apply_autotune_to_config(&mut config, &profile)?;
+        }
+    }
     let path = bloom_data_dir()?
         .join("instances")
         .join(format!("{}.json", config.id));
@@ -801,8 +965,10 @@ fn list_instances() -> Result<Vec<InstanceConfig>, String> {
             == Some("json")
         {
             if let Ok(bytes) = std::fs::read(entry.path()) {
-                if let Ok(instance) = serde_json::from_slice(&bytes) {
-                    instances.push(instance);
+                if let Ok(instance) = serde_json::from_slice::<InstanceConfig>(&bytes) {
+                    if instance.visible {
+                        instances.push(instance);
+                    }
                 }
             }
         }
@@ -1037,6 +1203,167 @@ fn open_game_folder() -> Result<(), String> {
     Ok(())
 }
 
+const AUTOTUNE_INSTANCE_ID: &str = "bloom-autotune-benchmark";
+const AUTOTUNE_VERSION: &str = "26.2";
+const AUTOTUNE_FABRIC_LOADER: &str = "0.19.3";
+const AUTOTUNE_FABRIC_API: &str = "0.154.0+26.2";
+const AUTOTUNE_MOD: &[u8] = include_bytes!("../resources/bloom-autotune-benchmark-26.2.jar");
+
+fn write_autotune_options(game_directory: &std::path::Path) -> Result<(), String> {
+    let options = concat!(
+        "version:4903\n",
+        "enableVsync:false\n",
+        "fullscreen:true\n",
+        "maxFps:260\n",
+        "narrator:0\n",
+        "narratorHotkey:false\n",
+        "onboardAccessibility:false\n",
+        "soundCategory_master:0.0\n",
+        "soundCategory_music:0.0\n",
+        "soundCategory_record:0.0\n",
+        "soundCategory_weather:0.0\n",
+        "soundCategory_block:0.0\n",
+        "soundCategory_hostile:0.0\n",
+        "soundCategory_neutral:0.0\n",
+        "soundCategory_player:0.0\n",
+        "soundCategory_ambient:0.0\n",
+        "soundCategory_voice:0.0\n",
+        "soundCategory_ui:0.0\n",
+    );
+    std::fs::write(game_directory.join("options.txt"), options).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn install_autotune_benchmark(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LauncherState>,
+) -> Result<String, String> {
+    let appdata = std::env::var("APPDATA").map_err(|_| "APPDATA is unavailable.")?;
+    let game_directory = std::path::PathBuf::from(appdata)
+        .join(".minecraft")
+        .join("instances")
+        .join(AUTOTUNE_INSTANCE_ID);
+    let config = InstanceConfig {
+        id: AUTOTUNE_INSTANCE_ID.into(),
+        name: "Bloom AutoTune Benchmark".into(),
+        icon: None,
+        loader: "Fabric".into(),
+        loader_version: Some(AUTOTUNE_FABRIC_LOADER.into()),
+        version: AUTOTUNE_VERSION.into(),
+        directory: game_directory.to_string_lossy().to_string(),
+        java: "Automatic (Recommended)".into(),
+        memory: 4096,
+        jvm_arguments: String::new(),
+        mods: true,
+        resource_packs: false,
+        shader_packs: false,
+        config: true,
+        custom_resolution: false,
+        visible: false,
+        shortcut: false,
+    };
+    write_instance(&config)?;
+    {
+        let mut active = state
+            .launch_active
+            .lock()
+            .map_err(|_| "The task manager is busy.")?;
+        if *active {
+            return Err("Another download or game launch is already active.".into());
+        }
+        *active = true;
+    }
+    state.cancel_requested.store(false, Ordering::SeqCst);
+    let active = state.launch_active.clone();
+    let cancel = state.cancel_requested.clone();
+    let instance_id = AUTOTUNE_INSTANCE_ID.to_string();
+    std::thread::spawn(move || {
+        let result = (|| -> Result<(), String> {
+            emit_launch(
+                &app,
+                &instance_id,
+                "installing",
+                1,
+                "Preparing the private AutoTune instance",
+            );
+            if game_directory.exists() {
+                std::fs::remove_dir_all(&game_directory).map_err(|error| error.to_string())?;
+            }
+            let mods = game_directory.join("mods");
+            std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
+            write_autotune_options(&game_directory)?;
+            std::fs::write(mods.join("bloom-autotune-benchmark-26.2.jar"), AUTOTUNE_MOD)
+                .map_err(|error| error.to_string())?;
+            let mut plan = mc_launcher_core::net::download::DownloadPlan::default();
+            plan.tasks.push(mc_launcher_core::net::download::DownloadTask {
+                url: format!("https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/{0}/fabric-api-{0}.jar", AUTOTUNE_FABRIC_API),
+                destination: mods.join(format!("fabric-api-{AUTOTUNE_FABRIC_API}.jar")), checksum: None,
+                label: "Downloading Fabric API".into(),
+            });
+            execute_download_plan(
+                &app,
+                &instance_id,
+                &plan,
+                &cancel,
+                2,
+                18,
+                "Downloading Fabric API",
+                false,
+            )?;
+            let shared = bloom_data_dir()?.join("minecraft");
+            install_instance_files(&app, &instance_id, &config, &shared, &cancel, 19, 99)?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => emit_launch(
+                &app,
+                &instance_id,
+                "complete",
+                100,
+                "AutoTune benchmark installed",
+            ),
+            Err(error) if error == "__cancelled__" => emit_launch(
+                &app,
+                &instance_id,
+                "cancelled",
+                0,
+                "Benchmark installation cancelled",
+            ),
+            Err(error) => emit_launch(&app, &instance_id, "error", 0, error),
+        }
+        if let Ok(mut value) = active.lock() {
+            *value = false;
+        }
+    });
+    Ok(AUTOTUNE_INSTANCE_ID.into())
+}
+
+#[tauri::command]
+fn get_autotune_benchmark_result() -> Result<Option<serde_json::Value>, String> {
+    let config = load_instance(AUTOTUNE_INSTANCE_ID)?;
+    let path = std::path::PathBuf::from(config.directory).join("bloom-benchmark-result.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
+    serde_json::from_slice(&bytes)
+        .map(Some)
+        .map_err(|error| format!("Benchmark result is invalid: {error}"))
+}
+
+#[tauri::command]
+fn get_autotune_benchmark_status() -> Result<Option<serde_json::Value>, String> {
+    let config = load_instance(AUTOTUNE_INSTANCE_ID)?;
+    let path = std::path::PathBuf::from(config.directory).join("bloom-benchmark-status.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
+    serde_json::from_slice(&bytes)
+        .map(Some)
+        .map_err(|error| format!("Benchmark status is invalid: {error}"))
+}
+
 fn safe_pack_path(raw: &str) -> Result<std::path::PathBuf, String> {
     use std::path::Component;
     let path = std::path::Path::new(raw);
@@ -1180,7 +1507,7 @@ fn import_fabric_modpack(
             .join(".minecraft")
             .join("instances")
             .join(&id);
-    let config = InstanceConfig {
+    let mut config = InstanceConfig {
         id: id.clone(),
         name,
         icon: None,
@@ -1199,6 +1526,9 @@ fn import_fabric_modpack(
         visible: true,
         shortcut: false,
     };
+    if let Some(profile) = saved_autotune_profile() {
+        apply_autotune_to_config(&mut config, &profile)?;
+    }
     let mut plan = mc_launcher_core::net::download::DownloadPlan::default();
     for file in index["files"]
         .as_array()
@@ -2141,6 +2471,7 @@ pub fn run() {
             complete_microsoft_login,
             detect_java_installations,
             detect_hardware_report,
+            apply_autotune_profile,
             get_minecraft_releases,
             save_instance,
             list_instances,
@@ -2150,6 +2481,9 @@ pub fn run() {
             update_instance_settings,
             open_instance_folder,
             open_game_folder,
+            install_autotune_benchmark,
+            get_autotune_benchmark_result,
+            get_autotune_benchmark_status,
             import_fabric_modpack,
             install_modrinth_mod,
             launch_minecraft,
@@ -2165,7 +2499,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{allowed_pack_download, safe_pack_path};
+    use super::{allowed_pack_download, patch_options, safe_pack_path};
 
     #[test]
     fn modpack_paths_stay_inside_the_instance() {
@@ -2186,5 +2520,25 @@ mod tests {
         assert!(!allowed_pack_download(
             "file:///C:/Windows/System32/file.jar"
         ));
+    }
+
+    #[test]
+    fn autotune_only_patches_selected_options() {
+        let path = std::env::temp_dir().join(format!("bloom-options-{}.txt", std::process::id()));
+        std::fs::write(&path, "music:0.5\nrenderDistance:8\ncustomSetting:keep\n").unwrap();
+        patch_options(
+            &path,
+            &[
+                ("renderDistance", "16".into()),
+                ("simulationDistance", "10".into()),
+            ],
+        )
+        .unwrap();
+        let updated = std::fs::read_to_string(&path).unwrap();
+        assert!(updated.contains("music:0.5"));
+        assert!(updated.contains("customSetting:keep"));
+        assert!(updated.contains("renderDistance:16"));
+        assert!(updated.contains("simulationDistance:10"));
+        let _ = std::fs::remove_file(path);
     }
 }

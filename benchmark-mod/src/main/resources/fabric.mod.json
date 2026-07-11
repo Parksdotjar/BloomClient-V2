@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "bloom_autotune",
+  "version": "${version}",
+  "name": "Bloom AutoTune Benchmark",
+  "description": "Measures real Minecraft client frame times for Bloom Client AutoTune.",
+  "authors": ["Bloom Client"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.bloomclient.benchmark.BloomBenchmarkClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
