@@ -14,6 +14,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update as TauriUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { animate } from "animejs";
@@ -102,6 +103,7 @@ const settingTabs = [
   [Cuboid, "Minecraft"],
   [Rocket, "Launcher"],
   [Shield, "Privacy"],
+  [Download, "Updates"],
   [UserRound, "My Profile"],
   [TerminalSquare, "Advanced"],
 ] as const;
@@ -330,6 +332,11 @@ function SettingsPage({
   onProfileIconChange,
   initialTab,
   navigationKey,
+  currentVersion,
+  availableVersion,
+  updateChecking,
+  onCheckUpdates,
+  onOpenUpdate,
 }: {
   settings: SettingsState;
   setSettings: (s: SettingsState) => void;
@@ -339,6 +346,11 @@ function SettingsPage({
   onProfileIconChange: (icon: string) => void;
   initialTab?: string;
   navigationKey: number;
+  currentVersion: string;
+  availableVersion: string | null;
+  updateChecking: boolean;
+  onCheckUpdates: () => void;
+  onOpenUpdate: () => void;
 }) {
   const update = <K extends keyof SettingsState>(
     key: K,
@@ -426,15 +438,6 @@ function SettingsPage({
                 <Toggle
                   value={settings.tray}
                   onChange={(v) => update("tray", v)}
-                />
-              </SettingRow>
-              <SettingRow
-                title="Check for Updates"
-                description="Automatically check for updates on startup."
-              >
-                <Toggle
-                  value={settings.updates}
-                  onChange={(v) => update("updates", v)}
                 />
               </SettingRow>
             </div>
@@ -644,6 +647,23 @@ function SettingsPage({
                   options={["Show recommendations", "Hide recommendations"]}
                   onChange={() => {}}
                 />
+              </SettingRow>
+            </div>
+          </div>
+          <div className="settings-section" {...section("Updates")}>
+            <h2>Updates</h2>
+            <p className="section-subtitle">Keep Bloom Client secure and up to date.</p>
+            <div className="settings-card updates-settings-card">
+              <SettingRow title="Current Version" description="The version currently installed on this computer.">
+                <span className="current-app-version">v{currentVersion}</span>
+              </SettingRow>
+              <SettingRow
+                title={availableVersion ? `Version ${availableVersion} available` : "Update Status"}
+                description={availableVersion ? `Bloom can update from v${currentVersion} to v${availableVersion}.` : "Bloom automatically checks once whenever the launcher opens."}
+              >
+                {availableVersion
+                  ? <button className="settings-update-button available" onClick={onOpenUpdate}><Download size={15} />Download update</button>
+                  : <button className="settings-update-button" disabled={updateChecking} onClick={onCheckUpdates}><RotateCw className={updateChecking ? "spinning" : ""} size={15} />{updateChecking ? "Checking…" : "Check for updates"}</button>}
               </SettingRow>
             </div>
           </div>
@@ -1332,6 +1352,9 @@ function App() {
   const [toast, setToast] = useState("");
   const [toastKind, setToastKind] = useState<"notification" | "error">("notification");
   const [availableUpdate, setAvailableUpdate] = useState<TauriUpdate | null>(null);
+  const [currentVersion, setCurrentVersion] = useState("1.0.0");
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updatePanelOpen, setUpdatePanelOpen] = useState(false);
   const [updatePhase, setUpdatePhase] = useState<"ready" | "downloading" | "installing" | "error">("ready");
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateError, setUpdateError] = useState("");
@@ -1368,17 +1391,36 @@ function App() {
     document.documentElement.style.setProperty("--accent", settings.accent);
     document.documentElement.dataset.theme = settings.theme;
   }, [settings]);
-  useEffect(() => {
-    if (!settings.updates || updateCheckStarted.current) return;
-    updateCheckStarted.current = true;
-    void check({ timeout: 15_000 })
-      .then((update) => {
-        if (update) setAvailableUpdate(update);
-      })
-      .catch(() => {
-        updateCheckStarted.current = false;
+  const checkForUpdates = async (manual = false) => {
+    if (updateChecking) return;
+    setUpdateChecking(true);
+    try {
+      const update = await check({ timeout: 15_000 });
+      setAvailableUpdate((previous) => {
+        if (previous && previous !== update) void previous.close().catch(() => {});
+        return update;
       });
-  }, [settings.updates]);
+      if (manual) {
+        setToastKind("notification");
+        setToast(update ? `Bloom Client ${update.version} is ready to download.` : "Bloom Client is already up to date.");
+        window.setTimeout(() => setToast(""), 3200);
+      }
+    } catch (error) {
+      if (manual) {
+        setToastKind("error");
+        setToast(`Could not check for updates: ${String(error)}`);
+        window.setTimeout(() => setToast(""), 4200);
+      }
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+  useEffect(() => {
+    void getVersion().then(setCurrentVersion).catch(() => {});
+    if (updateCheckStarted.current) return;
+    updateCheckStarted.current = true;
+    void checkForUpdates(false);
+  }, []);
 
   const installUpdate = async () => {
     if (!availableUpdate || updatePhase !== "ready") return;
@@ -1406,10 +1448,9 @@ function App() {
     }
   };
 
-  const postponeUpdate = async () => {
-    if (!availableUpdate || updatePhase !== "ready") return;
-    await availableUpdate.close().catch(() => {});
-    setAvailableUpdate(null);
+  const closeUpdatePanel = () => {
+    if (updatePhase !== "ready") return;
+    setUpdatePanelOpen(false);
   };
   useEffect(() => monitorBackend((status) => {
     document.documentElement.dataset.backend = status?.status === "ok" ? "online" : "offline";
@@ -1732,6 +1773,10 @@ function App() {
                 <div className="avatar">{profileIcon ? <img src={profileIcon} alt="" /> : profile.name.slice(0, 1).toUpperCase()}</div>
                 <div className="signed-in-name"><b>{profile.name}</b></div>
               </button>
+              {availableUpdate && <button className="sidebar-update-button" onClick={() => setUpdatePanelOpen(true)} aria-label={`Update to Bloom Client ${availableUpdate.version}`} title={`Update available: ${availableUpdate.version}`}>
+                <Download size={16} />
+                <i />
+              </button>}
               <button onClick={() => openSettings()}>
                 <SettingsIcon size={16} />
               </button>
@@ -1776,7 +1821,7 @@ function App() {
         ) : page === "downloads" ? (
           <DownloadsPage download={download} instances={instances} completed={completedDownloads} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} />
         ) : page === "settings" ? (
-          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} initialTab={settingsTarget} navigationKey={settingsNavigationKey} />
+          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => setUpdatePanelOpen(true)} />
         ) : page === "new-instance" ? (
           <NewInstancePage
             onCancel={() => setPage("home")}
@@ -1896,13 +1941,13 @@ function App() {
           <button>Coming soon</button>
         </div>
       )}
-      {availableUpdate && <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="update-title">
+      {availableUpdate && updatePanelOpen && <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="update-title">
         <section className="update-dialog">
           <div className="update-mark"><Download size={24} /></div>
           <div className="update-copy">
             <span className="update-eyebrow">Bloom Client update</span>
             <h2 id="update-title">Version {availableUpdate.version} is ready</h2>
-            {updatePhase === "ready" && <p>Bloom will download and install this update securely in the background. The launcher will close briefly and reopen automatically when it is finished.</p>}
+            {updatePhase === "ready" && <p>You’ll be moving from version {currentVersion} to {availableUpdate.version}. Bloom will install the update securely, close the launcher briefly, and reopen it automatically.</p>}
             {updatePhase === "downloading" && <p>Downloading the signed update package…</p>}
             {updatePhase === "installing" && <p>Installing the update now. Bloom will restart in a moment.</p>}
             {updatePhase === "error" && <p className="update-error">The update could not be installed: {updateError}</p>}
@@ -1910,9 +1955,9 @@ function App() {
           {updatePhase !== "ready" && updatePhase !== "error" && <div className="update-progress"><i style={{ width: `${updateProgress}%` }} /><span>{updatePhase === "installing" ? "Installing" : `${Math.round(updateProgress)}%`}</span></div>}
           {updatePhase === "ready" && availableUpdate.body && <div className="update-notes"><b>What’s new</b><p>{availableUpdate.body}</p></div>}
           <div className="update-actions">
-            {updatePhase === "ready" && <button className="update-later" onClick={() => void postponeUpdate()}>Later</button>}
-            {updatePhase === "ready" && <button className="update-install" onClick={() => void installUpdate()}><Download size={15} />Update and restart</button>}
-            {updatePhase === "error" && <button className="update-later" onClick={() => { setAvailableUpdate(null); setUpdatePhase("ready"); }}>Close</button>}
+            {updatePhase === "ready" && <button className="update-later" onClick={closeUpdatePanel}>Not now</button>}
+            {updatePhase === "ready" && <button className="update-install" onClick={() => void installUpdate()}><Download size={15} />Confirm update</button>}
+            {updatePhase === "error" && <button className="update-later" onClick={() => { setUpdatePanelOpen(false); setUpdatePhase("ready"); }}>Close</button>}
             {updatePhase === "error" && <button className="update-install" onClick={() => { setUpdatePhase("ready"); setUpdateError(""); }}><RotateCw size={15} />Try again</button>}
           </div>
         </section>
