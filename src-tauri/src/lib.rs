@@ -1303,6 +1303,8 @@ fn install_autotune_benchmark(
             }
             let mods = game_directory.join("mods");
             std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
+            std::fs::write(game_directory.join(".bloom-autotune-managed"), b"managed")
+                .map_err(|error| error.to_string())?;
             write_autotune_options(&game_directory)?;
             std::fs::write(mods.join("bloom-autotune-benchmark-26.2.jar"), AUTOTUNE_MOD)
                 .map_err(|error| error.to_string())?;

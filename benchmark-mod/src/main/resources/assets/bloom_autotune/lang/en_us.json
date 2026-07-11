@@ -1,0 +1,6 @@
+{
+  "bloom_autotune.menu.run": "Bloom Benchmark",
+  "bloom_autotune.message.started": "Bloom Benchmark is warming up. The test runs automatically for about 75 seconds.",
+  "bloom_autotune.results.title": "Bloom Benchmark Complete",
+  "bloom_autotune.results.again": "Run Again"
+}

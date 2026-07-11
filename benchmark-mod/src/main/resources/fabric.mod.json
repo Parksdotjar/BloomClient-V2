@@ -2,9 +2,14 @@
   "schemaVersion": 1,
   "id": "bloom_autotune",
   "version": "${version}",
-  "name": "Bloom AutoTune Benchmark",
-  "description": "Measures real Minecraft client frame times for Bloom Client AutoTune.",
+  "name": "Bloom Benchmark",
+  "description": "A standardized, fixed-seed Minecraft performance benchmark with average FPS, 1% lows, frame times, and memory measurements.",
   "authors": ["Bloom Client"],
+  "contact": {
+    "homepage": "https://bloomclient.org",
+    "sources": "https://github.com/Parksdotjar/BlimClient",
+    "issues": "https://github.com/Parksdotjar/BlimClient/issues"
+  },
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
