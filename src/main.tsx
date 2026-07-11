@@ -78,9 +78,7 @@ const defaults: SettingsState = {
 };
 const nav = [
   [House, "Home"],
-  [Puzzle, "Mods"],
-  [PackageOpen, "Resource Packs"],
-  [Layers3, "Shaders"],
+  [Layers3, "Instances"],
   [SettingsIcon, "Settings"],
 ] as const;
 const quickActions = [
@@ -1342,13 +1340,14 @@ function App() {
             <button
               className={
                 (page === "home" && index === 0) ||
+                (page === "instances" && label === "Instances") ||
                 (page === "settings" && label === "Settings")
                   ? "active"
                   : ""
               }
               key={label}
               onClick={() =>
-                label === "Settings" ? openSettings() : setPage("home")
+                label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : setPage("home")
               }
             >
               <Icon size={17} />
@@ -1380,13 +1379,6 @@ function App() {
             />
           )}
         </div>
-        <button
-          className="add-instance"
-          onClick={() => setPage("instances")}
-        >
-          <ChevronRight size={16} />
-          <span>View all</span>
-        </button>
         <div className="sidebar-spacer" />
         <button className={`sidebar-link downloads-link ${page === "downloads" ? "active" : ""}`} onClick={() => setPage("downloads")}>
           <Download size={17} />
