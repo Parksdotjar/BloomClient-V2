@@ -283,7 +283,16 @@ internal sealed class ReleaseManagerForm : Form
         if (stream) Log($"> {file} {arguments}\n", Accent);
         var executable = file;
         var processArguments = arguments;
-        if (file.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+        if (file.Equals("npm.cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            var nodeRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs");
+            var systemNode = Path.Combine(nodeRoot, "node.exe");
+            var npmCli = Path.Combine(nodeRoot, "node_modules", "npm", "bin", "npm-cli.js");
+            if (!File.Exists(systemNode) || !File.Exists(npmCli)) throw new FileNotFoundException("The system Node.js/npm installation could not be found.", npmCli);
+            executable = systemNode;
+            processArguments = $"{Quote(npmCli)} {arguments}";
+        }
+        else if (file.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
         {
             executable = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
             processArguments = $"/d /s /c \"\"{file}\" {arguments}\"";
