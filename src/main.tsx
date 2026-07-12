@@ -48,6 +48,7 @@ import {
   Rocket,
   RotateCw,
   Search,
+  Shirt,
   Settings as SettingsIcon,
   Shield,
   SlidersHorizontal,
@@ -55,6 +56,11 @@ import {
   Timer,
   TriangleAlert,
   Trash2,
+  Upload,
+  Grid3X3,
+  RotateCcw,
+  Lock,
+  Unlock,
   UserRound,
   WandSparkles,
   LockKeyhole,
@@ -95,6 +101,7 @@ const defaults: SettingsState = {
 const nav = [
   [House, "Home"],
   [Layers3, "Instances"],
+  [Shirt, "Locker"],
   [WandSparkles, "AutoTune"],
   [SettingsIcon, "Settings"],
 ] as const;
@@ -1365,6 +1372,126 @@ type CompletedDownload = { id: string; name: string; version: string; loader?: s
 
 const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
 
+type LockerSkin = { id: string; name: string; createdAt: number; dataUrl: string };
+type SkinViewerInstance = import("skinview3d").SkinViewer;
+
+function SkinThumbnail({ skin }: { skin: LockerSkin }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!canvas.current) return;
+    let disposed = false;
+    let viewer: SkinViewerInstance | null = null;
+    void import("skinview3d").then(({ SkinViewer }) => {
+      if (disposed || !canvas.current) return;
+      viewer = new SkinViewer({ canvas: canvas.current, width: 118, height: 142 });
+      viewer.background = null;
+      viewer.zoom = .82;
+      viewer.controls.enabled = false;
+      viewer.autoRotate = false;
+      void viewer.loadSkin(skin.dataUrl).then(() => {
+        if (!viewer || disposed) return;
+        viewer.playerObject.rotation.y = .52;
+        viewer.render();
+        viewer.renderPaused = true;
+      });
+    });
+    return () => { disposed = true; viewer?.dispose(); };
+  }, [skin.dataUrl]);
+  return <canvas ref={canvas} aria-label={`${skin.name} preview`} />;
+}
+
+function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
+  const [skins, setSkins] = useState<LockerSkin[]>([]);
+  const [activeId, setActiveId] = useState(() => localStorage.getItem(`bloom-active-skin-${profile?.id || "local"}`) || "");
+  const [locked, setLocked] = useState(false);
+  const [page, setPage] = useState(1);
+  const [message, setMessage] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  const preview = useRef<HTMLCanvasElement>(null);
+  const viewerRef = useRef<SkinViewerInstance | null>(null);
+  const lockedRef = useRef(locked);
+  const active = skins.find((skin) => skin.id === activeId) || skins[0];
+  const pageCount = Math.max(1, Math.ceil(skins.length / 12));
+  const visible = skins.slice((page - 1) * 12, page * 12);
+
+  const loadSkins = async (preferred?: string) => {
+    try {
+      const saved = await invoke<LockerSkin[]>("list_locker_skins");
+      setSkins(saved);
+      setActiveId((current) => preferred || (saved.some((skin) => skin.id === current) ? current : saved[0]?.id || ""));
+    } catch (error) { setMessage(String(error)); }
+  };
+  useEffect(() => { void loadSkins(); }, []);
+  useEffect(() => {
+    if (!activeId) return;
+    localStorage.setItem(`bloom-active-skin-${profile?.id || "local"}`, activeId);
+  }, [activeId, profile?.id]);
+  useEffect(() => {
+    if (!preview.current || !active) return;
+    const host = preview.current.parentElement!;
+    let disposed = false;
+    let viewer: SkinViewerInstance | null = null;
+    let resize: ResizeObserver | null = null;
+    void import("skinview3d").then(({ SkinViewer }) => {
+      if (disposed || !preview.current) return;
+      viewer = new SkinViewer({ canvas: preview.current, width: Math.max(230, host.clientWidth), height: Math.max(360, host.clientHeight), skin: active.dataUrl });
+      viewer.background = null;
+      viewer.zoom = .82;
+      viewer.autoRotate = !lockedRef.current;
+      viewer.autoRotateSpeed = .18;
+      viewer.controls.enabled = !lockedRef.current;
+      viewer.controls.enablePan = false;
+      viewer.controls.enableZoom = false;
+      viewerRef.current = viewer;
+      resize = new ResizeObserver(() => viewer?.setSize(Math.max(230, host.clientWidth), Math.max(360, host.clientHeight)));
+      resize.observe(host);
+    });
+    return () => { disposed = true; resize?.disconnect(); viewer?.dispose(); viewerRef.current = null; };
+  }, [active?.id]);
+  useEffect(() => {
+    lockedRef.current = locked;
+    if (!viewerRef.current) return;
+    viewerRef.current.autoRotate = !locked;
+    viewerRef.current.controls.enabled = !locked;
+  }, [locked]);
+
+  const upload = async (file?: File) => {
+    if (!file) return;
+    setMessage("Importing skin…");
+    try {
+      const saved = await invoke<LockerSkin>("save_locker_skin", { name: file.name, bytes: Array.from(new Uint8Array(await file.arrayBuffer())) });
+      await loadSkins(saved.id);
+      setPage(1);
+      setMessage(`${saved.name} was added to your locker.`);
+      window.setTimeout(() => setMessage(""), 2600);
+    } catch (error) { setMessage(String(error)); }
+    if (input.current) input.current.value = "";
+  };
+  const reset = () => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    viewer.resetCameraPose();
+    viewer.playerObject.rotation.y = 0;
+  };
+
+  return <div className="locker-page">
+    <header className="locker-heading"><div><span>PERSONALIZE</span><h1>Skin Locker</h1><p>Keep and preview your Minecraft skins locally.</p></div><div className="locker-actions"><button onClick={() => input.current?.click()}><Upload size={15} />Upload skin</button><button onClick={() => void invoke("open_skins_folder")}><FolderOpen size={15} />Folder</button><input ref={input} hidden type="file" accept="image/png" onChange={(event) => void upload(event.target.files?.[0])} /></div></header>
+    <div className="locker-layout">
+      <section className="locker-preview-panel">
+        <div className="locker-profile"><b>{profile?.name || "Minecraft Player"}</b><span><i />{profile ? "Connected" : "Offline"}</span></div>
+        <div className={`locker-stage ${active ? "has-skin" : "empty"}`}>{active ? <canvas ref={preview} /> : <div><Shirt size={42} /><b>No skins yet</b><span>Upload a Minecraft PNG to begin.</span><button onClick={() => input.current?.click()}>Upload first skin</button></div>}<i className="locker-orbit" /></div>
+        {active && <><div className="locker-drag-note">Click and drag to rotate</div><div className="locker-preview-controls"><button className={locked ? "active" : ""} onClick={() => setLocked((value) => !value)}>{locked ? <Lock size={15} /> : <Unlock size={15} />}{locked ? "Rotation locked" : "Lock rotation"}</button><button onClick={reset} aria-label="Reset rotation"><RotateCcw size={16} /></button></div></>}
+      </section>
+      <section className="locker-library-panel">
+        <div className="locker-library-heading"><div><h2>Your Skins <span>{skins.length}</span></h2><p>Click a skin to make it active in your locker.</p></div><span className="locker-grid-mode"><Grid3X3 size={15} /></span></div>
+        {visible.length ? <div className="skin-grid">{visible.map((skin) => <button key={skin.id} className={`skin-card ${active?.id === skin.id ? "active" : ""}`} onClick={() => setActiveId(skin.id)}>{active?.id === skin.id && <span className="skin-active-mark"><Check size={11} />Active</span>}<SkinThumbnail skin={skin} /><b>{skin.name}</b></button>)}</div> : <div className="locker-empty-library"><Shirt size={31} /><b>Your locker is empty</b><span>Uploaded skins will appear here as fixed 3D previews.</span><button onClick={() => input.current?.click()}><Upload size={15} />Upload skin</button></div>}
+        {skins.length > 12 && <div className="locker-pages"><button disabled={page === 1} onClick={() => setPage((value) => value - 1)}><ChevronRight size={15} /></button><span>Page {page} of {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}><ChevronRight size={15} /></button></div>}
+        {message && <div className="locker-message">{message}</div>}
+      </section>
+    </div>
+  </div>;
+}
+
 function InstancesPage({ instances, busy, onOpen, onPlay, onCreate }: { instances: InstanceDraft[]; busy: boolean; onOpen: (instance: InstanceDraft) => void; onPlay: (instance: InstanceDraft) => void; onCreate: () => void }) {
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("All");
@@ -1405,7 +1532,7 @@ function DownloadsPage({ download, instances, completed, onClear, onCancel }: { 
 }
 
 function App() {
-  const [page, setPage] = useState<"home" | "settings" | "autotune" | "new-instance" | "downloads" | "logs" | "instance" | "instances">(
+  const [page, setPage] = useState<"home" | "settings" | "autotune" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker">(
     "home",
   );
   const [instances, setInstances] = useState<InstanceDraft[]>([]);
@@ -1847,6 +1974,7 @@ function App() {
               className={
                 (page === "home" && index === 0) ||
                 (page === "instances" && label === "Instances") ||
+                (page === "locker" && label === "Locker") ||
                 (page === "autotune" && label === "AutoTune") ||
                 (page === "settings" && label === "Settings")
                   ? "active"
@@ -1854,7 +1982,7 @@ function App() {
               }
               key={label}
               onClick={() =>
-                label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "AutoTune" ? setPage("autotune") : setPage("home")
+                label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "Locker" ? setPage("locker") : label === "AutoTune" ? setPage("autotune") : setPage("home")
               }
             >
               <Icon size={17} />
@@ -1957,6 +2085,8 @@ function App() {
           <AutoTuneFlow />
         ) : page === "instances" ? (
           <InstancesPage instances={instances} busy={download.active || gameRunning} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onOpen={(instance) => { setSelectedInstanceId(instance.id); setPage("instance"); }} />
+        ) : page === "locker" ? (
+          <LockerPage profile={profile} />
         ) : page === "downloads" ? (
           <DownloadsPage download={download} instances={instances} completed={completedDownloads} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} />
         ) : page === "settings" ? (
@@ -2060,7 +2190,7 @@ function App() {
           </>
         )}
       </main>
-      <aside className="ad-rail">
+      <aside className={`ad-rail ${page === "locker" ? "locker-hidden" : ""}`}>
         <div className="ad-rail-heading">Sponsored</div>
         {[1, 2, 3].map((ad) => (
           <div className="ad-placeholder" key={ad}>

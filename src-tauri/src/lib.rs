@@ -1191,6 +1191,101 @@ fn bloom_data_dir() -> Result<std::path::PathBuf, String> {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+struct LockerSkin {
+    id: String,
+    name: String,
+    created_at: u64,
+    #[serde(default)]
+    data_url: String,
+}
+
+fn skins_directory() -> Result<std::path::PathBuf, String> {
+    let directory = bloom_data_dir()?.join("skins");
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    Ok(directory)
+}
+
+fn skins_index_path() -> Result<std::path::PathBuf, String> {
+    Ok(skins_directory()?.join("skins.json"))
+}
+
+fn read_skin_index() -> Vec<LockerSkin> {
+    skins_index_path()
+        .ok()
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn valid_skin_png(bytes: &[u8]) -> bool {
+    if bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" {
+        return false;
+    }
+    let width = u32::from_be_bytes(bytes[16..20].try_into().unwrap_or_default());
+    let height = u32::from_be_bytes(bytes[20..24].try_into().unwrap_or_default());
+    width >= 64 && width <= 1024 && width % 64 == 0 && (height == width || height * 2 == width)
+}
+
+#[tauri::command]
+fn list_locker_skins() -> Result<Vec<LockerSkin>, String> {
+    use base64::Engine;
+    let directory = skins_directory()?;
+    let mut skins = read_skin_index();
+    skins.retain(|skin| directory.join(format!("{}.png", skin.id)).is_file());
+    for skin in &mut skins {
+        let bytes = std::fs::read(directory.join(format!("{}.png", skin.id)))
+            .map_err(|error| error.to_string())?;
+        skin.data_url = format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        );
+    }
+    skins.sort_by_key(|skin| std::cmp::Reverse(skin.created_at));
+    Ok(skins)
+}
+
+#[tauri::command]
+fn save_locker_skin(name: String, bytes: Vec<u8>) -> Result<LockerSkin, String> {
+    if bytes.len() > 4 * 1024 * 1024 {
+        return Err("Skin files must be smaller than 4 MB.".into());
+    }
+    if !valid_skin_png(&bytes) {
+        return Err("Choose a valid 64×64 or 64×32 Minecraft PNG skin.".into());
+    }
+    let created_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis() as u64;
+    let id = format!("skin-{created_at}");
+    let clean_name = name.trim().trim_end_matches(".png").trim();
+    let skin = LockerSkin {
+        id: id.clone(),
+        name: if clean_name.is_empty() { "Custom Skin".into() } else { clean_name.chars().take(48).collect() },
+        created_at,
+        data_url: String::new(),
+    };
+    let directory = skins_directory()?;
+    let temporary = directory.join(format!("{id}.png.part"));
+    std::fs::write(&temporary, bytes).map_err(|error| error.to_string())?;
+    std::fs::rename(&temporary, directory.join(format!("{id}.png"))).map_err(|error| error.to_string())?;
+    let mut index = read_skin_index();
+    index.push(skin.clone());
+    std::fs::write(skins_index_path()?, serde_json::to_vec_pretty(&index).map_err(|error| error.to_string())?)
+        .map_err(|error| error.to_string())?;
+    list_locker_skins()?.into_iter().find(|item| item.id == id).ok_or("Bloom saved the skin but could not reload it.".into())
+}
+
+#[tauri::command]
+fn open_skins_folder() -> Result<(), String> {
+    std::process::Command::new("explorer.exe")
+        .arg(skins_directory()?)
+        .spawn()
+        .map_err(|error| format!("The skins folder could not be opened: {error}"))?;
+    Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct AutoTuneProfile {
     target_fps: u32,
     memory_mb: u32,
@@ -3098,6 +3193,9 @@ pub fn run() {
             detect_java_installations,
             list_managed_java_runtimes,
             remove_managed_java_runtime,
+            list_locker_skins,
+            save_locker_skin,
+            open_skins_folder,
             detect_hardware_report,
             apply_autotune_profile,
             get_minecraft_releases,
@@ -3132,6 +3230,7 @@ mod tests {
     use super::{
         account_credential_name, allowed_pack_download, patch_options, safe_pack_path,
         split_credential_secret,
+        valid_skin_png,
     };
 
     #[test]
@@ -3153,6 +3252,17 @@ mod tests {
         assert!(chunks.len() > 1);
         assert!(chunks.iter().all(|chunk| chunk.chars().count() <= 1_200));
         assert_eq!(chunks.concat(), token);
+    }
+
+    #[test]
+    fn locker_accepts_minecraft_png_dimensions_only() {
+        let mut standard = vec![0; 24];
+        standard[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        standard[16..20].copy_from_slice(&64u32.to_be_bytes());
+        standard[20..24].copy_from_slice(&64u32.to_be_bytes());
+        assert!(valid_skin_png(&standard));
+        standard[16..20].copy_from_slice(&65u32.to_be_bytes());
+        assert!(!valid_skin_png(&standard));
     }
 
     #[test]
