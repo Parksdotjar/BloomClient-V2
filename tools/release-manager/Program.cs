@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using System.ComponentModel;
-using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
 
 namespace BloomReleaseManager;
 
@@ -25,181 +25,103 @@ internal sealed class ReleaseManagerForm : Form
 {
     [DllImport("user32.dll")] private static extern bool ReleaseCapture();
     [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr handle, int message, int wParam, int lParam);
-    private static readonly Color Background = Color.FromArgb(8, 10, 10);
-    private static readonly Color Panel = Color.FromArgb(14, 17, 17);
-    private static readonly Color Control = Color.FromArgb(21, 25, 25);
-    private static readonly Color Border = Color.FromArgb(43, 49, 49);
-    private static readonly Color TextColor = Color.FromArgb(239, 244, 242);
-    private static readonly Color Muted = Color.FromArgb(130, 143, 139);
     private static readonly Color Accent = Color.FromArgb(142, 227, 101);
     private readonly string repo;
-    private readonly VersionStepper major = new("MAJOR");
-    private readonly VersionStepper minor = new("MINOR");
-    private readonly VersionStepper patch = new("PATCH");
-    private readonly Label versionPreview = new();
-    private readonly TextBox releaseNotes = new();
-    private readonly RichTextBox terminal = new();
-    private readonly Button publish = new BloomButton();
-    private readonly CheckBox autoPublish = new BloomCheckBox();
-    private readonly Label status = new();
+    private readonly WebView2 web = new() { Dock = DockStyle.Fill };
+    private int major;
+    private int minor;
+    private int patch;
+    private string releaseNotes = "";
+    private bool autoPublish = true;
     private bool running;
+    private bool webReady;
 
     public ReleaseManagerForm(string repoPath)
     {
         repo = repoPath;
+        LoadVersion();
         Text = "Bloom Release Manager";
-        ClientSize = new Size(1180, 760);
-        MinimumSize = new Size(980, 660);
+        ClientSize = new Size(1220, 780);
+        MinimumSize = new Size(960, 640);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Background;
-        ForeColor = TextColor;
-        Font = new Font("Segoe UI Variable Text", 9F);
+        BackColor = Color.FromArgb(5, 7, 7);
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         FormBorderStyle = FormBorderStyle.None;
-        Padding = new Padding(1);
-
-        var shell = new Panel { Dock = DockStyle.Fill, BackColor = Border, Padding = new Padding(1) };
-        var surface = new Panel { Dock = DockStyle.Fill, BackColor = Background };
-        shell.Controls.Add(surface);
-        Controls.Add(shell);
-        var titleBar = BuildTitleBar();
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Padding = new Padding(22, 20, 22, 18), BackColor = Background };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-        surface.Controls.Add(root);
-        surface.Controls.Add(titleBar);
-        titleBar.BringToFront();
-
-        root.Controls.Add(BuildControls(), 0, 0);
-        root.Controls.Add(BuildTerminal(), 1, 0);
-        root.SetColumnSpan(BuildFooter(root), 2);
-        LoadVersion();
+        Controls.Add(web);
+        Shown += async (_, _) => await InitializeWebAsync();
     }
 
-    private Control BuildTitleBar()
+    private async Task InitializeWebAsync()
     {
-        var bar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = Color.FromArgb(10, 12, 12) };
-        var mark = new PictureBox { Location = new Point(17, 12), Size = new Size(24, 24), SizeMode = PictureBoxSizeMode.Zoom, Image = Icon?.ToBitmap() };
-        var title = new Label { Text = "Bloom Release Manager", Location = new Point(51, 8), AutoSize = true, ForeColor = TextColor, Font = new Font("Segoe UI Variable Display", 10F, FontStyle.Bold) };
-        var subtitle = new Label { Text = "OWNER TOOL", Location = new Point(52, 27), AutoSize = true, ForeColor = Accent, Font = new Font("Segoe UI", 6.8F, FontStyle.Bold) };
-        var close = WindowButton("×");
-        var maximize = WindowButton("□");
-        var minimize = WindowButton("−");
-        close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        maximize.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        minimize.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        close.Location = new Point(ClientSize.Width - 45, 7);
-        maximize.Location = new Point(ClientSize.Width - 84, 7);
-        minimize.Location = new Point(ClientSize.Width - 123, 7);
-        close.Click += (_, _) => Close();
-        maximize.Click += (_, _) => WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
-        minimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
-        bar.Resize += (_, _) => { close.Left = bar.ClientSize.Width - 40; maximize.Left = bar.ClientSize.Width - 79; minimize.Left = bar.ClientSize.Width - 118; };
-        void Drag(object? sender, MouseEventArgs e) { if (e.Button != MouseButtons.Left) return; ReleaseCapture(); SendMessage(Handle, 0xA1, 0x2, 0); }
-        bar.MouseDown += Drag; title.MouseDown += Drag; subtitle.MouseDown += Drag;
-        bar.DoubleClick += (_, _) => maximize.PerformClick();
-        bar.Controls.Add(mark); bar.Controls.Add(title); bar.Controls.Add(subtitle); bar.Controls.Add(minimize); bar.Controls.Add(maximize); bar.Controls.Add(close);
-        return bar;
+        var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BloomReleaseManager", "WebView2"));
+        await web.EnsureCoreWebView2Async(environment);
+        web.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+        web.CoreWebView2.Settings.AreDevToolsEnabled = false;
+        web.CoreWebView2.Settings.IsStatusBarEnabled = false;
+        web.CoreWebView2.SetVirtualHostNameToFolderMapping("bloom.owner", Path.Combine(AppContext.BaseDirectory, "ui"), CoreWebView2HostResourceAccessKind.DenyCors);
+        web.CoreWebView2.WebMessageReceived += WebMessageReceived;
+        web.CoreWebView2.NavigationCompleted += (_, _) => { webReady = true; PushState(); };
+        web.Source = new Uri("https://bloom.owner/index.html");
     }
 
-    private Control BuildControls()
+    private async void WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs args)
     {
-        var card = Card();
-        card.Padding = new Padding(24);
-        var layout = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, BackColor = Panel };
-        card.Controls.Add(layout);
-        layout.Controls.Add(Heading("OWNER TOOL", "Ship Bloom Client", "Choose the next version and let Bloom handle the complete signed GitHub release."));
-
-        versionPreview.AutoSize = false;
-        versionPreview.Size = new Size(310, 64);
-        versionPreview.TextAlign = ContentAlignment.MiddleCenter;
-        versionPreview.Font = new Font("Segoe UI Variable Display", 22F, FontStyle.Bold);
-        versionPreview.ForeColor = Accent;
-        versionPreview.BackColor = Color.Transparent;
-        versionPreview.Dock = DockStyle.Fill;
-        var previewSurface = new RoundedPanel { Width = 310, Height = 64, Radius = 10, BorderColor = Color.FromArgb(35, 43, 41), BackColor = Control, Margin = new Padding(0) };
-        previewSurface.Controls.Add(versionPreview);
-        layout.Controls.Add(previewSurface);
-
-        var versionGrid = new TableLayoutPanel { Width = 310, Height = 76, ColumnCount = 3, RowCount = 1, Margin = new Padding(0, 14, 0, 0), BackColor = Panel };
-        for (var i = 0; i < 3; i++) versionGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
-        versionGrid.Controls.Add(major, 0, 0);
-        versionGrid.Controls.Add(minor, 1, 0);
-        versionGrid.Controls.Add(patch, 2, 0);
-        layout.Controls.Add(versionGrid);
-
-        var patchButton = ActionButton("+ Next patch", Accent, Color.FromArgb(14, 20, 13));
-        patchButton.Width = 310;
-        patchButton.Margin = new Padding(0, 10, 0, 0);
-        patchButton.Click += (_, _) => patch.Value++;
-        layout.Controls.Add(patchButton);
-
-        var notesLabel = new Label { Text = "RELEASE NOTES", AutoSize = true, ForeColor = Muted, Font = new Font("Segoe UI", 8F, FontStyle.Bold), Margin = new Padding(0, 20, 0, 7) };
-        layout.Controls.Add(notesLabel);
-        releaseNotes.Multiline = true;
-        releaseNotes.Dock = DockStyle.Fill;
-        releaseNotes.BackColor = Control;
-        releaseNotes.ForeColor = TextColor;
-        releaseNotes.BorderStyle = BorderStyle.None;
-        releaseNotes.Padding = new Padding(3);
-        releaseNotes.PlaceholderText = "What changed in this release?";
-        var notesSurface = new RoundedPanel { Width = 310, Height = 140, Radius = 10, BorderColor = Border, BackColor = Control, Padding = new Padding(11), Margin = new Padding(0) };
-        notesSurface.Controls.Add(releaseNotes);
-        layout.Controls.Add(notesSurface);
-
-        autoPublish.Text = "Publish automatically after the build passes";
-        autoPublish.Checked = true;
-        autoPublish.AutoSize = true;
-        autoPublish.ForeColor = TextColor;
-        autoPublish.Margin = new Padding(0, 14, 0, 0);
-        layout.Controls.Add(autoPublish);
-        return card;
+        try
+        {
+            using var document = JsonDocument.Parse(args.WebMessageAsJson);
+            var root = document.RootElement;
+            var action = root.GetProperty("action").GetString();
+            switch (action)
+            {
+                case "drag": ReleaseCapture(); SendMessage(Handle, 0xA1, 0x2, 0); break;
+                case "minimize": WindowState = FormWindowState.Minimized; break;
+                case "maximize": WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized; break;
+                case "close": Close(); break;
+                case "version":
+                    major = Math.Clamp(root.GetProperty("major").GetInt32(), 0, 999);
+                    minor = Math.Clamp(root.GetProperty("minor").GetInt32(), 0, 999);
+                    patch = Math.Clamp(root.GetProperty("patch").GetInt32(), 0, 999);
+                    PushState();
+                    break;
+                case "publish":
+                    major = Math.Clamp(root.GetProperty("major").GetInt32(), 0, 999);
+                    minor = Math.Clamp(root.GetProperty("minor").GetInt32(), 0, 999);
+                    patch = Math.Clamp(root.GetProperty("patch").GetInt32(), 0, 999);
+                    releaseNotes = root.GetProperty("notes").GetString() ?? "";
+                    autoPublish = root.GetProperty("autoPublish").GetBoolean();
+                    await PublishAsync();
+                    break;
+            }
+        }
+        catch (Exception error) { ShowResult("Something went wrong", error.Message, true); }
     }
 
-    private Control BuildTerminal()
-    {
-        var card = Card();
-        card.Margin = new Padding(14, 0, 0, 0);
-        card.Padding = new Padding(18);
-        var title = new Label { Text = "LIVE RELEASE OUTPUT", Dock = DockStyle.Top, Height = 32, ForeColor = Muted, Font = new Font("Segoe UI", 8F, FontStyle.Bold) };
-        terminal.Dock = DockStyle.Fill;
-        terminal.ReadOnly = true;
-        terminal.BorderStyle = BorderStyle.None;
-        terminal.BackColor = Color.FromArgb(5, 7, 7);
-        terminal.ForeColor = Color.FromArgb(183, 197, 192);
-        terminal.Font = new Font("Cascadia Mono", 9.25F);
-        terminal.DetectUrls = false;
-        terminal.Text = "Bloom Release Manager ready.\nNo command windows will be opened.\n\n";
-        card.Controls.Add(terminal);
-        card.Controls.Add(title);
-        return card;
-    }
+    private void PushState() => RunScript($"window.bloom?.setState({JsonSerializer.Serialize(new { major, minor, patch, running })})");
+    private void SetBusy(bool value) { running = value; RunScript($"window.bloom?.setBusy({value.ToString().ToLowerInvariant()})"); }
+    private void SetStatus(string message, string tone = "muted") => RunScript($"window.bloom?.setStatus({JsonSerializer.Serialize(message)}, {JsonSerializer.Serialize(tone)})");
+    private void ClearTerminal() => RunScript("window.bloom?.clearTerminal()");
+    private void ShowResult(string title, string message, bool error = false) => RunScript($"window.bloom?.showResult({JsonSerializer.Serialize(title)}, {JsonSerializer.Serialize(message)}, {error.ToString().ToLowerInvariant()})");
+    private void RunScript(string script) { if (!webReady || IsDisposed) return; if (InvokeRequired) { BeginInvoke(() => RunScript(script)); return; } _ = web.ExecuteScriptAsync(script); }
 
-    private Control BuildFooter(TableLayoutPanel root)
+    protected override void WndProc(ref Message message)
     {
-        var footer = new Panel { Dock = DockStyle.Fill, Margin = new Padding(2, 12, 0, 0), BackColor = Background };
-        status.Text = "Ready to prepare a release";
-        status.ForeColor = Muted;
-        status.AutoSize = true;
-        status.Location = new Point(2, 16);
-        publish.Text = "Build and publish release";
-        publish.FlatStyle = FlatStyle.Flat;
-        publish.BackColor = Accent;
-        publish.ForeColor = Color.FromArgb(14, 20, 13);
-        publish.Cursor = Cursors.Hand;
-        publish.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        publish.Width = 220;
-        publish.Height = 42;
-        publish.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        publish.Location = new Point(root.ClientSize.Width - 258, 0);
-        footer.Resize += (_, _) => publish.Left = footer.ClientSize.Width - publish.Width;
-        publish.Click += async (_, _) => await PublishAsync();
-        footer.Controls.Add(status);
-        footer.Controls.Add(publish);
-        root.Controls.Add(footer, 0, 1);
-        return footer;
+        const int WmNcHitTest = 0x84;
+        if (message.Msg == WmNcHitTest && WindowState == FormWindowState.Normal)
+        {
+            base.WndProc(ref message);
+            var point = PointToClient(new Point((short)(message.LParam.ToInt64() & 0xffff), (short)((message.LParam.ToInt64() >> 16) & 0xffff)));
+            const int edge = 7;
+            if (point.X <= edge && point.Y <= edge) message.Result = (IntPtr)13;
+            else if (point.X >= ClientSize.Width - edge && point.Y <= edge) message.Result = (IntPtr)14;
+            else if (point.X <= edge && point.Y >= ClientSize.Height - edge) message.Result = (IntPtr)16;
+            else if (point.X >= ClientSize.Width - edge && point.Y >= ClientSize.Height - edge) message.Result = (IntPtr)17;
+            else if (point.X <= edge) message.Result = (IntPtr)10;
+            else if (point.X >= ClientSize.Width - edge) message.Result = (IntPtr)11;
+            else if (point.Y <= edge) message.Result = (IntPtr)12;
+            else if (point.Y >= ClientSize.Height - edge) message.Result = (IntPtr)15;
+            return;
+        }
+        base.WndProc(ref message);
     }
 
     private async Task PublishAsync()
@@ -209,17 +131,12 @@ internal sealed class ReleaseManagerForm : Form
         var currentTag = File.ReadAllText(Path.Combine(repo, "VERSION")).Trim();
         if (ParseVersion(tag) <= ParseVersion(currentTag))
         {
-            MessageBox.Show($"Choose a version higher than {currentTag} before publishing.", "Version must increase", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ShowResult("Version must increase", $"Choose a version higher than {currentTag} before publishing.", true);
             return;
         }
-        if (MessageBox.Show(
-                $"Publish Bloom Client {tag}?\n\nThis will commit the version bump, push main, create the tag, start the signed GitHub build, and {(autoPublish.Checked ? "publish" : "prepare")} the release.",
-                "Confirm Bloom release", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
 
-        running = true;
-        publish.Enabled = false;
-        SetInputs(false);
-        terminal.Clear();
+        SetBusy(true);
+        ClearTerminal();
         var versionPrepared = false;
         var releaseCommitted = false;
         try
@@ -260,18 +177,17 @@ internal sealed class ReleaseManagerForm : Form
 
             Step("Release", "Applying release notes");
             var notesPath = Path.Combine(Path.GetTempPath(), $"bloom-release-{Guid.NewGuid():N}.md");
-            await File.WriteAllTextAsync(notesPath, string.IsNullOrWhiteSpace(releaseNotes.Text) ? $"Bloom Client {tag}" : releaseNotes.Text.Trim());
+            await File.WriteAllTextAsync(notesPath, string.IsNullOrWhiteSpace(releaseNotes) ? $"Bloom Client {tag}" : releaseNotes.Trim());
             try
             {
                 await MustRun("gh", $"release edit {Quote(tag)} --notes-file {Quote(notesPath)}");
-                if (autoPublish.Checked) await MustRun("gh", $"release edit {Quote(tag)} --draft=false");
+                if (autoPublish) await MustRun("gh", $"release edit {Quote(tag)} --draft=false");
             }
             finally { File.Delete(notesPath); }
 
-            Step("Complete", autoPublish.Checked ? $"{tag} is live and available to Bloom clients" : $"{tag} is ready as a draft release");
-            status.Text = autoPublish.Checked ? "Release published successfully" : "Draft release created successfully";
-            status.ForeColor = Accent;
-            MessageBox.Show($"Bloom Client {tag} completed successfully.", "Release complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Step("Complete", autoPublish ? $"{tag} is live and available to Bloom clients" : $"{tag} is ready as a draft release");
+            SetStatus(autoPublish ? "Release published successfully" : "Draft release created successfully", "success");
+            ShowResult("Release complete", $"Bloom Client {tag} completed successfully.");
         }
         catch (Exception error)
         {
@@ -285,15 +201,12 @@ internal sealed class ReleaseManagerForm : Form
                 );
             }
             Log($"\nERROR: {error.Message}\n", Color.FromArgb(241, 103, 103));
-            status.Text = "Release stopped — review the terminal";
-            status.ForeColor = Color.FromArgb(241, 103, 103);
-            MessageBox.Show(error.Message, "Release stopped", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            SetStatus("Release stopped — review the terminal", "error");
+            ShowResult("Release stopped", error.Message, true);
         }
         finally
         {
-            running = false;
-            publish.Enabled = true;
-            SetInputs(true);
+            SetBusy(false);
         }
     }
 
@@ -404,134 +317,16 @@ internal sealed class ReleaseManagerForm : Form
     {
         var raw = File.ReadAllText(Path.Combine(repo, "VERSION")).Trim().TrimStart('v', 'V');
         var parts = raw.Split('.').Select(value => int.TryParse(value, out var number) ? number : 0).ToArray();
-        major.Value = parts.ElementAtOrDefault(0);
-        minor.Value = parts.ElementAtOrDefault(1);
-        patch.Value = parts.ElementAtOrDefault(2);
-        major.ValueChanged += VersionChanged;
-        minor.ValueChanged += VersionChanged;
-        patch.ValueChanged += VersionChanged;
-        UpdatePreview();
+        major = parts.ElementAtOrDefault(0);
+        minor = parts.ElementAtOrDefault(1);
+        patch = parts.ElementAtOrDefault(2);
     }
 
-    private void VersionChanged(object? sender, EventArgs eventArgs) => UpdatePreview();
-    private void UpdatePreview() => versionPreview.Text = CurrentTag();
-    private string CurrentTag() => $"v{major.Value}.{minor.Value}.{patch.Value}";
+    private string CurrentTag() => $"v{major}.{minor}.{patch}";
     private static Version ParseVersion(string value) => Version.Parse(value.Trim().TrimStart('v', 'V'));
-    private void SetInputs(bool enabled) { major.Enabled = enabled; minor.Enabled = enabled; patch.Enabled = enabled; releaseNotes.Enabled = enabled; autoPublish.Enabled = enabled; }
-    private void Step(string title, string message) { status.Text = message; status.ForeColor = Muted; Log($"\n[{title.ToUpperInvariant()}] {message}\n", Accent); }
-    private void Log(string message, Color color) { if (InvokeRequired) { BeginInvoke(() => Log(message, color)); return; } terminal.SelectionStart = terminal.TextLength; terminal.SelectionColor = color; terminal.AppendText(message); terminal.ScrollToCaret(); }
+    private void Step(string title, string message) { SetStatus(message); Log($"\n[{title.ToUpperInvariant()}] {message}\n", Accent); }
+    private void Log(string message, Color color) { RunScript($"window.bloom?.appendLog({JsonSerializer.Serialize(message)}, {JsonSerializer.Serialize($"#{color.R:x2}{color.G:x2}{color.B:x2}")})"); }
     private static string Quote(string value) => $"\"{value.Replace("\"", "\\\"")}\"";
-
-    private static Panel Card() => new RoundedPanel { Dock = DockStyle.Fill, BackColor = Panel, BorderColor = Border, Radius = 14 };
-    private static Button ActionButton(string text, Color background, Color foreground) => new BloomButton { Text = text, Height = 40, BackColor = background, ForeColor = foreground, Cursor = Cursors.Hand, Font = new Font("Segoe UI", 9F, FontStyle.Bold) };
-    private static Button WindowButton(string text) => new BloomButton { Text = text, Size = new Size(34, 32), BackColor = Color.FromArgb(15, 18, 18), ForeColor = Muted, Font = new Font("Segoe UI", 12F), Cursor = Cursors.Hand };
-    private static Control Heading(string eyebrow, string title, string description)
-    {
-        var panel = new Panel { Width = 310, Height = 112, BackColor = Panel };
-        panel.Controls.Add(new Label { Text = description, Location = new Point(0, 57), Size = new Size(300, 45), ForeColor = Muted });
-        panel.Controls.Add(new Label { Text = title, Location = new Point(0, 23), AutoSize = true, ForeColor = TextColor, Font = new Font("Segoe UI", 17F, FontStyle.Bold) });
-        panel.Controls.Add(new Label { Text = eyebrow, Location = new Point(0, 0), AutoSize = true, ForeColor = Accent, Font = new Font("Segoe UI", 8F, FontStyle.Bold) });
-        return panel;
-    }
-
-    private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
-    {
-        var diameter = radius * 2;
-        var path = new GraphicsPath();
-        path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
-        path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
-        path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
-        path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
-
-    private sealed class RoundedPanel : Panel
-    {
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public int Radius { get; set; } = 12;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public Color BorderColor { get; set; } = Border;
-        public RoundedPanel() { DoubleBuffered = true; }
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var path = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), Radius);
-            using var fill = new SolidBrush(BackColor);
-            using var pen = new Pen(BorderColor);
-            e.Graphics.FillPath(fill, path);
-            e.Graphics.DrawPath(pen, path);
-        }
-    }
-
-    private sealed class BloomButton : Button
-    {
-        private bool hovered;
-        private bool pressed;
-        public BloomButton()
-        {
-            FlatStyle = FlatStyle.Flat;
-            FlatAppearance.BorderSize = 0;
-            DoubleBuffered = true;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-        }
-        protected override void OnMouseEnter(EventArgs e) { hovered = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hovered = pressed = false; Invalidate(); base.OnMouseLeave(e); }
-        protected override void OnMouseDown(MouseEventArgs e) { pressed = true; Invalidate(); base.OnMouseDown(e); }
-        protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var color = !Enabled ? Color.FromArgb(55, BackColor) : pressed ? Blend(BackColor, Color.Black, .16F) : hovered ? Blend(BackColor, Color.White, .07F) : BackColor;
-            using var path = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 9);
-            using var brush = new SolidBrush(color);
-            e.Graphics.FillPath(brush, path);
-            TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, Enabled ? ForeColor : Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        }
-    }
-
-    private sealed class BloomCheckBox : CheckBox
-    {
-        public BloomCheckBox() { SetStyle(ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true); Height = 28; }
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.Clear(Parent?.BackColor ?? Panel);
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var box = new Rectangle(0, 5, 18, 18);
-            using var path = RoundedRectangle(box, 5);
-            using var fill = new SolidBrush(Checked ? Accent : Control);
-            using var pen = new Pen(Checked ? Accent : Border);
-            e.Graphics.FillPath(fill, path); e.Graphics.DrawPath(pen, path);
-            if (Checked) TextRenderer.DrawText(e.Graphics, "✓", new Font("Segoe UI", 8F, FontStyle.Bold), box, Color.FromArgb(12, 18, 12), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(28, 0, Width - 28, Height), Enabled ? TextColor : Muted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-        }
-    }
-
-    private sealed class VersionStepper : UserControl
-    {
-        private decimal value;
-        private readonly Label number = new();
-        private readonly BloomButton decrement = new() { Text = "−" };
-        private readonly BloomButton increment = new() { Text = "+" };
-        public event EventHandler? ValueChanged;
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public decimal Value { get => value; set { var next = Math.Clamp(value, 0, 999); if (this.value == next) return; this.value = next; number.Text = next.ToString(); ValueChanged?.Invoke(this, EventArgs.Empty); } }
-        public VersionStepper(string caption)
-        {
-            Dock = DockStyle.Fill; Margin = new Padding(3); BackColor = Panel;
-            Controls.Add(new Label { Text = caption, Dock = DockStyle.Top, Height = 22, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Muted, Font = new Font("Segoe UI", 7.5F, FontStyle.Bold) });
-            var body = new RoundedPanel { Dock = DockStyle.Bottom, Height = 40, Radius = 8, BorderColor = Border, BackColor = Control };
-            decrement.Dock = DockStyle.Left; decrement.Width = 28; decrement.BackColor = Control; decrement.ForeColor = Muted;
-            increment.Dock = DockStyle.Right; increment.Width = 28; increment.BackColor = Control; increment.ForeColor = Muted;
-            number.Dock = DockStyle.Fill; number.Text = "0"; number.TextAlign = ContentAlignment.MiddleCenter; number.ForeColor = TextColor; number.Font = new Font("Segoe UI Variable Text", 11F, FontStyle.Bold); number.BackColor = Control;
-            decrement.Click += (_, _) => Value--; increment.Click += (_, _) => Value++;
-            body.Controls.Add(number); body.Controls.Add(decrement); body.Controls.Add(increment); Controls.Add(body);
-        }
-        protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); decrement.Enabled = increment.Enabled = Enabled; number.ForeColor = Enabled ? TextColor : Muted; }
-    }
-
-    private static Color Blend(Color first, Color second, float amount) => Color.FromArgb(
-        first.A,
-        (int)(first.R + (second.R - first.R) * amount),
-        (int)(first.G + (second.G - first.G) * amount),
-        (int)(first.B + (second.B - first.B) * amount));
 
     private sealed record ProcessResult(int ExitCode, string Output, string Error);
 }

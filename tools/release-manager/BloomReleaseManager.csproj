@@ -8,5 +8,11 @@
     <AssemblyName>BloomReleaseManager</AssemblyName>
     <RootNamespace>BloomReleaseManager</RootNamespace>
     <ApplicationIcon>../../src-tauri/icons/icon.ico</ApplicationIcon>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4078.44" />
+    <Content Include="ui\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\public\bloom-logo.png" Link="ui\bloom-logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

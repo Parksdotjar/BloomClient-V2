@@ -4,6 +4,7 @@ $project = Join-Path $PSScriptRoot "BloomReleaseManager.csproj"
 $publish = Join-Path $PSScriptRoot "publish"
 $exe = Join-Path $publish "BloomReleaseManager.exe"
 $source = Join-Path $PSScriptRoot "Program.cs"
+$uiFiles = Get-ChildItem (Join-Path $PSScriptRoot "ui") -File -Recurse
 
 $running = Get-Process -Name "BloomReleaseManager" -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($running) {
@@ -25,7 +26,8 @@ public static class BloomWindow {
 $needsBuild = -not (Test-Path $exe)
 if (-not $needsBuild) {
     $needsBuild = (Get-Item $source).LastWriteTimeUtc -gt (Get-Item $exe).LastWriteTimeUtc -or
-        (Get-Item $project).LastWriteTimeUtc -gt (Get-Item $exe).LastWriteTimeUtc
+        (Get-Item $project).LastWriteTimeUtc -gt (Get-Item $exe).LastWriteTimeUtc -or
+        ($uiFiles | Where-Object { $_.LastWriteTimeUtc -gt (Get-Item $exe).LastWriteTimeUtc } | Select-Object -First 1)
 }
 
 if ($needsBuild) {

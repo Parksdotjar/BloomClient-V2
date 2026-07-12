@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bloom Release Manager</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="titlebar" id="drag-region">
+      <div class="brand"><img src="bloom-logo.png" alt="" /><div><b>Bloom Release Manager</b><span>OWNER TOOL</span></div></div>
+      <div class="window-controls">
+        <button data-window="minimize" aria-label="Minimize">−</button>
+        <button data-window="maximize" aria-label="Maximize">□</button>
+        <button class="close" data-window="close" aria-label="Close">×</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="release-card card">
+        <div class="heading"><span>OWNER TOOL</span><h1>Ship Bloom Client</h1><p>Choose the next version and let Bloom handle the complete signed GitHub release.</p></div>
+        <div class="version-preview" id="version-preview">v1.0.0</div>
+        <div class="steppers">
+          <div class="stepper" data-part="major"><label>MAJOR</label><div><button data-delta="-1">−</button><strong>1</strong><button data-delta="1">+</button></div></div>
+          <div class="stepper" data-part="minor"><label>MINOR</label><div><button data-delta="-1">−</button><strong>0</strong><button data-delta="1">+</button></div></div>
+          <div class="stepper" data-part="patch"><label>PATCH</label><div><button data-delta="-1">−</button><strong>0</strong><button data-delta="1">+</button></div></div>
+        </div>
+        <button class="next-patch" id="next-patch"><span>+</span> Next patch</button>
+        <label class="field-label" for="release-notes">RELEASE NOTES</label>
+        <textarea id="release-notes" placeholder="What changed in this release?"></textarea>
+        <label class="check-row"><input id="auto-publish" type="checkbox" checked /><i><span>✓</span></i><div><b>Publish automatically</b><small>Make the release public after the signed build passes</small></div></label>
+      </section>
+
+      <section class="console-card card">
+        <div class="console-heading"><div><i></i><span>LIVE RELEASE OUTPUT</span></div><small id="console-state">READY</small></div>
+        <div class="terminal" id="terminal" role="log" aria-live="polite"><span>Bloom Release Manager ready.\nNo command windows will be opened.\n\n</span></div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="status"><i></i><span id="status-text">Ready to prepare a release</span></div>
+      <button class="publish" id="publish"><span class="publish-icon">↑</span><span><b>Build and publish release</b><small>Validate, tag, sign, and ship</small></span></button>
+    </footer>
+  </div>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <section class="modal">
+      <div class="modal-mark" id="modal-mark">↑</div>
+      <span class="modal-eyebrow" id="modal-eyebrow">CONFIRM RELEASE</span>
+      <h2 id="modal-title">Publish Bloom Client?</h2>
+      <p id="modal-message"></p>
+      <div class="modal-actions"><button class="secondary" id="modal-cancel">Cancel</button><button class="confirm" id="modal-confirm">Confirm release</button></div>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
