@@ -2190,7 +2190,7 @@ function App() {
           </>
         )}
       </main>
-      <aside className={`ad-rail ${page === "locker" ? "locker-hidden" : ""}`}>
+      <aside className="ad-rail">
         <div className="ad-rail-heading">Sponsored</div>
         {[1, 2, 3].map((ad) => (
           <div className="ad-placeholder" key={ad}>

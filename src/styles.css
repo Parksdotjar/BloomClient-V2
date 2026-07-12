@@ -2356,7 +2356,6 @@ button.button-press-preview { --animate-duration: 620ms; pointer-events: none; t
 @media (prefers-reduced-motion: reduce) { button.button-press-preview { animation: none !important; } }
 
 /* Local skin locker */
-.ad-rail.locker-hidden { display: none; }
 .locker-page { min-height: 100%; padding: 20px 18px 28px; }
 .locker-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 0 2px 18px; border-bottom: 1px solid var(--line); }
 .locker-heading > div:first-child > span { color: var(--accent); font-size: 9px; font-weight: 850; letter-spacing: .14em; }
