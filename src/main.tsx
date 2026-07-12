@@ -2104,7 +2104,7 @@ function App() {
             <section className="hero">
               <div>
                 <h1>
-                  Welcome back, <span>{profile?.name || "Parks"}</span>
+                  Welcome back, <span>{profile?.name || "User"}</span>
                 </h1>
                 <p>Ready to play? Launch an instance or get started below.</p>
               </div>
