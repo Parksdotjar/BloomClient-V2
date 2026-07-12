@@ -1463,6 +1463,7 @@ function App() {
     localStorage.setItem("bloom-settings", JSON.stringify(settings));
     document.documentElement.style.setProperty("--accent", settings.accent);
     document.documentElement.dataset.theme = settings.theme;
+    document.documentElement.dataset.animations = settings.animations ? "on" : "off";
   }, [settings]);
   useEffect(() => {
     if (!settings.animations || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -1492,7 +1493,7 @@ function App() {
         if (!button.isConnected || button.disabled) return;
         replaying.add(button);
         button.click();
-      }, 145);
+      }, 200);
       timers.add(timer);
     };
     document.addEventListener("click", pressBeforeAction, true);
