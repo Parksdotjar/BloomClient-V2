@@ -18,6 +18,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update as TauriUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { animate } from "animejs";
+import "animate.css";
 import {
   Check,
   Bell,
@@ -1483,17 +1484,17 @@ function App() {
       event.stopImmediatePropagation();
       if (pending.has(button)) return;
       pending.add(button);
-      button.classList.remove("button-press-preview");
+      button.classList.remove("button-press-preview", "animate__animated", "animate__pulse");
       void button.offsetWidth;
-      button.classList.add("button-press-preview");
+      button.classList.add("button-press-preview", "animate__animated", "animate__pulse");
       const timer = window.setTimeout(() => {
         timers.delete(timer);
         pending.delete(button);
-        button.classList.remove("button-press-preview");
+        button.classList.remove("button-press-preview", "animate__animated", "animate__pulse");
         if (!button.isConnected || button.disabled) return;
         replaying.add(button);
         button.click();
-      }, 200);
+      }, 500);
       timers.add(timer);
     };
     document.addEventListener("click", pressBeforeAction, true);

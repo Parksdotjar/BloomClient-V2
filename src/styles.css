@@ -2346,14 +2346,8 @@ body,
 @media (prefers-reduced-motion: reduce) { .animated-folder, .animated-folder svg { transition: none; } }
 
 html[data-animations="on"] button:not(:disabled) { transform-origin: center; }
-html[data-animations="on"] button:active:not(:disabled) { transform: translateY(2px) scale(.94) !important; filter: brightness(.9); transition-duration: 70ms !important; }
-button.button-press-preview { pointer-events: none; animation: bloom-button-press 200ms cubic-bezier(.2,.82,.24,1) both !important; transform-origin: center; will-change: transform, filter; }
-@keyframes bloom-button-press {
-  0% { transform: translateY(0) scale(1); filter: brightness(1); }
-  32% { transform: translateY(3px) scale(.92); filter: brightness(.86); }
-  70% { transform: translateY(-2px) scale(1.045); filter: brightness(1.1); }
-  100% { transform: translateY(0) scale(1); filter: brightness(1); }
-}
+html[data-animations="on"] button:active:not(:disabled) { transform: translateY(3px) scale(.92) !important; filter: brightness(.86); transition: transform 150ms cubic-bezier(.22,.7,.28,1), filter 150ms ease !important; }
+button.button-press-preview { --animate-duration: 500ms; pointer-events: none; transform-origin: center; will-change: transform, filter; animation-timing-function: cubic-bezier(.2,.75,.25,1) !important; }
 @media (prefers-reduced-motion: reduce) { button.button-press-preview { animation: none !important; } }
 .instances-empty { min-height: 390px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed var(--border); border-radius: 15px; background: color-mix(in srgb, var(--panel) 55%, transparent); color: var(--muted); text-align: center; }
 .instances-empty h2 { margin: 14px 0 0; color: var(--text); font-size: 18px; }.instances-empty p { margin: 7px 0 0; font-size: 11px; }.instances-empty button { margin-top: 18px; display: flex; align-items: center; gap: 7px; padding: 10px 14px; border: 0; border-radius: 9px; background: var(--accent); color: #101310; font-size: 11px; font-weight: 850; }
