@@ -1383,9 +1383,9 @@ function SkinThumbnail({ skin }: { skin: LockerSkin }) {
     let viewer: SkinViewerInstance | null = null;
     void import("skinview3d").then(({ SkinViewer }) => {
       if (disposed || !canvas.current) return;
-      viewer = new SkinViewer({ canvas: canvas.current, width: 118, height: 142 });
+      viewer = new SkinViewer({ canvas: canvas.current, width: 128, height: 148 });
       viewer.background = null;
-      viewer.zoom = .82;
+      viewer.zoom = .96;
       viewer.controls.enabled = false;
       viewer.autoRotate = false;
       void viewer.loadSkin(skin.dataUrl).then(() => {
@@ -1479,7 +1479,7 @@ function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
     <div className="locker-layout">
       <section className="locker-preview-panel">
         <div className="locker-profile"><b>{profile?.name || "Minecraft Player"}</b><span><i />{profile ? "Connected" : "Offline"}</span></div>
-        <div className={`locker-stage ${active ? "has-skin" : "empty"}`}>{active ? <canvas ref={preview} /> : <div><Shirt size={42} /><b>No skins yet</b><span>Upload a Minecraft PNG to begin.</span><button onClick={() => input.current?.click()}>Upload first skin</button></div>}<i className="locker-orbit" /></div>
+        <div className={`locker-stage ${active ? "has-skin" : "empty"}`}>{active ? <canvas ref={preview} /> : <div><Shirt size={42} /><b>No skins yet</b><span>Upload a Minecraft PNG to begin.</span><button onClick={() => input.current?.click()}>Upload first skin</button></div>}</div>
         {active && <><div className="locker-drag-note">Click and drag to rotate</div><div className="locker-preview-controls"><button className={locked ? "active" : ""} onClick={() => setLocked((value) => !value)}>{locked ? <Lock size={15} /> : <Unlock size={15} />}{locked ? "Rotation locked" : "Lock rotation"}</button><button onClick={reset} aria-label="Reset rotation"><RotateCcw size={16} /></button></div></>}
       </section>
       <section className="locker-library-panel">
