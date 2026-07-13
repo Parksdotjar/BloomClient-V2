@@ -19,6 +19,7 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 | BLIM-005 | Fixed | Fabric | Fabric profile installed without its Maven libraries |
 | BLOOM-006 | Fixed | Packaging | Production client opened with a terminal window |
 | BLOOM-007 | Fixed | Accounts | Microsoft session exceeded Windows' 2,560-character credential limit |
+| BLOOM-008 | Fixed | Settings | Settings controls persisted visually but were not connected to application behavior |
 
 ---
 
@@ -78,6 +79,14 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 - **Root cause:** The profile, Minecraft access token, and Microsoft refresh token were serialized into one Windows Credential Manager password value. Refreshed token payloads can make that combined value exceed Windows' per-credential limit.
 - **Fix:** Bloom stores the small account profile separately and splits each sensitive token into bounded secure credential chunks. Existing single-entry accounts remain readable and migrate automatically after refresh. Signing out deletes both formats.
 - **Verification:** Rust tests reconstruct a 7,001-character token exactly from chunks no larger than 1,200 characters; the complete native test suite and `cargo check` pass.
+
+## BLOOM-008 — Settings controls were cosmetic
+
+- **Status:** Fixed
+- **Symptom:** Several dropdowns and toggles displayed choices but used hard-coded values or empty change handlers. Launcher lifecycle, defaults, update checks, recommendations, logging, and download concurrency did not consistently follow the selected preferences.
+- **Root cause:** The settings screen was built before each native/application consumer existed, so presentation state and operational state diverged.
+- **Fix:** Every remaining setting now persists and has a concrete consumer. Startup and window behavior control Tauri, Minecraft defaults seed new instances, launch mode patches `options.txt`, Java choices use detected executables, the download queue runs native parallel workers, updates honor automatic-check preference, and privacy choices control local-only records. Unsupported language and loader choices were removed instead of being presented as functional.
+- **Verification:** `npm run build` and `cargo test --manifest-path src-tauri/Cargo.toml` pass.
 
 ## How to add a bug
 

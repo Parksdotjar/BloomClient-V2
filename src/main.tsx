@@ -76,6 +76,7 @@ type SettingsState = {
   theme: Theme;
   accent: string;
   animations: boolean;
+  ultraPerformance: boolean;
   tray: boolean;
   updates: boolean;
   memory: string;
@@ -84,11 +85,20 @@ type SettingsState = {
   analytics: boolean;
   crashReports: boolean;
   debugLogging: boolean;
+  startupBehavior: "Open Home" | "Open Settings" | "Remember last page";
+  javaArguments: string;
+  defaultVersion: string;
+  defaultLoader: "Vanilla" | "Fabric";
+  launchMethod: "Standard window" | "Fullscreen";
+  downloadWorkers: 1 | 3 | 5;
+  recommendations: boolean;
+  gameDirectory: string;
 };
 const defaults: SettingsState = {
   theme: "dark",
   accent: "#8ee365",
   animations: true,
+  ultraPerformance: false,
   tray: true,
   updates: true,
   memory: "4096 MB",
@@ -97,6 +107,14 @@ const defaults: SettingsState = {
   analytics: false,
   crashReports: true,
   debugLogging: false,
+  startupBehavior: "Open Home",
+  javaArguments: "",
+  defaultVersion: "Latest release",
+  defaultLoader: "Fabric",
+  launchMethod: "Standard window",
+  downloadWorkers: 3,
+  recommendations: true,
+  gameDirectory: ".minecraft/instances/",
 };
 const nav = [
   [House, "Home"],
@@ -147,6 +165,7 @@ function Toggle({
   const change = () => {
     const next = !value;
     onChange(next);
+    if (document.documentElement.dataset.animations !== "on") return;
     if (ref.current)
       animate(ref.current, {
         translateX: next ? 16 : 0,
@@ -393,6 +412,10 @@ function SettingsPage({
   updateChecking,
   onCheckUpdates,
   onOpenUpdate,
+  accounts,
+  switchingAccount,
+  onSwitchAccount,
+  onAccountAdded,
 }: {
   settings: SettingsState;
   setSettings: (s: SettingsState) => void;
@@ -407,6 +430,10 @@ function SettingsPage({
   updateChecking: boolean;
   onCheckUpdates: () => void;
   onOpenUpdate: () => void;
+  accounts: MinecraftProfile[];
+  switchingAccount: boolean;
+  onSwitchAccount: (account: MinecraftProfile) => Promise<void>;
+  onAccountAdded: (profile: MinecraftProfile) => void;
 }) {
   const update = <K extends keyof SettingsState>(
     key: K,
@@ -414,6 +441,10 @@ function SettingsPage({
   ) => setSettings({ ...settings, [key]: value });
   const [activeTab, setActiveTab] = useState("General");
   const [profileMessage, setProfileMessage] = useState("");
+  const [releaseOptions, setReleaseOptions] = useState<string[]>([]);
+  const [javaOptions, setJavaOptions] = useState<string[]>(["Automatic"]);
+  const [addingAccount, setAddingAccount] = useState(false);
+  const [pendingProfileAccountId, setPendingProfileAccountId] = useState<string | null>(null);
   const profileIconInput = useRef<HTMLInputElement>(null);
   const sections = useRef<Record<string, HTMLDivElement | null>>({});
   const jumpTo = (label: string) => {
@@ -423,6 +454,7 @@ function SettingsPage({
     setActiveTab(label);
     const destination = label === "General" ? 0 : Math.max(0, target.offsetTop - scroller.clientHeight / 2 + target.offsetHeight / 2);
     const distance = Math.abs(scroller.scrollTop - destination);
+    if (settings.ultraPerformance || !settings.animations) { scroller.scrollTop = destination; return; }
     animate(scroller, {
       scrollTop: destination,
       duration: Math.min(1050, Math.max(420, 420 + distance * 0.45)),
@@ -430,6 +462,12 @@ function SettingsPage({
     });
   };
   useEffect(() => { if (!initialTab) return; const timer = window.setTimeout(() => jumpTo(initialTab), 0); return () => window.clearTimeout(timer); }, [initialTab, navigationKey]);
+  useEffect(() => {
+    void Promise.all([invoke<Release[]>("get_minecraft_releases"), invoke<JavaInstallation[]>("detect_java_installations")]).then(([releases, javas]) => {
+      setReleaseOptions(releases.map(release => release.id));
+      setJavaOptions(["Automatic", ...javas.filter(java => java.usable).map(java => `Java ${java.majorVersion} — ${java.path}`)]);
+    }).catch(() => {});
+  }, []);
   const section = (label: string) => ({
     ref: (node: HTMLDivElement | null) => {
       sections.current[label] = node;
@@ -468,23 +506,13 @@ function SettingsPage({
             <p className="section-subtitle">Basic settings for Bloom Client.</p>
             <div className="settings-card">
               <SettingRow
-                title="Language"
-                description="Choose your preferred language."
-              >
-                <Select
-                  value="English (US)"
-                  options={["English (US)", "Spanish", "French", "German"]}
-                  onChange={() => {}}
-                />
-              </SettingRow>
-              <SettingRow
                 title="Startup Behavior"
                 description="Choose what happens when Bloom Client starts."
               >
                 <Select
-                  value="Open Home"
+                  value={settings.startupBehavior}
                   options={["Open Home", "Open Settings", "Remember last page"]}
-                  onChange={() => {}}
+                  onChange={(v) => update("startupBehavior", v as SettingsState["startupBehavior"])}
                 />
               </SettingRow>
               <SettingRow
@@ -569,6 +597,9 @@ function SettingsPage({
               Optimize performance and resource usage.
             </p>
             <div className="settings-card">
+              <SettingRow title="Ultra Performance Mode" description="Disable motion, glow, blur, and continuous visual rendering for lower-end computers.">
+                <Toggle value={settings.ultraPerformance} onChange={(v) => setSettings({ ...settings, ultraPerformance: v, animations: v ? false : settings.animations })} />
+              </SettingRow>
               <SettingRow
                 title="Memory Allocation"
                 description="Set how much RAM Minecraft can use."
@@ -585,7 +616,7 @@ function SettingsPage({
               >
                 <Select
                   value={settings.java}
-                  options={["Automatic", "Java 8", "Java 17", "Java 21"]}
+                  options={javaOptions.includes(settings.java) ? javaOptions : [settings.java, ...javaOptions]}
                   onChange={(v) => update("java", v)}
                 />
               </SettingRow>
@@ -599,7 +630,7 @@ function SettingsPage({
                 title="Java Arguments"
                 description="Advanced JVM arguments for Minecraft launches."
               >
-                <input className="text-input" placeholder="-XX:+UseG1GC" />
+                <input className="text-input" value={settings.javaArguments} onChange={event => update("javaArguments", event.target.value)} placeholder="-XX:+UseG1GC" />
               </SettingRow>
             </div>
           </div>
@@ -614,9 +645,9 @@ function SettingsPage({
                 description="Used when creating a new instance."
               >
                 <Select
-                  value="Latest release"
-                  options={["Latest release", "1.21.1", "1.20.4", "1.8.9"]}
-                  onChange={() => {}}
+                  value={settings.defaultVersion}
+                  options={["Latest release", ...releaseOptions]}
+                  onChange={(v) => update("defaultVersion", v)}
                 />
               </SettingRow>
               <SettingRow
@@ -624,9 +655,9 @@ function SettingsPage({
                 description="The loader selected for new instances."
               >
                 <Select
-                  value="Fabric"
-                  options={["Fabric", "Quilt", "Forge", "Vanilla"]}
-                  onChange={() => {}}
+                  value={settings.defaultLoader}
+                  options={["Fabric", "Vanilla"]}
+                  onChange={(v) => update("defaultLoader", v as SettingsState["defaultLoader"])}
                 />
               </SettingRow>
             </div>
@@ -642,13 +673,9 @@ function SettingsPage({
                 description="Choose how Minecraft windows open."
               >
                 <Select
-                  value="Standard window"
-                  options={[
-                    "Standard window",
-                    "Borderless window",
-                    "Fullscreen",
-                  ]}
-                  onChange={() => {}}
+                  value={settings.launchMethod}
+                  options={["Standard window", "Fullscreen"]}
+                  onChange={(v) => update("launchMethod", v as SettingsState["launchMethod"])}
                 />
               </SettingRow>
               <SettingRow
@@ -665,13 +692,13 @@ function SettingsPage({
                 description="Choose how many downloads can run at once."
               >
                 <Select
-                  value="3 simultaneous downloads"
+                  value={`${settings.downloadWorkers} simultaneous download${settings.downloadWorkers === 1 ? "" : "s"}`}
                   options={[
                     "1 simultaneous download",
                     "3 simultaneous downloads",
                     "5 simultaneous downloads",
                   ]}
-                  onChange={() => {}}
+                  onChange={(v) => update("downloadWorkers", Number.parseInt(v, 10) as 1 | 3 | 5)}
                 />
               </SettingRow>
             </div>
@@ -684,7 +711,7 @@ function SettingsPage({
             <div className="settings-card">
               <SettingRow
                 title="Usage Analytics"
-                description="Help improve Bloom Client with anonymous usage data."
+                description="Store anonymous feature-use counters locally on this device."
               >
                 <Toggle
                   value={settings.analytics}
@@ -693,7 +720,7 @@ function SettingsPage({
               </SettingRow>
               <SettingRow
                 title="Crash Reports"
-                description="Send anonymous crash details when something goes wrong."
+                description="Save crash details locally so they can be reviewed in Logs."
               >
                 <Toggle
                   value={settings.crashReports}
@@ -705,9 +732,9 @@ function SettingsPage({
                 description="Show relevant client updates and sponsored content."
               >
                 <Select
-                  value="Show recommendations"
+                  value={settings.recommendations ? "Show recommendations" : "Hide recommendations"}
                   options={["Show recommendations", "Hide recommendations"]}
-                  onChange={() => {}}
+                  onChange={(v) => update("recommendations", v === "Show recommendations")}
                 />
               </SettingRow>
             </div>
@@ -716,6 +743,9 @@ function SettingsPage({
             <h2>Updates</h2>
             <p className="section-subtitle">Keep Bloom Client secure and up to date.</p>
             <div className="settings-card updates-settings-card">
+              <SettingRow title="Automatic Checks" description="Check GitHub Releases once whenever Bloom Client opens.">
+                <Toggle value={settings.updates} onChange={(v) => update("updates", v)} />
+              </SettingRow>
               <SettingRow title="Current Version" description="The version currently installed on this computer.">
                 <span className="current-app-version">v{currentVersion}</span>
               </SettingRow>
@@ -732,10 +762,19 @@ function SettingsPage({
           <div className="settings-section" {...section("My Profile")}>
             <h2>My Profile</h2>
             <p className="section-subtitle">Your connected Minecraft account.</p>
-            <div className="settings-card profile-settings-card">
+            <div className={`settings-card profile-settings-card ${addingAccount ? "adding-account" : ""}`}>
               <button className="profile-settings-avatar" disabled={!profile} onClick={() => profileIconInput.current?.click()} aria-label="Change profile picture">{profileIcon ? <img src={profileIcon} alt="" /> : profile?.name.slice(0, 1).toUpperCase() || "?"}<i><ImagePlus size={13} /></i></button>
               <input ref={profileIconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseProfileIcon(event.target.files?.[0])} />
-              <div><b>{profile?.name || "Not signed in"}</b><span>{profile ? "Click your picture to choose a new one." : "Connect a Microsoft account from the sidebar."}</span>{profileMessage && <small>{profileMessage}</small>}</div>
+              <div className="profile-account-picker">
+                <Select value={profile?.name || "Not signed in"} options={accounts.length ? accounts.map(account => account.name) : ["Not signed in"]} onChange={(name) => {
+                  const account = accounts.find(item => item.name === name);
+                  if (account && account.id !== profile?.id) setPendingProfileAccountId(account.id);
+                }} />
+                {pendingProfileAccountId && <div className="profile-switch-confirm"><span>Switch account?</span><button disabled={switchingAccount} onClick={() => { const account = accounts.find(item => item.id === pendingProfileAccountId); if (account) void onSwitchAccount(account).then(() => setPendingProfileAccountId(null)); }}>{switchingAccount ? "Switching…" : "Confirm"}</button><button onClick={() => setPendingProfileAccountId(null)}>Cancel</button></div>}
+                {profileMessage && <small>{profileMessage}</small>}
+              </div>
+              {!addingAccount && <button className="profile-add-account" onClick={() => setAddingAccount(true)} aria-label="Add Minecraft account"><Plus size={20} /></button>}
+              {addingAccount && <SignInPanel onClose={() => setAddingAccount(false)} onSignedIn={(next) => { onAccountAdded(next); setAddingAccount(false); setPendingProfileAccountId(null); }} />}
             </div>
           </div>
           <div className="settings-section" {...section("Advanced")}>
@@ -757,11 +796,7 @@ function SettingsPage({
                 title="Game Directory"
                 description="Choose where Minecraft files and instances are stored."
               >
-                <input
-                  className="text-input"
-                  value="Default directory"
-                  readOnly
-                />
+                <button className="directory-setting" onClick={async () => { const chosen = await invoke<string | null>("choose_game_directory"); if (chosen) update("gameDirectory", chosen); }}><FolderOpen size={15} /><span title={settings.gameDirectory}>{settings.gameDirectory}</span></button>
               </SettingRow>
               <SettingRow
                 title="Minecraft Account"
@@ -818,19 +853,21 @@ type Release = { id: string; type: string; url: string };
 function NewInstancePage({
   onCancel,
   onCreated,
+  defaults: instanceDefaults,
 }: {
   onCancel: () => void;
   onCreated: (destination: "home" | "downloads") => void;
+  defaults: SettingsState;
 }) {
   const [draft, setDraft] = useState<InstanceDraft>({
     id: "",
     name: "",
-    loader: "Vanilla",
-    version: "Latest release",
-    directory: ".minecraft/instances/",
-    java: "Automatic (Recommended)",
-    memory: 4096,
-    jvmArguments: "",
+    loader: instanceDefaults.defaultLoader,
+    version: instanceDefaults.defaultVersion,
+    directory: instanceDefaults.gameDirectory,
+    java: instanceDefaults.java === "Automatic" ? "Automatic (Recommended)" : instanceDefaults.java,
+    memory: Number.parseInt(instanceDefaults.memory, 10),
+    jvmArguments: instanceDefaults.javaArguments,
     mods: true,
     resourcePacks: true,
     shaderPacks: true,
@@ -853,7 +890,7 @@ function NewInstancePage({
         setJavas(javaList);
         setDraft((current) => ({
           ...current,
-          version: releaseList[0]?.id || current.version,
+          version: current.version === "Latest release" ? releaseList[0]?.id || current.version : current.version,
         }));
       })
       .catch((error) => setMessage(String(error)));
@@ -1090,6 +1127,7 @@ function InstancePage({ instance, busy, onPlay, onChanged, onInstallMod }: { ins
   const [addingMods, setAddingMods] = useState(false);
   const [catalog, setCatalog] = useState<CatalogSearchResult>({ items: [], offset: 0, limit: 20, total: 0 });
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [draggingMods, setDraggingMods] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [name, setName] = useState(instance.name);
@@ -1098,7 +1136,7 @@ function InstancePage({ instance, busy, onPlay, onChanged, onInstallMod }: { ins
   const jvmPreset = Object.entries(JVM_PRESETS).find(([, args]) => args === jvmArguments)?.[0] || "Custom";
   const iconInput = useRef<HTMLInputElement>(null);
   const loadContent = async () => { if (tab === "settings") return; try { setItems(await invoke<InstanceContentItem[]>("list_instance_content", { instanceId: instance.id, category: tab })); } catch (error) { setMessage(String(error)); } };
-  useEffect(() => { void loadContent(); const timer = window.setInterval(() => void loadContent(), 2500); const focus = () => void loadContent(); window.addEventListener("focus", focus); return () => { window.clearInterval(timer); window.removeEventListener("focus", focus); }; }, [tab, instance.id]);
+  useEffect(() => { void loadContent(); const timer = window.setInterval(() => void loadContent(), 10000); const focus = () => void loadContent(); window.addEventListener("focus", focus); return () => { window.clearInterval(timer); window.removeEventListener("focus", focus); }; }, [tab, instance.id]);
   useEffect(() => { setName(instance.name); setMemory(instance.memory); setJvmArguments(instance.jvmArguments); }, [instance]);
   useEffect(() => { if (tab !== "mods") setAddingMods(false); }, [tab]);
   useEffect(() => { setContentPage(1); }, [tab, search, filter, sort, instance.id]);
@@ -1128,8 +1166,26 @@ function InstancePage({ instance, busy, onPlay, onChanged, onInstallMod }: { ins
     setSearch(""); setContentPage(1); setAddingMods(true); setMessage("");
   };
   const closeCatalog = () => { setAddingMods(false); setSearch(""); setContentPage(1); setMessage(""); void loadContent(); };
+  useEffect(() => {
+    if (!addingMods || tab !== "mods") { setDraggingMods(false); return; }
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow().onDragDropEvent((event) => {
+      if (event.payload.type === "enter") setDraggingMods(true);
+      if (event.payload.type === "leave") setDraggingMods(false);
+      if (event.payload.type === "drop") {
+        setDraggingMods(false);
+        const paths = event.payload.paths;
+        setMessage(`Importing ${paths.length} mod${paths.length === 1 ? "" : "s"}…`);
+        void invoke<string[]>("import_instance_mod_files", { instanceId: instance.id, paths })
+          .then((names) => { setAddingMods(false); setSearch(""); setContentPage(1); setMessage(`${names.length} Fabric mod${names.length === 1 ? "" : "s"} added to ${instance.name}.`); return loadContent(); })
+          .catch((error) => setMessage(String(error)));
+      }
+    }).then((value) => { unlisten = value; });
+    return () => unlisten?.();
+  }, [addingMods, tab, instance.id]);
   const tabs: Array<[InstanceTab, typeof Puzzle, string, string]> = [["mods", Puzzle, "Mods", "Manage your mods"], ["resourcepacks", PackageOpen, "Resource Packs", "Manage resource packs"], ["shaderpacks", Cuboid, "Shaders", "Manage shader packs"], ["settings", SettingsIcon, "Settings", "Configure instance settings"]];
   return <div className="instance-workspace">
+    {draggingMods && <div className="mod-drop-overlay"><span><Upload size={30} /></span><b>Drop Fabric mods here</b><p>Bloom will copy the JAR files into {instance.name}'s mods folder.</p></div>}
     <section className="instance-hero-panel"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()}>{instance.icon ? <img src={instance.icon} alt="" /> : <Cuboid size={32} />}<span><ImagePlus size={14} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1>{instance.name}</h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy} onClick={onPlay}><Play size={17} fill="currentColor" />Play</button><div className="instance-more-wrap"><button className="instance-more" onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && <div className="instance-folder-menu"><button onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id }); }}>Show in folder</button><button onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id, category: "mods" }); }}>Open mods folder</button></div>}</div></div>
     <div className="instance-tabs">{tabs.map(([id, Icon, title, description]) => <button key={id} className={tab === id ? "selected" : ""} onClick={() => setTab(id)}><span><Icon size={22} /></span><div><b>{title}</b><small>{description}</small></div></button>)}</div></section>
     {tab === "settings" && <section className="jvm-preset"><div className="jvm-preset-heading"><div><b>JVM Performance Profile</b><span>Optional Java tuning for this instance</span></div><div className="jvm-preset-actions"><Select value={jvmPreset} options={["Default", "Performance", "Overdrive", "Custom"]} onChange={applyJvmPreset} /><button disabled={!jvmArguments} onClick={() => applyJvmPreset("Default")}>Remove</button></div></div><div className={`jvm-preset-note ${jvmPreset.toLowerCase()}`}><Rocket size={17} /><div><b>{jvmPreset === "Default" ? "Launcher managed" : jvmPreset === "Performance" ? "Stable performance tuning" : jvmPreset === "Overdrive" ? "Experimental overdrive" : "Custom arguments"}</b><span>{jvmPreset === "Default" ? "Uses modern Java defaults. Safest choice and recommended when troubleshooting." : jvmPreset === "Performance" ? "May reduce garbage-collection stutter with conservative G1 settings. Raw FPS gains are not guaranteed." : jvmPreset === "Overdrive" ? "Aggressive G1 tuning for larger modpacks. May increase memory use or fail on an incompatible Java runtime." : "Manually edited arguments. Invalid or conflicting flags can prevent Minecraft from launching."}</span></div></div></section>}
@@ -1375,7 +1431,7 @@ const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFix
 type LockerSkin = { id: string; name: string; createdAt: number; dataUrl: string };
 type SkinViewerInstance = import("skinview3d").SkinViewer;
 
-function SkinThumbnail({ skin }: { skin: LockerSkin }) {
+function SkinThumbnail({ skin, ultraPerformance = document.documentElement.dataset.performance === "ultra" }: { skin: LockerSkin; ultraPerformance?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (!canvas.current) return;
@@ -1397,12 +1453,14 @@ function SkinThumbnail({ skin }: { skin: LockerSkin }) {
     });
     return () => { disposed = true; viewer?.dispose(); };
   }, [skin.dataUrl]);
+  if (ultraPerformance) return <img className="ultra-skin-thumbnail" src={skin.dataUrl} alt={`${skin.name} texture`} />;
   return <canvas ref={canvas} aria-label={`${skin.name} preview`} />;
 }
 
-function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
+function LockerPage({ profile, ultraPerformance }: { profile: MinecraftProfile | null; ultraPerformance: boolean }) {
   const [skins, setSkins] = useState<LockerSkin[]>([]);
   const [activeId, setActiveId] = useState(() => localStorage.getItem(`bloom-active-skin-${profile?.id || "local"}`) || "");
+  const [slimArms, setSlimArms] = useState(() => localStorage.getItem(`bloom-active-skin-model-${profile?.id || "local"}`) === "slim");
   const [locked, setLocked] = useState(false);
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
@@ -1426,6 +1484,7 @@ function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
     if (!activeId) return;
     localStorage.setItem(`bloom-active-skin-${profile?.id || "local"}`, activeId);
   }, [activeId, profile?.id]);
+  useEffect(() => { localStorage.setItem(`bloom-active-skin-model-${profile?.id || "local"}`, slimArms ? "slim" : "classic"); }, [slimArms, profile?.id]);
   useEffect(() => {
     if (!preview.current || !active) return;
     const host = preview.current.parentElement!;
@@ -1437,7 +1496,7 @@ function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
       viewer = new SkinViewer({ canvas: preview.current, width: Math.max(230, host.clientWidth), height: Math.max(360, host.clientHeight), skin: active.dataUrl });
       viewer.background = null;
       viewer.zoom = .82;
-      viewer.autoRotate = !lockedRef.current;
+      viewer.autoRotate = !ultraPerformance && !lockedRef.current;
       viewer.autoRotateSpeed = .18;
       viewer.controls.enabled = !lockedRef.current;
       viewer.controls.enablePan = false;
@@ -1447,13 +1506,13 @@ function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
       resize.observe(host);
     });
     return () => { disposed = true; resize?.disconnect(); viewer?.dispose(); viewerRef.current = null; };
-  }, [active?.id]);
+  }, [active?.id, ultraPerformance]);
   useEffect(() => {
     lockedRef.current = locked;
     if (!viewerRef.current) return;
-    viewerRef.current.autoRotate = !locked;
+    viewerRef.current.autoRotate = !ultraPerformance && !locked;
     viewerRef.current.controls.enabled = !locked;
-  }, [locked]);
+  }, [locked, ultraPerformance]);
 
   const upload = async (file?: File) => {
     if (!file) return;
@@ -1467,6 +1526,17 @@ function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
     } catch (error) { setMessage(String(error)); }
     if (input.current) input.current.value = "";
   };
+  const activateSkin = async (skin: LockerSkin, model = slimArms) => {
+    if (!profile) { setMessage("Sign in with Microsoft before applying a skin."); return; }
+    setMessage(`Applying ${skin.name} to ${profile.name}…`);
+    try {
+      await invoke<MinecraftProfile>("apply_locker_skin", { skinId: skin.id, variant: model ? "slim" : "classic" });
+      setActiveId(skin.id);
+      setMessage(`${skin.name} is now active with ${model ? "slim" : "classic"} arms for ${profile.name}.`);
+    } catch (error) {
+      setMessage(String(error));
+    }
+  };
   const reset = () => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -1475,7 +1545,7 @@ function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
   };
 
   return <div className="locker-page">
-    <header className="locker-heading"><div><span>PERSONALIZE</span><h1>Skin Locker</h1><p>Keep and preview your Minecraft skins locally.</p></div><div className="locker-actions"><button onClick={() => input.current?.click()}><Upload size={15} />Upload skin</button><button onClick={() => void invoke("open_skins_folder")}><FolderOpen size={15} />Folder</button><input ref={input} hidden type="file" accept="image/png" onChange={(event) => void upload(event.target.files?.[0])} /></div></header>
+    <header className="locker-heading"><div><span>PERSONALIZE</span><h1>Skin Locker</h1><p>Keep and preview your Minecraft skins locally.</p></div><div className="locker-actions"><label className="skin-model-toggle"><span>Slim arms</span><Toggle value={slimArms} onChange={(value) => { setSlimArms(value); if (active) void activateSkin(active, value); }} /></label><button onClick={() => input.current?.click()}><Upload size={15} />Upload skin</button><button onClick={() => void invoke("open_skins_folder")}><FolderOpen size={15} />Folder</button><input ref={input} hidden type="file" accept="image/png" onChange={(event) => void upload(event.target.files?.[0])} /></div></header>
     <div className="locker-layout">
       <section className="locker-preview-panel">
         <div className="locker-profile"><b>{profile?.name || "Minecraft Player"}</b><span><i />{profile ? "Connected" : "Offline"}</span></div>
@@ -1484,7 +1554,7 @@ function LockerPage({ profile }: { profile: MinecraftProfile | null }) {
       </section>
       <section className="locker-library-panel">
         <div className="locker-library-heading"><div><h2>Your Skins <span>{skins.length}</span></h2><p>Click a skin to make it active in your locker.</p></div><span className="locker-grid-mode"><Grid3X3 size={15} /></span></div>
-        {visible.length ? <div className="skin-grid">{visible.map((skin) => <button key={skin.id} className={`skin-card ${active?.id === skin.id ? "active" : ""}`} onClick={() => setActiveId(skin.id)}>{active?.id === skin.id && <span className="skin-active-mark"><Check size={11} />Active</span>}<SkinThumbnail skin={skin} /><b>{skin.name}</b></button>)}</div> : <div className="locker-empty-library"><Shirt size={31} /><b>Your locker is empty</b><span>Uploaded skins will appear here as fixed 3D previews.</span><button onClick={() => input.current?.click()}><Upload size={15} />Upload skin</button></div>}
+        {visible.length ? <div className="skin-grid">{visible.map((skin) => <button key={skin.id} className={`skin-card ${active?.id === skin.id ? "active" : ""}`} onClick={() => void activateSkin(skin)}>{active?.id === skin.id && <span className="skin-active-mark"><Check size={11} />Active</span>}<SkinThumbnail skin={skin} /><b>{skin.name}</b></button>)}</div> : <div className="locker-empty-library"><Shirt size={31} /><b>Your locker is empty</b><span>Uploaded skins will appear here as fixed 3D previews.</span><button onClick={() => input.current?.click()}><Upload size={15} />Upload skin</button></div>}
         {skins.length > 12 && <div className="locker-pages"><button disabled={page === 1} onClick={() => setPage((value) => value - 1)}><ChevronRight size={15} /></button><span>Page {page} of {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}><ChevronRight size={15} /></button></div>}
         {message && <div className="locker-message">{message}</div>}
       </section>
@@ -1533,7 +1603,7 @@ function DownloadsPage({ download, instances, completed, onClear, onCancel }: { 
 
 function App() {
   const [page, setPage] = useState<"home" | "settings" | "autotune" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker">(
-    "home",
+    (() => { try { const saved = { ...defaults, ...JSON.parse(localStorage.getItem("bloom-settings") || "{}") } as SettingsState; if (saved.startupBehavior === "Open Settings") return "settings"; if (saved.startupBehavior === "Remember last page") return (localStorage.getItem("bloom-last-page") as "home" | "settings" | "autotune" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker") || "home"; } catch {} return "home"; })(),
   );
   const [instances, setInstances] = useState<InstanceDraft[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
@@ -1591,10 +1661,21 @@ function App() {
     localStorage.setItem("bloom-settings", JSON.stringify(settings));
     document.documentElement.style.setProperty("--accent", settings.accent);
     document.documentElement.dataset.theme = settings.theme;
-    document.documentElement.dataset.animations = settings.animations ? "on" : "off";
+    document.documentElement.dataset.animations = settings.animations && !settings.ultraPerformance ? "on" : "off";
+    document.documentElement.dataset.performance = settings.ultraPerformance ? "ultra" : "normal";
   }, [settings]);
+  useEffect(() => { if (page !== "new-instance" && page !== "instance") localStorage.setItem("bloom-last-page", page); }, [page]);
   useEffect(() => {
-    if (!settings.animations || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow().onCloseRequested(async event => {
+      if (!settings.tray) return;
+      event.preventDefault();
+      await getCurrentWindow().hide();
+    }).then(value => { unlisten = value; });
+    return () => unlisten?.();
+  }, [settings.tray]);
+  useEffect(() => {
+    if (!settings.animations || settings.ultraPerformance || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const pending = new WeakSet<HTMLButtonElement>();
     const replaying = new WeakSet<HTMLButtonElement>();
     const timers = new Set<number>();
@@ -1629,7 +1710,7 @@ function App() {
       document.removeEventListener("click", pressBeforeAction, true);
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [settings.animations]);
+  }, [settings.animations, settings.ultraPerformance]);
   const checkForUpdates = async (manual = false) => {
     if (updateChecking) return;
     setUpdateChecking(true);
@@ -1658,7 +1739,7 @@ function App() {
     void getVersion().then(setCurrentVersion).catch(() => {});
     if (updateCheckStarted.current) return;
     updateCheckStarted.current = true;
-    void checkForUpdates(false);
+    if (settings.updates) void checkForUpdates(false);
   }, []);
 
   const installUpdate = async () => {
@@ -1745,6 +1826,7 @@ function App() {
         }
         if (next.state === "running") {
           setGameRunning(true);
+          if (settings.closeAfterLaunch) void invoke("exit_application");
         }
         if (next.state === "complete") {
           void invoke<InstanceDraft[]>("list_instances").then(setInstances);
@@ -1767,9 +1849,31 @@ function App() {
       unlisten = value;
     });
     return () => unlisten?.();
-  }, []);
+  }, [settings.closeAfterLaunch, instances]);
   useEffect(() => { localStorage.setItem("bloom-completed-downloads", JSON.stringify(completedDownloads.slice(0, 5))); }, [completedDownloads]);
-  useEffect(() => { localStorage.setItem("bloom-live-logs", JSON.stringify(logs.slice(-600))); }, [logs]);
+  useEffect(() => {
+    if (settings.debugLogging) localStorage.setItem("bloom-live-logs", JSON.stringify(logs.slice(-600)));
+    else localStorage.removeItem("bloom-live-logs");
+  }, [logs, settings.debugLogging]);
+  useEffect(() => {
+    if (!settings.analytics) return;
+    const counts = JSON.parse(localStorage.getItem("bloom-local-usage") || "{}") as Record<string, number>;
+    counts[page] = (counts[page] || 0) + 1;
+    localStorage.setItem("bloom-local-usage", JSON.stringify(counts));
+  }, [page, settings.analytics]);
+  useEffect(() => {
+    if (!settings.crashReports) return;
+    const capture = (message: string) => {
+      const reports = JSON.parse(localStorage.getItem("bloom-local-crashes") || "[]") as Array<{ message: string; timestamp: number }>;
+      localStorage.setItem("bloom-local-crashes", JSON.stringify([{ message, timestamp: Date.now() }, ...reports].slice(0, 20)));
+      setLogs(current => [...current, { id: `${Date.now()}-client-crash`, instanceId: "bloom-client", instanceName: "Bloom Client", stream: "client", level: "error" as const, message, timestamp: Date.now() }].slice(-600));
+    };
+    const onError = (event: ErrorEvent) => capture(event.error?.stack || event.message);
+    const onRejection = (event: PromiseRejectionEvent) => capture(String(event.reason));
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => { window.removeEventListener("error", onError); window.removeEventListener("unhandledrejection", onRejection); };
+  }, [settings.crashReports]);
   useEffect(() => {
     let unlisten: undefined | (() => void);
     void listen<{ instanceId: string; stream: string; line: string }>("minecraft-log-line", event => {
@@ -1814,13 +1918,14 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [download.state, ringProgress]);
   useEffect(() => {
+    if (!download.active) return;
     const poll = window.setInterval(() => {
       void invoke<DownloadViewState>("get_minecraft_launch_status").then((status) => {
         if (status.state === "installing" || status.state === "launching") setDownload(current => ({ ...status, active: true, taskName: current.instanceId === status.instanceId ? current.taskName : undefined, taskVersion: current.instanceId === status.instanceId ? current.taskVersion : undefined, taskKind: current.instanceId === status.instanceId ? current.taskKind : undefined }));
       }).catch(() => {});
-    }, 250);
+    }, settings.ultraPerformance ? 1200 : 600);
     return () => window.clearInterval(poll);
-  }, []);
+  }, [download.active, settings.ultraPerformance]);
   const launch = async (instance: InstanceDraft) => {
     if (download.active || gameRunning) {
       setToastKind("notification");
@@ -1838,7 +1943,7 @@ function App() {
     });
     setLogs(current => [...current, { id: `${Date.now()}-launch`, instanceId: instance.id, instanceName: instance.name, stream: "launcher", level: "info" as const, message: `Starting ${instance.name} (${instance.version} • ${instance.loader})`, timestamp: Date.now() }].slice(-600));
     try {
-      await invoke("launch_minecraft", { instanceId: instance.id });
+      await invoke("launch_minecraft", { instanceId: instance.id, launchMethod: settings.launchMethod, downloadWorkers: settings.downloadWorkers, debugLogging: settings.debugLogging });
     } catch (error) {
       const message = String(error);
       setToastKind("error");
@@ -2040,16 +2145,6 @@ function App() {
               {profileMenuOpen && <div className="profile-popover" onClick={event => event.stopPropagation()}>
                 <button onClick={() => { setProfileMenuOpen(false); openSettings("My Profile"); }}>My profile</button>
                 <button className="profile-logout" onClick={signOut}>Log out</button>
-                <div className="profile-popover-rule" />
-                <div className="saved-account-list">
-                  {accounts.filter(account => account.id !== profile.id).map(account => <div className={`saved-account-row ${pendingAccountId === account.id ? "confirming" : ""}`} key={account.id}>
-                    <button className="saved-account-main" disabled={switchingAccount} onClick={() => setPendingAccountId(current => current === account.id ? null : account.id)}>
-                      <span>{account.name.slice(0, 1).toUpperCase()}</span><b>{account.name}</b>
-                    </button>
-                    {pendingAccountId === account.id && <button className="account-confirm" disabled={switchingAccount} onClick={() => void switchAccount(account)}>{switchingAccount ? "Switching…" : "Confirm"}</button>}
-                  </div>)}
-                </div>
-                <button className="add-minecraft-account" onClick={() => { setProfileMenuOpen(false); setPendingAccountId(null); setSignInOpen(true); }}><span><Plus size={16} /></span><b>Add account</b></button>
               </div>}
             </div>
           ) : (
@@ -2086,13 +2181,14 @@ function App() {
         ) : page === "instances" ? (
           <InstancesPage instances={instances} busy={download.active || gameRunning} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onOpen={(instance) => { setSelectedInstanceId(instance.id); setPage("instance"); }} />
         ) : page === "locker" ? (
-          <LockerPage profile={profile} />
+          <LockerPage profile={profile} ultraPerformance={settings.ultraPerformance} />
         ) : page === "downloads" ? (
           <DownloadsPage download={download} instances={instances} completed={completedDownloads} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} />
         ) : page === "settings" ? (
-          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => setUpdatePanelOpen(true)} />
+          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => setUpdatePanelOpen(true)} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} />
         ) : page === "new-instance" ? (
           <NewInstancePage
+            defaults={settings}
             onCancel={() => setPage("home")}
             onCreated={(destination) => {
               void invoke<InstanceDraft[]>("list_instances").then(setInstances);
@@ -2171,7 +2267,7 @@ function App() {
                   View all instances <ChevronRight size={16} />
                 </button>
               </section>
-              <section className="whats-new">
+              {settings.recommendations && <section className="whats-new">
                 <div className="section-heading">
                   <h2>What's New</h2>
                   <button>
@@ -2185,19 +2281,19 @@ function App() {
                     sub="Updates and news will appear here"
                   />
                 ))}
-              </section>
+              </section>}
             </div>
           </>
         )}
       </main>
-      <aside className="ad-rail">
+      {settings.recommendations && <aside className="ad-rail">
         <div className="ad-rail-heading">Sponsored</div>
         {[1, 2, 3].map((ad) => (
           <div className="ad-placeholder" key={ad}>
             <span>Ads</span>
           </div>
         ))}
-      </aside>
+      </aside>}
       {contextMenu && (
         <div
           className="context-menu"

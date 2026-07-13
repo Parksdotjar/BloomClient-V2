@@ -1,13 +1,14 @@
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex, OnceLock,
 };
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 const BACKEND_URL: &str = match option_env!("BLOOM_BACKEND_URL") {
     Some(value) => value,
     None => "https://api.north.bloomclient.org/minecraft",
 };
+static DOWNLOAD_WORKERS: AtomicUsize = AtomicUsize::new(3);
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1260,19 +1261,30 @@ fn save_locker_skin(name: String, bytes: Vec<u8>) -> Result<LockerSkin, String> 
     let clean_name = name.trim().trim_end_matches(".png").trim();
     let skin = LockerSkin {
         id: id.clone(),
-        name: if clean_name.is_empty() { "Custom Skin".into() } else { clean_name.chars().take(48).collect() },
+        name: if clean_name.is_empty() {
+            "Custom Skin".into()
+        } else {
+            clean_name.chars().take(48).collect()
+        },
         created_at,
         data_url: String::new(),
     };
     let directory = skins_directory()?;
     let temporary = directory.join(format!("{id}.png.part"));
     std::fs::write(&temporary, bytes).map_err(|error| error.to_string())?;
-    std::fs::rename(&temporary, directory.join(format!("{id}.png"))).map_err(|error| error.to_string())?;
+    std::fs::rename(&temporary, directory.join(format!("{id}.png")))
+        .map_err(|error| error.to_string())?;
     let mut index = read_skin_index();
     index.push(skin.clone());
-    std::fs::write(skins_index_path()?, serde_json::to_vec_pretty(&index).map_err(|error| error.to_string())?)
-        .map_err(|error| error.to_string())?;
-    list_locker_skins()?.into_iter().find(|item| item.id == id).ok_or("Bloom saved the skin but could not reload it.".into())
+    std::fs::write(
+        skins_index_path()?,
+        serde_json::to_vec_pretty(&index).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    list_locker_skins()?
+        .into_iter()
+        .find(|item| item.id == id)
+        .ok_or("Bloom saved the skin but could not reload it.".into())
 }
 
 #[tauri::command]
@@ -1282,6 +1294,65 @@ fn open_skins_folder() -> Result<(), String> {
         .spawn()
         .map_err(|error| format!("The skins folder could not be opened: {error}"))?;
     Ok(())
+}
+
+#[tauri::command]
+async fn apply_locker_skin(
+    state: tauri::State<'_, LauncherState>,
+    skin_id: String,
+    variant: String,
+) -> Result<serde_json::Value, String> {
+    if !matches!(variant.as_str(), "classic" | "slim") {
+        return Err("Skin model must be Classic or Slim.".into());
+    }
+    let skin = read_skin_index()
+        .into_iter()
+        .find(|item| item.id == skin_id)
+        .ok_or("That skin is no longer in your locker.")?;
+    let bytes = std::fs::read(skins_directory()?.join(format!("{}.png", skin.id)))
+        .map_err(|error| format!("Bloom could not read that skin: {error}"))?;
+    if !valid_skin_png(&bytes) {
+        return Err("That skin file is not a valid Minecraft skin PNG.".into());
+    }
+    let stored = state
+        .session
+        .lock()
+        .map_err(|_| "Bloom could not read the active Minecraft account.")?
+        .clone()
+        .or_else(saved_session)
+        .ok_or("Sign in with Microsoft before applying a skin.")?;
+    let session = refresh_minecraft_session(&stored)
+        .await
+        .map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
+    let file = reqwest::multipart::Part::bytes(bytes)
+        .file_name(format!("{}.png", skin.name))
+        .mime_str("image/png")
+        .map_err(|error| format!("Bloom could not prepare the skin upload: {error}"))?;
+    let form = reqwest::multipart::Form::new()
+        .text("variant", variant)
+        .part("file", file);
+    let response = reqwest::Client::new()
+        .post("https://api.minecraftservices.com/minecraft/profile/skins")
+        .bearer_auth(&session.access_token)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|error| format!("Minecraft skin upload could not start: {error}"))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let details = response.text().await.unwrap_or_default();
+        return Err(if details.is_empty() {
+            format!("Minecraft rejected the skin upload ({status}).")
+        } else {
+            format!("Minecraft rejected the skin upload ({status}): {details}")
+        });
+    }
+    save_account_session(&session, true)?;
+    *state
+        .session
+        .lock()
+        .map_err(|_| "Bloom could not save the refreshed Minecraft account.")? = Some(session.clone());
+    Ok(serde_json::json!({ "id": session.uuid, "name": session.username }))
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -1575,7 +1646,7 @@ fn save_instance(config: InstanceConfig) -> Result<InstanceConfig, String> {
     let mut target = if config.directory.starts_with(".minecraft") {
         game_dir.join(&config.directory)
     } else {
-        game_dir
+        game_dir.join(&config.id)
     };
     if target
         .file_name()
@@ -1865,6 +1936,33 @@ fn open_instance_folder(instance_id: String, category: Option<String>) -> Result
         .spawn()
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+fn import_instance_mod_files(instance_id: String, paths: Vec<String>) -> Result<Vec<String>, String> {
+    if paths.is_empty() { return Err("Drop one or more Fabric mod JAR files.".into()); }
+    let config = load_instance(&instance_id)?;
+    if !config.loader.eq_ignore_ascii_case("fabric") { return Err("Drag-and-drop mod installation currently supports Fabric instances only.".into()); }
+    let mods = content_folder(&config, "mods")?;
+    std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
+    let mut imported = Vec::new();
+    for raw in paths {
+        let source = std::path::PathBuf::from(raw);
+        if !source.is_file() || !source.extension().and_then(|value| value.to_str()).map(|value| value.eq_ignore_ascii_case("jar")).unwrap_or(false) { return Err("Only .jar mod files can be dropped into Mods.".into()); }
+        let file = std::fs::File::open(&source).map_err(|error| format!("Could not read {}: {error}", source.display()))?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|_| format!("{} is not a valid mod JAR.", source.display()))?;
+        if archive.by_name("fabric.mod.json").is_err() { return Err(format!("{} is not a Fabric mod.", source.file_name().and_then(|value| value.to_str()).unwrap_or("That file"))); }
+        let name = source.file_name().and_then(|value| value.to_str()).ok_or("A dropped mod has an invalid filename.")?.to_string();
+        let destination = mods.join(&name);
+        if source.canonicalize().ok() != destination.canonicalize().ok() {
+            let temporary = mods.join(format!(".{name}.bloom-import"));
+            std::fs::copy(&source, &temporary).map_err(|error| format!("Could not import {name}: {error}"))?;
+            if destination.exists() { std::fs::remove_file(&destination).map_err(|error| format!("Could not replace {name}: {error}"))?; }
+            std::fs::rename(&temporary, &destination).map_err(|error| format!("Could not finish importing {name}: {error}"))?;
+        }
+        imported.push(name);
+    }
+    Ok(imported)
 }
 
 #[tauri::command]
@@ -2445,6 +2543,157 @@ fn execute_download_plan(
         .build()
         .map_err(|error| error.to_string())?;
     let total_tasks = plan.tasks.len().max(1) as f64;
+    let worker_count = DOWNLOAD_WORKERS
+        .load(Ordering::Relaxed)
+        .clamp(1, 5)
+        .min(plan.tasks.len().max(1));
+    if worker_count > 1 && plan.tasks.len() > 1 {
+        let next = AtomicUsize::new(0);
+        let finished = AtomicUsize::new(0);
+        let failure = Mutex::new(None::<String>);
+        std::thread::scope(|scope| {
+            for _ in 0..worker_count {
+                let client = client.clone();
+                let next = &next;
+                let finished = &finished;
+                let failure = &failure;
+                scope.spawn(move || loop {
+                    if cancel.load(Ordering::SeqCst)
+                        || failure.lock().map(|value| value.is_some()).unwrap_or(true)
+                    {
+                        break;
+                    }
+                    let index = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(task) = plan.tasks.get(index) else {
+                        break;
+                    };
+                    let outcome = (|| -> Result<(), String> {
+                        if mc_launcher_core::net::download::should_skip_existing(task)
+                            .map_err(|error| error.to_string())?
+                        {
+                            return Ok(());
+                        }
+                        if let Some(parent) = task.destination.parent() {
+                            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                        }
+                        let mut response = client
+                            .get(&task.url)
+                            .send()
+                            .map_err(|error| {
+                                format!("Download failed for {}: {error}", task.label)
+                            })?
+                            .error_for_status()
+                            .map_err(|error| {
+                                format!("Download failed for {}: {error}", task.label)
+                            })?;
+                        let total_bytes = response.content_length().unwrap_or(0);
+                        let temporary = task.destination.with_extension("bloom-part");
+                        let mut file =
+                            std::fs::File::create(&temporary).map_err(|error| error.to_string())?;
+                        let mut buffer = [0u8; 65536];
+                        let mut received = 0u64;
+                        let started = std::time::Instant::now();
+                        loop {
+                            if cancel.load(Ordering::SeqCst) {
+                                let _ = std::fs::remove_file(&temporary);
+                                return Err("__cancelled__".into());
+                            }
+                            let count = response
+                                .read(&mut buffer)
+                                .map_err(|error| error.to_string())?;
+                            if count == 0 {
+                                break;
+                            }
+                            file.write_all(&buffer[..count])
+                                .map_err(|error| error.to_string())?;
+                            received += count as u64;
+                            let base = finished.load(Ordering::Relaxed) as f64;
+                            let fraction = if total_bytes > 0 {
+                                received as f64 / total_bytes as f64
+                            } else {
+                                0.0
+                            };
+                            let overall = start as f64
+                                + ((base + fraction) / total_tasks) * (end - start) as f64;
+                            emit_download(
+                                app,
+                                instance_id,
+                                overall.round() as u8,
+                                if assets {
+                                    "Loading assets".into()
+                                } else {
+                                    stage.into()
+                                },
+                                received,
+                                total_bytes,
+                                (received as f64 / started.elapsed().as_secs_f64().max(0.01))
+                                    as u64,
+                            );
+                        }
+                        drop(file);
+                        if let Some(mc_launcher_core::net::download::Checksum::Sha1(expected)) =
+                            &task.checksum
+                        {
+                            let actual = mc_launcher_core::io::hash::sha1_file(&temporary)
+                                .map_err(|error| error.to_string())?;
+                            if &actual != expected {
+                                let _ = std::fs::remove_file(&temporary);
+                                return Err(format!(
+                                    "Checksum verification failed for {}.",
+                                    task.label
+                                ));
+                            }
+                        }
+                        if task.destination.exists() {
+                            std::fs::remove_file(&task.destination)
+                                .map_err(|error| error.to_string())?;
+                        }
+                        std::fs::rename(&temporary, &task.destination)
+                            .map_err(|error| error.to_string())?;
+                        Ok(())
+                    })();
+                    match outcome {
+                        Ok(()) => {
+                            let done = finished.fetch_add(1, Ordering::SeqCst) + 1;
+                            let progress =
+                                start as f64 + (done as f64 / total_tasks) * (end - start) as f64;
+                            emit_download(
+                                app,
+                                instance_id,
+                                progress.round() as u8,
+                                if assets {
+                                    "Loading assets".into()
+                                } else {
+                                    stage.into()
+                                },
+                                0,
+                                0,
+                                0,
+                            );
+                        }
+                        Err(error) => {
+                            if let Ok(mut slot) = failure.lock() {
+                                if slot.is_none() {
+                                    *slot = Some(error);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                });
+            }
+        });
+        if cancel.load(Ordering::SeqCst) {
+            return Err("__cancelled__".into());
+        }
+        if let Some(error) = failure
+            .into_inner()
+            .map_err(|_| "Download worker failed.".to_string())?
+        {
+            return Err(error);
+        }
+        return Ok(());
+    }
     for (index, task) in plan.tasks.iter().enumerate() {
         if cancel.load(Ordering::SeqCst) {
             return Err("__cancelled__".into());
@@ -2859,7 +3108,14 @@ async fn launch_minecraft(
     app: tauri::AppHandle,
     state: tauri::State<'_, LauncherState>,
     instance_id: String,
+    launch_method: String,
+    download_workers: u8,
+    debug_logging: bool,
 ) -> Result<(), String> {
+    if !matches!(download_workers, 1 | 3 | 5) {
+        return Err("Download workers must be 1, 3, or 5.".into());
+    }
+    DOWNLOAD_WORKERS.store(download_workers as usize, Ordering::Relaxed);
     {
         let mut active = state
             .launch_active
@@ -2914,6 +3170,23 @@ async fn launch_minecraft(
                 return;
             }
         };
+        let options_path = std::path::PathBuf::from(&config.directory).join("options.txt");
+        if let Err(error) = patch_options(
+            &options_path,
+            &[("fullscreen", (launch_method == "Fullscreen").to_string())],
+        ) {
+            emit_launch(
+                &app,
+                &instance_id,
+                "error",
+                0,
+                format!("Could not apply launch mode: {error}"),
+            );
+            if let Ok(mut value) = active.lock() {
+                *value = false;
+            }
+            return;
+        }
         emit_launch(
             &app,
             &instance_id,
@@ -3067,7 +3340,16 @@ async fn launch_minecraft(
                     return Err("Minecraft launch was cancelled.".into());
                 }
                 while let Ok((stream, line)) = log_receiver.try_recv() {
-                    emit_game_log(&app, &instance_id, &stream, line.clone());
+                    if debug_logging
+                        || stream == "stderr"
+                        || line.contains("WARN")
+                        || line.contains("ERROR")
+                        || line.contains("Loading ")
+                        || line.contains("OpenAL")
+                        || line.contains("Created:")
+                    {
+                        emit_game_log(&app, &instance_id, &stream, line.clone());
+                    }
                     if line.contains("Loading ") && line.contains(" mods") {
                         emit_launch(&app, &instance_id, "launching", 97, "Loading Fabric mods");
                     } else if line.contains("Backend library") || line.contains("LWJGL Version") {
@@ -3121,6 +3403,18 @@ async fn launch_minecraft(
         }
     });
     Ok(())
+}
+
+#[tauri::command]
+fn choose_game_directory() -> Option<String> {
+    rfd::FileDialog::new()
+        .pick_folder()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn exit_application(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 #[tauri::command]
@@ -3184,6 +3478,33 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            use tauri::{
+                menu::{Menu, MenuItem},
+                tray::TrayIconBuilder,
+            };
+            let show = MenuItem::with_id(app, "show", "Show Bloom Client", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Bloom Client", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let mut tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(true);
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.on_menu_event(|app, event| match event.id.as_ref() {
+                "show" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                "quit" => app.exit(0),
+                _ => {}
+            })
+            .build(app)?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             get_backend_status,
@@ -3196,6 +3517,7 @@ pub fn run() {
             list_locker_skins,
             save_locker_skin,
             open_skins_folder,
+            apply_locker_skin,
             detect_hardware_report,
             apply_autotune_profile,
             get_minecraft_releases,
@@ -3206,6 +3528,7 @@ pub fn run() {
             set_instance_icon,
             update_instance_settings,
             open_instance_folder,
+            import_instance_mod_files,
             open_game_folder,
             install_autotune_benchmark,
             get_autotune_benchmark_result,
@@ -3213,6 +3536,8 @@ pub fn run() {
             import_fabric_modpack,
             install_modrinth_mod,
             launch_minecraft,
+            choose_game_directory,
+            exit_application,
             get_minecraft_launch_status,
             cancel_minecraft_launch,
             repair_minecraft_installation,
@@ -3229,8 +3554,7 @@ pub fn run() {
 mod tests {
     use super::{
         account_credential_name, allowed_pack_download, patch_options, safe_pack_path,
-        split_credential_secret,
-        valid_skin_png,
+        split_credential_secret, valid_skin_png,
     };
 
     #[test]
