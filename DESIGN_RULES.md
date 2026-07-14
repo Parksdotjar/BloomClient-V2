@@ -40,11 +40,12 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Toggles must follow standard semantics: off is gray with the thumb left; on is accent-colored with the thumb right.
 - Every toggle must be backed by real state and an `onChange` handler before it is added to the UI. Never ship a hardcoded toggle with a no-op handler.
 - Interactive controls need hover, focus, and pressed states.
+- Button press duration is user-configurable from 0–1000 ms (620 ms by default), but the visual must run independently through compositor animation and must never delay the button action, force layout, or schedule a React render.
 - Use Anime.js for purposeful UI motion, including toggle thumb movement and subtle state transitions. Respect the Show Animations setting.
 - Do not expose browser context menus or browser-looking actions inside the client.
 - Desktop window controls use Bloom's custom dim icon buttons inside a transparent draggable region; close uses a restrained red hover state, and the native operating-system title bar remains disabled.
 - Compact filters belong behind a recognizable filter icon when showing every option inline would clutter a toolbar; the active filter is indicated with a muted accent state.
-- Dropdown menus render through a document-level overlay with a top-layer stack order so cards, scroll regions, and parent overflow can never cover or clip them.
+- Dropdown menus and their follow-up confirmation popovers render through a document-level overlay with a top-layer stack order so cards, scroll regions, paint containment, and parent overflow can never cover or clip them.
 - File imports must use a clearly labeled accent-colored action and report genuine native progress through Downloads; never simulate import progress.
 
 ## Large collections

@@ -18,6 +18,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update as TauriUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { animate } from "animejs";
+import { waapi, type WAAPIAnimation } from "animejs/waapi";
 import {
   Check,
   Bell,
@@ -75,6 +76,7 @@ type SettingsState = {
   theme: Theme;
   accent: string;
   animations: boolean;
+  buttonPressDuration: number;
   ultraPerformance: boolean;
   tray: boolean;
   updates: boolean;
@@ -97,6 +99,7 @@ const defaults: SettingsState = {
   theme: "dark",
   accent: "#8ee365",
   animations: true,
+  buttonPressDuration: 620,
   ultraPerformance: false,
   tray: true,
   updates: true,
@@ -444,7 +447,9 @@ function SettingsPage({
   const [javaOptions, setJavaOptions] = useState<string[]>(["Automatic"]);
   const [addingAccount, setAddingAccount] = useState(false);
   const [pendingProfileAccountId, setPendingProfileAccountId] = useState<string | null>(null);
+  const [profileConfirmPosition, setProfileConfirmPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const profileIconInput = useRef<HTMLInputElement>(null);
+  const profileAccountPicker = useRef<HTMLDivElement>(null);
   const sections = useRef<Record<string, HTMLDivElement | null>>({});
   const jumpTo = (label: string) => {
     const target = sections.current[label];
@@ -467,6 +472,25 @@ function SettingsPage({
       setJavaOptions(["Automatic", ...javas.filter(java => java.usable).map(java => `Java ${java.majorVersion} — ${java.path}`)]);
     }).catch(() => {});
   }, []);
+  useEffect(() => {
+    if (!pendingProfileAccountId) { setProfileConfirmPosition(null); return; }
+    const place = () => {
+      const bounds = profileAccountPicker.current?.getBoundingClientRect();
+      if (!bounds) return;
+      const width = Math.max(250, Math.min(bounds.width, 310));
+      const left = Math.max(8, Math.min(bounds.left + (bounds.width - width) / 2, window.innerWidth - width - 8));
+      const below = bounds.bottom + 7;
+      const top = below + 46 <= window.innerHeight - 8 ? below : Math.max(8, bounds.top - 53);
+      setProfileConfirmPosition({ top, left, width });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [pendingProfileAccountId]);
   const section = (label: string) => ({
     ref: (node: HTMLDivElement | null) => {
       sections.current[label] = node;
@@ -587,6 +611,27 @@ function SettingsPage({
                   value={settings.animations}
                   onChange={(v) => update("animations", v)}
                 />
+              </SettingRow>
+              <SettingRow
+                title="Button Pop Duration"
+                description="Choose how quickly buttons press and spring back. Set to 0 for no button pop."
+              >
+                <div
+                  className="button-pop-control"
+                  style={{ "--button-pop-fill": `${settings.buttonPressDuration / 10}%` } as CSSProperties}
+                >
+                  <input
+                    type="range"
+                    min="0"
+                    max="1000"
+                    step="50"
+                    value={settings.buttonPressDuration}
+                    aria-label="Button pop duration"
+                    aria-valuetext={`${settings.buttonPressDuration} milliseconds`}
+                    onChange={(event) => update("buttonPressDuration", Number(event.target.value))}
+                  />
+                  <output>{settings.buttonPressDuration} ms</output>
+                </div>
               </SettingRow>
             </div>
           </div>
@@ -764,17 +809,25 @@ function SettingsPage({
             <div className={`settings-card profile-settings-card ${addingAccount ? "adding-account" : ""}`}>
               <button className="profile-settings-avatar" disabled={!profile} onClick={() => profileIconInput.current?.click()} aria-label="Change profile picture">{profileIcon ? <img src={profileIcon} alt="" /> : profile?.name.slice(0, 1).toUpperCase() || "?"}<i><ImagePlus size={13} /></i></button>
               <input ref={profileIconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseProfileIcon(event.target.files?.[0])} />
-              <div className="profile-account-picker">
+              <div ref={profileAccountPicker} className="profile-account-picker">
                 <Select value={profile?.name || "Not signed in"} options={accounts.length ? accounts.map(account => account.name) : ["Not signed in"]} onChange={(name) => {
                   const account = accounts.find(item => item.name === name);
                   if (account && account.id !== profile?.id) setPendingProfileAccountId(account.id);
                 }} />
-                {pendingProfileAccountId && <div className="profile-switch-confirm"><span>Switch account?</span><button disabled={switchingAccount} onClick={() => { const account = accounts.find(item => item.id === pendingProfileAccountId); if (account) void onSwitchAccount(account).then(() => setPendingProfileAccountId(null)); }}>{switchingAccount ? "Switching…" : "Confirm"}</button><button onClick={() => setPendingProfileAccountId(null)}>Cancel</button></div>}
                 {profileMessage && <small>{profileMessage}</small>}
               </div>
               {!addingAccount && <button className="profile-add-account" onClick={() => setAddingAccount(true)} aria-label="Add Minecraft account"><Plus size={20} /></button>}
               {addingAccount && <SignInPanel onClose={() => setAddingAccount(false)} onSignedIn={(next) => { onAccountAdded(next); setAddingAccount(false); setPendingProfileAccountId(null); }} />}
             </div>
+            {pendingProfileAccountId && profileConfirmPosition && createPortal(
+              <div className="profile-switch-confirm-portal" style={profileConfirmPosition}>
+                <div className="profile-switch-confirm">
+                  <span>Switch account?</span>
+                  <button disabled={switchingAccount} onClick={() => { const account = accounts.find(item => item.id === pendingProfileAccountId); if (account) void onSwitchAccount(account).then(() => setPendingProfileAccountId(null)); }}>{switchingAccount ? "Switching…" : "Confirm"}</button>
+                  <button onClick={() => setPendingProfileAccountId(null)}>Cancel</button>
+                </div>
+              </div>, document.body
+            )}
           </div>
           <div className="settings-section" {...section("Advanced")}>
             <h2>Advanced</h2>
@@ -1690,7 +1743,38 @@ function App() {
     document.documentElement.dataset.theme = settings.theme;
     document.documentElement.dataset.animations = settings.animations && !settings.ultraPerformance ? "on" : "off";
     document.documentElement.dataset.performance = settings.ultraPerformance ? "ultra" : "normal";
+    const buttonPressDuration = Math.max(0, Math.min(1000, settings.buttonPressDuration));
+    document.documentElement.dataset.buttonPressDuration = String(buttonPressDuration);
   }, [settings]);
+  useEffect(() => {
+    const activePresses = new WeakMap<HTMLButtonElement, WAAPIAnimation>();
+    const press = (event: PointerEvent) => {
+      if (event.button !== 0 || document.documentElement.dataset.animations !== "on" || document.documentElement.dataset.performance === "ultra") return;
+      const target = event.target instanceof Element ? event.target.closest("button") as HTMLButtonElement | null : null;
+      if (!target || target.disabled) return;
+      const duration = Number(document.documentElement.dataset.buttonPressDuration || 0);
+      activePresses.get(target)?.cancel();
+      activePresses.delete(target);
+      if (duration <= 0) return;
+      const animation = waapi.animate(target, {
+        transform: [
+          "translateY(0) scale(1)",
+          "translateY(1.5px) scale(.975)",
+          "translateY(-.5px) scale(1.008)",
+          "translateY(0) scale(1)",
+        ],
+        duration,
+        ease: "cubic-bezier(.2,.72,.22,1)",
+        persist: false,
+      });
+      activePresses.set(target, animation);
+      void animation.then(() => {
+        if (activePresses.get(target) === animation) activePresses.delete(target);
+      });
+    };
+    document.addEventListener("pointerdown", press, { passive: true });
+    return () => document.removeEventListener("pointerdown", press);
+  }, []);
   useEffect(() => { if (page !== "new-instance" && page !== "instance") localStorage.setItem("bloom-last-page", page); }, [page]);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
