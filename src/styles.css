@@ -2360,7 +2360,7 @@ body,
 
 html[data-animations="on"] button:not(:disabled) { transform-origin: center; }
 html[data-animations="on"] button:active:not(:disabled) { transform: translateY(1.5px) scale(.96) !important; filter: brightness(.93); transition: transform 190ms cubic-bezier(.22,.7,.28,1), filter 190ms ease !important; }
-button.button-press-preview { --animate-duration: 620ms; pointer-events: none; transform-origin: center; will-change: transform, filter; animation-timing-function: cubic-bezier(.22,.65,.25,1) !important; }
+button.button-press-preview { --animate-duration: 440ms; pointer-events: none; transform-origin: center; animation-timing-function: cubic-bezier(.22,.65,.25,1) !important; }
 @keyframes pulse {
   from { transform: scale3d(1, 1, 1); }
   48% { transform: scale3d(1.022, 1.022, 1.022); }
@@ -2375,8 +2375,7 @@ button.button-press-preview { --animate-duration: 620ms; pointer-events: none; t
 .locker-heading h1 { margin: 5px 0 0; font-size: 29px; letter-spacing: -.045em; }
 .locker-heading p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
 .locker-actions { display: flex; gap: 8px; }
-.skin-model-toggle { min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--control); color: var(--muted); font-size: 10px; font-weight: 750; }
-.skin-model-toggle .toggle { transform: scale(.78); transform-origin: right center; margin-right: -4px; }
+.skin-model-toggle { min-height: 38px; display: flex; align-items: center; gap: 12px; padding: 0 10px 0 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--control); color: var(--muted); font-size: 10px; font-weight: 750; }
 .ultra-skin-thumbnail { width: 92px; height: 112px; align-self: center; object-fit: contain; image-rendering: pixelated; border-radius: 7px; background: var(--control); }
 
 /* Low-end hardware mode: retain layout and functionality while removing GPU-heavy polish. */
@@ -2403,7 +2402,7 @@ button.button-press-preview { --animate-duration: 620ms; pointer-events: none; t
 :root[data-performance="ultra"] .instance-library-card:hover { transform: none !important; filter: none !important; }
 .settings-section { content-visibility: auto; contain-intrinsic-size: auto 360px; }
 .content-item, .skin-card, .instance-library-card { contain: layout paint style; }
-.locker-actions button, .locker-empty-library button { min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--accent) 9%, var(--control)); color: var(--accent); font-size: 10px; font-weight: 800; }
+.locker-actions > button, .locker-empty-library button { min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--accent) 9%, var(--control)); color: var(--accent); font-size: 10px; font-weight: 800; }
 .locker-layout { min-height: 600px; height: calc(100vh - 126px); display: grid; grid-template-columns: minmax(330px, 36%) minmax(0, 1fr); gap: 12px; padding-top: 12px; }
 .locker-preview-panel, .locker-library-panel { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: linear-gradient(145deg, var(--panel), color-mix(in srgb, var(--panel) 78%, var(--page))); }
 .locker-preview-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; padding: 22px 28px; background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%), var(--panel); }

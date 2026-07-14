@@ -72,6 +72,138 @@ struct CatalogInstallPlan {
     files: Vec<CatalogInstallFile>,
 }
 
+#[derive(serde::Deserialize)]
+struct ModrinthSearchResponse {
+    hits: Vec<ModrinthSearchHit>,
+    offset: u64,
+    limit: u64,
+    total_hits: u64,
+}
+
+#[derive(serde::Deserialize)]
+struct ModrinthSearchHit {
+    project_id: String,
+    slug: String,
+    title: String,
+    description: String,
+    icon_url: Option<String>,
+    author: String,
+    downloads: u64,
+}
+
+#[derive(serde::Deserialize)]
+struct ModrinthVersion {
+    id: String,
+    version_number: String,
+    version_type: String,
+    files: Vec<ModrinthFile>,
+}
+
+#[derive(serde::Deserialize)]
+struct ModrinthFile {
+    filename: String,
+    url: String,
+    size: u64,
+    primary: bool,
+    hashes: std::collections::HashMap<String, String>,
+}
+
+#[derive(serde::Deserialize)]
+struct ModrinthProject {
+    title: String,
+}
+
+fn catalog_category(category: &str) -> Result<(&'static str, &'static str, &'static str), String> {
+    match category {
+        "mods" => Ok(("mod", "Fabric", "mods")),
+        "resourcepacks" => Ok(("resourcepack", "Minecraft", "resourcepacks")),
+        "shaderpacks" => Ok(("shader", "Shader", "shaderpacks")),
+        _ => Err("Unsupported Modrinth content category.".into()),
+    }
+}
+
+fn primary_modrinth_file(version: &ModrinthVersion) -> Option<&ModrinthFile> {
+    version.files.iter().find(|file| file.primary).or_else(|| version.files.first())
+}
+
+async fn direct_modrinth_search(
+    query: String,
+    game_version: String,
+    offset: u64,
+    category: &str,
+) -> Result<CatalogSearchResult, String> {
+    use futures_util::future::join_all;
+
+    let (project_type, loader_label, _) = catalog_category(category)?;
+    let mut facets = vec![
+        vec![format!("project_type:{project_type}")],
+        vec![format!("versions:{game_version}")],
+    ];
+    if category == "mods" {
+        facets.push(vec!["categories:fabric".to_string()]);
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION"), " (support@bloomclient.org)"))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let result = client
+        .get("https://api.modrinth.com/v2/search")
+        .query(&[
+            ("query", query.as_str()),
+            ("facets", serde_json::to_string(&facets).map_err(|error| error.to_string())?.as_str()),
+            ("index", if query.is_empty() { "downloads" } else { "relevance" }),
+            ("limit", "20"),
+            ("offset", offset.to_string().as_str()),
+        ])
+        .send()
+        .await
+        .map_err(|error| format!("The Modrinth catalog is unavailable: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Modrinth rejected the catalog search: {error}"))?
+        .json::<ModrinthSearchResponse>()
+        .await
+        .map_err(|error| format!("Modrinth returned invalid catalog data: {error}"))?;
+
+    let requests = result.hits.into_iter().map(|hit| {
+        let client = client.clone();
+        let game_version = game_version.clone();
+        let category = category.to_string();
+        async move {
+            let game_versions = serde_json::to_string(&[game_version.as_str()]).ok()?;
+            let mut request = client
+                .get(format!("https://api.modrinth.com/v2/project/{}/version", hit.project_id))
+                .query(&[("game_versions", game_versions.as_str()), ("include_changelog", "false")]);
+            let loaders;
+            if category == "mods" {
+                loaders = serde_json::to_string(&["fabric"]).ok()?;
+                request = request.query(&[("loaders", loaders.as_str())]);
+            }
+            let versions = request.send().await.ok()?.error_for_status().ok()?.json::<Vec<ModrinthVersion>>().await.ok()?;
+            let version = versions.iter().find(|version| version.version_type == "release").or_else(|| versions.first())?;
+            let file = primary_modrinth_file(version)?;
+            Some(CatalogMod {
+                provider: "modrinth".into(),
+                project_id: hit.project_id,
+                slug: hit.slug,
+                title: hit.title,
+                summary: hit.description,
+                icon_url: hit.icon_url,
+                author: hit.author,
+                downloads: hit.downloads,
+                loader: loader_label.into(),
+                game_version: game_version.clone(),
+                version_id: version.id.clone(),
+                version_number: version.version_number.clone(),
+                file_name: file.filename.clone(),
+                file_size: file.size,
+            })
+        }
+    });
+    let items = join_all(requests).await.into_iter().flatten().collect();
+    Ok(CatalogSearchResult { items, offset: result.offset, limit: result.limit, total: result.total_hits })
+}
+
 #[tauri::command]
 async fn get_backend_status() -> Result<BackendStatus, String> {
     reqwest::Client::builder()
@@ -91,11 +223,16 @@ async fn get_backend_status() -> Result<BackendStatus, String> {
 }
 
 #[tauri::command]
-async fn search_modrinth_mods(
+async fn search_modrinth_content(
     query: String,
     game_version: String,
     offset: u64,
+    category: String,
 ) -> Result<CatalogSearchResult, String> {
+    catalog_category(&category)?;
+    if category != "mods" {
+        return direct_modrinth_search(query, game_version, offset, &category).await;
+    }
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
@@ -1931,11 +2068,14 @@ fn open_instance_folder(instance_id: String, category: Option<String>) -> Result
     } else {
         std::path::PathBuf::from(config.directory)
     };
-    std::process::Command::new("explorer.exe")
-        .arg(target)
-        .spawn()
-        .map_err(|error| error.to_string())?;
-    Ok(())
+    std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
+    let target = target.canonicalize().map_err(|error| {
+        format!("Bloom could not resolve this instance folder: {error}")
+    })?;
+
+    tauri_plugin_opener::open_path(&target, None::<&str>).map_err(|error| {
+        format!("Bloom could not open this instance folder: {error}")
+    })
 }
 
 #[tauri::command]
@@ -2795,14 +2935,16 @@ fn execute_download_plan(
 }
 
 #[tauri::command]
-fn install_modrinth_mod(
+fn install_modrinth_content(
     app: tauri::AppHandle,
     state: tauri::State<'_, LauncherState>,
     instance_id: String,
     project_id: String,
+    category: String,
 ) -> Result<(), String> {
     let config = load_instance(&instance_id)?;
-    if !config.loader.eq_ignore_ascii_case("fabric") {
+    let (_, content_label, destination_folder) = catalog_category(&category)?;
+    if category == "mods" && !config.loader.eq_ignore_ascii_case("fabric") {
         return Err("Modrinth mod installation currently supports Fabric instances only.".into());
     }
     if !(3..=64).contains(&project_id.len())
@@ -2825,13 +2967,14 @@ fn install_modrinth_mod(
     state.cancel_requested.store(false, Ordering::SeqCst);
     let active = state.launch_active.clone();
     let cancel = state.cancel_requested.clone();
+    let category_for_task = category.clone();
     std::thread::spawn(move || {
         emit_launch(
             &app,
             &instance_id,
             "installing",
             1,
-            "Resolving Modrinth mod",
+            format!("Resolving Modrinth {}", content_label.to_lowercase()),
         );
         let result = (|| -> Result<String, String> {
             let client = reqwest::blocking::Client::builder()
@@ -2839,24 +2982,50 @@ fn install_modrinth_mod(
                 .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .map_err(|error| error.to_string())?;
-            let plan: CatalogInstallPlan = client
-                .get(format!(
-                    "{}/v1/catalog/modrinth/{}/install",
-                    BACKEND_URL.trim_end_matches('/'),
-                    project_id
-                ))
-                .query(&[("gameVersion", config.version.as_str())])
-                .send()
-                .map_err(|error| format!("Unable to resolve the Modrinth file: {error}"))?
-                .error_for_status()
-                .map_err(|error| format!("Modrinth could not provide a compatible file: {error}"))?
-                .json()
-                .map_err(|error| format!("The mod install plan is invalid: {error}"))?;
+            let plan: CatalogInstallPlan = if category_for_task == "mods" {
+                client
+                    .get(format!(
+                        "{}/v1/catalog/modrinth/{}/install",
+                        BACKEND_URL.trim_end_matches('/'),
+                        project_id
+                    ))
+                    .query(&[("gameVersion", config.version.as_str())])
+                    .send()
+                    .map_err(|error| format!("Unable to resolve the Modrinth file: {error}"))?
+                    .error_for_status()
+                    .map_err(|error| format!("Modrinth could not provide a compatible file: {error}"))?
+                    .json()
+                    .map_err(|error| format!("The mod install plan is invalid: {error}"))?
+            } else {
+                let versions: Vec<ModrinthVersion> = client
+                    .get(format!("https://api.modrinth.com/v2/project/{}/version", project_id))
+                    .query(&[("game_versions", serde_json::to_string(&[config.version.as_str()]).map_err(|error| error.to_string())?), ("include_changelog", "false".into())])
+                    .send()
+                    .map_err(|error| format!("Unable to resolve the Modrinth file: {error}"))?
+                    .error_for_status()
+                    .map_err(|error| format!("Modrinth could not provide compatible content: {error}"))?
+                    .json()
+                    .map_err(|error| format!("The Modrinth version response is invalid: {error}"))?;
+                let version = versions.iter().find(|version| version.version_type == "release").or_else(|| versions.first()).ok_or_else(|| format!("No compatible {content_label} exists for Minecraft {}.", config.version))?;
+                let file = primary_modrinth_file(version).ok_or_else(|| format!("The selected {content_label} has no downloadable file."))?;
+                let project: ModrinthProject = client
+                    .get(format!("https://api.modrinth.com/v2/project/{}", project_id))
+                    .send()
+                    .map_err(|error| format!("Unable to load the Modrinth project: {error}"))?
+                    .error_for_status()
+                    .map_err(|error| format!("Modrinth rejected the project request: {error}"))?
+                    .json()
+                    .map_err(|error| format!("The Modrinth project response is invalid: {error}"))?;
+                CatalogInstallPlan {
+                    title: project.title,
+                    files: vec![CatalogInstallFile { file_name: file.filename.clone(), download_url: file.url.clone(), sha1: file.hashes.get("sha1").cloned() }],
+                }
+            };
             if plan.files.is_empty() {
-                return Err("The selected mod has no compatible files to install.".into());
+                return Err(format!("The selected {content_label} has no compatible files to install."));
             }
-            let mods = std::path::PathBuf::from(&config.directory).join("mods");
-            std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
+            let destination = std::path::PathBuf::from(&config.directory).join(destination_folder);
+            std::fs::create_dir_all(&destination).map_err(|error| error.to_string())?;
             let mut downloads = mc_launcher_core::net::download::DownloadPlan::default();
             for file in plan.files {
                 if std::path::Path::new(&file.file_name)
@@ -2864,7 +3033,7 @@ fn install_modrinth_mod(
                     .and_then(|name| name.to_str())
                     != Some(file.file_name.as_str())
                 {
-                    return Err("Modrinth returned an unsafe mod filename.".into());
+                    return Err(format!("Modrinth returned an unsafe {content_label} filename."));
                 }
                 if !allowed_pack_download(&file.download_url) {
                     return Err("Modrinth returned an untrusted download address.".into());
@@ -2873,7 +3042,7 @@ fn install_modrinth_mod(
                     .tasks
                     .push(mc_launcher_core::net::download::DownloadTask {
                         url: file.download_url,
-                        destination: mods.join(&file.file_name),
+                        destination: destination.join(&file.file_name),
                         checksum: file
                             .sha1
                             .map(mc_launcher_core::net::download::Checksum::Sha1),
@@ -2905,7 +3074,7 @@ fn install_modrinth_mod(
                 &instance_id,
                 "cancelled",
                 0,
-                "Mod installation cancelled",
+                format!("{content_label} installation cancelled"),
             ),
             Err(error) => emit_launch(&app, &instance_id, "error", 0, error),
         }
@@ -3508,7 +3677,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_backend_status,
-            search_modrinth_mods,
+            search_modrinth_content,
             request_microsoft_device_code,
             complete_microsoft_login,
             detect_java_installations,
@@ -3534,7 +3703,7 @@ pub fn run() {
             get_autotune_benchmark_result,
             get_autotune_benchmark_status,
             import_fabric_modpack,
-            install_modrinth_mod,
+            install_modrinth_content,
             launch_minecraft,
             choose_game_directory,
             exit_application,

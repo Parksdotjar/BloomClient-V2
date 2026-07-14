@@ -20,6 +20,8 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 | BLOOM-006 | Fixed | Packaging | Production client opened with a terminal window |
 | BLOOM-007 | Fixed | Accounts | Microsoft session exceeded Windows' 2,560-character credential limit |
 | BLOOM-008 | Fixed | Settings | Settings controls persisted visually but were not connected to application behavior |
+| BLOOM-009 | Fixed | Instance content | Resource-pack and shader tabs could not browse or install from Modrinth |
+| BLOOM-010 | Fixed | Performance | Low-end PCs had delayed buttons and freezes during log output or Skin Locker rendering |
 
 ---
 
@@ -87,6 +89,22 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 - **Root cause:** The settings screen was built before each native/application consumer existed, so presentation state and operational state diverged.
 - **Fix:** Every remaining setting now persists and has a concrete consumer. Startup and window behavior control Tauri, Minecraft defaults seed new instances, launch mode patches `options.txt`, Java choices use detected executables, the download queue runs native parallel workers, updates honor automatic-check preference, and privacy choices control local-only records. Unsupported language and loader choices were removed instead of being presented as functional.
 - **Verification:** `npm run build` and `cargo test --manifest-path src-tauri/Cargo.toml` pass.
+
+## BLOOM-009 — Resource-pack and shader catalogs were unavailable
+
+- **Status:** Fixed
+- **Symptom:** Instance Resource Packs and Shaders tabs showed Add buttons, but only the Mods tab could open a Modrinth catalog or install content.
+- **Root cause:** The catalog state, search command, installer command, destination folder, labels, and Downloads metadata were all hard-coded to Fabric mods.
+- **Fix:** Bloom now uses one category-aware catalog UI for mods, resource packs, and shaders. Mod results retain Bloom's dependency-aware Fabric backend flow; resource packs and shaders resolve exact Minecraft-compatible files through Modrinth and install into the owning instance's correct folder with genuine download progress.
+- **Verification:** Run the focused frontend/native checks, then install one item from each tab in a Fabric instance.
+
+## BLOOM-010 — Launcher interactions lagged on lower-end computers
+
+- **Status:** Fixed
+- **Symptom:** Buttons felt delayed, live log output could make the client stutter or freeze, and opening a populated Skin Locker caused heavy GPU usage on some systems.
+- **Root cause:** Bloom blocked every button action for 620 ms to finish a decorative animation, committed a full React update for every Minecraft log line, and created a separate WebGL renderer for every visible skin card.
+- **Fix:** Button actions now execute immediately while the press animation runs independently, log events are committed in batches, debug-log persistence is debounced, inactive instance folders are no longer polled continuously, and skin cards use lightweight 2D previews while retaining one interactive 3D main preview.
+- **Verification:** Compare button response, a noisy Fabric launch, and a 12-skin locker on a lower-end PC with normal animations and Ultra Performance Mode.
 
 ## How to add a bug
 
