@@ -18,7 +18,6 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update as TauriUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { animate } from "animejs";
-import "animate.css";
 import {
   Check,
   Bell,
@@ -1702,28 +1701,6 @@ function App() {
     }).then(value => { unlisten = value; });
     return () => unlisten?.();
   }, [settings.tray]);
-  useEffect(() => {
-    if (!settings.animations || settings.ultraPerformance || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timers = new Set<number>();
-    const showPress = (event: PointerEvent) => {
-      if (event.button !== 0 || !(event.target instanceof Element)) return;
-      const button = event.target.closest("button");
-      if (!(button instanceof HTMLButtonElement) || button.disabled) return;
-      button.classList.remove("button-press-preview", "animate__animated", "animate__pulse");
-      void button.offsetWidth;
-      button.classList.add("button-press-preview", "animate__animated", "animate__pulse");
-      const timer = window.setTimeout(() => {
-        timers.delete(timer);
-        button.classList.remove("button-press-preview", "animate__animated", "animate__pulse");
-      }, 440);
-      timers.add(timer);
-    };
-    document.addEventListener("pointerdown", showPress, true);
-    return () => {
-      document.removeEventListener("pointerdown", showPress, true);
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [settings.animations, settings.ultraPerformance]);
   const checkForUpdates = async (manual = false) => {
     if (updateChecking) return;
     setUpdateChecking(true);

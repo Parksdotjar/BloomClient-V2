@@ -22,6 +22,7 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 | BLOOM-008 | Fixed | Settings | Settings controls persisted visually but were not connected to application behavior |
 | BLOOM-009 | Fixed | Instance content | Resource-pack and shader tabs could not browse or install from Modrinth |
 | BLOOM-010 | Fixed | Performance | Low-end PCs had delayed buttons and freezes during log output or Skin Locker rendering |
+| BLOOM-011 | Fixed | Performance | Packaged client froze during navigation while browser development stayed responsive |
 
 ---
 
@@ -105,6 +106,14 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 - **Root cause:** Bloom blocked every button action for 620 ms to finish a decorative animation, committed a full React update for every Minecraft log line, and created a separate WebGL renderer for every visible skin card.
 - **Fix:** Button actions now execute immediately while the press animation runs independently, log events are committed in batches, debug-log persistence is debounced, inactive instance folders are no longer polled continuously, and skin cards use lightweight 2D previews while retaining one interactive 3D main preview.
 - **Verification:** Compare button response, a noisy Fabric launch, and a 12-skin locker on a lower-end PC with normal animations and Ultra Performance Mode.
+
+## BLOOM-011 — Packaged client froze during navigation
+
+- **Status:** Fixed
+- **Symptom:** The installed Tauri build froze for several seconds after ordinary clicks and page changes, while the browser development build remained responsive.
+- **Root cause:** Several synchronous native commands performed Java process detection, credential access, hardware inspection, directory scans, ZIP metadata parsing, and skin image encoding on Tauri's UI thread. The frontend also forced a synchronous layout calculation and restarted Animate.css on every button press.
+- **Fix:** Slow native reads now run on Tauri's blocking worker pool, Java discovery is cached briefly, launcher session state can safely cross worker tasks, and button feedback uses lightweight CSS without forced layout or global click timers.
+- **Verification:** `cargo check --manifest-path src-tauri/Cargo.toml`, `npm run typecheck`, and `npm run tauri:build -- --no-bundle` pass. In a cold release build, opening Settings took 88 ms, reading the updated window took 88 ms, and clicking Home while Java discovery was still running took 53 ms. Repeated page clicks remained around 50 ms.
 
 ## How to add a bug
 

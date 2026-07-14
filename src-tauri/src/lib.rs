@@ -290,7 +290,7 @@ struct MinecraftAccountList {
 
 #[derive(Default)]
 struct LauncherState {
-    session: Mutex<Option<MinecraftSession>>,
+    session: Arc<Mutex<Option<MinecraftSession>>>,
     launch_active: Arc<Mutex<bool>>,
     cancel_requested: Arc<AtomicBool>,
 }
@@ -644,33 +644,41 @@ fn saved_session() -> Option<MinecraftSession> {
 }
 
 #[tauri::command]
-fn list_minecraft_accounts() -> Result<MinecraftAccountList, String> {
-    let store = ensure_account_store()?;
-    Ok(MinecraftAccountList {
-        active_id: store.active_id,
-        accounts: store.accounts,
+async fn list_minecraft_accounts() -> Result<MinecraftAccountList, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let store = ensure_account_store()?;
+        Ok(MinecraftAccountList {
+            active_id: store.active_id,
+            accounts: store.accounts,
+        })
     })
+    .await
+    .map_err(|error| format!("The account reader stopped unexpectedly: {error}"))?
 }
 
 #[tauri::command]
-fn sign_out_minecraft(
+async fn sign_out_minecraft(
     state: tauri::State<'_, LauncherState>,
 ) -> Result<Option<serde_json::Value>, String> {
-    let mut store = ensure_account_store()?;
-    let Some(active_id) = store.active_id.clone() else {
-        return Ok(None);
-    };
-    delete_account_credentials(&active_id)
-        .map_err(|error| format!("Windows could not remove the saved account: {error}"))?;
-    store.accounts.retain(|account| account.id != active_id);
-    store.active_id = store.accounts.first().map(|account| account.id.clone());
-    write_account_store(&store)?;
-    let next = store.active_id.as_deref().and_then(load_account_session);
-    *state
-        .session
-        .lock()
-        .map_err(|_| "Unable to clear the Minecraft sign-in session.")? = next.clone();
-    Ok(next.map(|session| serde_json::json!({ "id": session.uuid, "name": session.username })))
+    let session_store = state.session.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut store = ensure_account_store()?;
+        let Some(active_id) = store.active_id.clone() else {
+            return Ok(None);
+        };
+        delete_account_credentials(&active_id)
+            .map_err(|error| format!("Windows could not remove the saved account: {error}"))?;
+        store.accounts.retain(|account| account.id != active_id);
+        store.active_id = store.accounts.first().map(|account| account.id.clone());
+        write_account_store(&store)?;
+        let next = store.active_id.as_deref().and_then(load_account_session);
+        *session_store
+            .lock()
+            .map_err(|_| "Unable to clear the Minecraft sign-in session.")? = next.clone();
+        Ok(next.map(|session| serde_json::json!({ "id": session.uuid, "name": session.username })))
+    })
+    .await
+    .map_err(|error| format!("The sign-out task stopped unexpectedly: {error}"))?
 }
 
 #[tauri::command]
@@ -896,23 +904,42 @@ async fn switch_minecraft_account(
 }
 
 #[tauri::command]
-fn get_saved_minecraft_profile(
+async fn get_saved_minecraft_profile(
     state: tauri::State<'_, LauncherState>,
-) -> Option<serde_json::Value> {
-    let session = state
-        .session
-        .lock()
-        .ok()
-        .and_then(|session| session.clone())
-        .or_else(saved_session)?;
-    Some(serde_json::json!({ "id": session.uuid, "name": session.username }))
+) -> Result<Option<serde_json::Value>, String> {
+    let session_store = state.session.clone();
+    let profile = tauri::async_runtime::spawn_blocking(move || {
+        let session = session_store
+            .lock()
+            .ok()
+            .and_then(|session| session.clone())
+            .or_else(saved_session)?;
+        Some(serde_json::json!({ "id": session.uuid, "name": session.username }))
+    })
+    .await
+    .map_err(|error| format!("The saved-account reader stopped unexpectedly: {error}"))?;
+    Ok(profile)
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 struct JavaInstallation {
     path: String,
     major_version: Option<u32>,
     usable: bool,
+}
+
+static JAVA_INSTALLATION_CACHE: OnceLock<Mutex<Option<(std::time::Instant, Vec<JavaInstallation>)>>> =
+    OnceLock::new();
+
+fn java_installation_cache(
+) -> &'static Mutex<Option<(std::time::Instant, Vec<JavaInstallation>)>> {
+    JAVA_INSTALLATION_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn invalidate_java_installation_cache() {
+    if let Ok(mut cache) = java_installation_cache().lock() {
+        *cache = None;
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -946,8 +973,10 @@ fn managed_java_runtimes() -> Vec<ManagedJavaRuntime> {
 }
 
 #[tauri::command]
-fn list_managed_java_runtimes() -> Vec<ManagedJavaRuntime> {
-    managed_java_runtimes()
+async fn list_managed_java_runtimes() -> Vec<ManagedJavaRuntime> {
+    tauri::async_runtime::spawn_blocking(managed_java_runtimes)
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -968,6 +997,7 @@ fn remove_managed_java_runtime(
         std::fs::remove_dir_all(folder)
             .map_err(|error| format!("Java {major_version} could not be removed: {error}"))?;
     }
+    invalidate_java_installation_cache();
     Ok(())
 }
 
@@ -1182,6 +1212,7 @@ fn download_managed_java(
     )
     .map_err(|error| error.to_string())?;
     let _ = std::fs::remove_file(archive);
+    invalidate_java_installation_cache();
     Ok(java)
 }
 
@@ -1212,8 +1243,7 @@ struct HardwareReport {
     recommended_graphics: String,
 }
 
-#[tauri::command]
-fn detect_hardware_report() -> Result<HardwareReport, String> {
+fn detect_hardware_report_blocking() -> Result<HardwareReport, String> {
     let script = r#"$cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $system=Get-CimInstance Win32_ComputerSystem; $video=@(Get-CimInstance Win32_VideoController); [pscustomobject]@{cpu=[string]$cpu.Name;cores=[uint32]$cpu.NumberOfCores;threads=[uint32]$cpu.NumberOfLogicalProcessors;ramBytes=[uint64]$system.TotalPhysicalMemory;gpus=@($video | ForEach-Object {[string]$_.Name});refreshRate=[uint32](($video | Measure-Object CurrentRefreshRate -Maximum).Maximum)} | ConvertTo-Json -Compress"#;
     let output = std::process::Command::new("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
@@ -1252,7 +1282,7 @@ fn detect_hardware_report() -> Result<HardwareReport, String> {
     } else {
         6
     };
-    let mut java_versions = detect_java_installations()
+    let mut java_versions = detect_java_installations_blocking()
         .into_iter()
         .filter(|java| java.usable)
         .filter_map(|java| java.major_version)
@@ -1276,6 +1306,13 @@ fn detect_hardware_report() -> Result<HardwareReport, String> {
             "Balanced".into()
         },
     })
+}
+
+#[tauri::command]
+async fn detect_hardware_report() -> Result<HardwareReport, String> {
+    tauri::async_runtime::spawn_blocking(detect_hardware_report_blocking)
+        .await
+        .map_err(|error| format!("The hardware scan stopped unexpectedly: {error}"))?
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -1364,8 +1401,7 @@ fn valid_skin_png(bytes: &[u8]) -> bool {
     width >= 64 && width <= 1024 && width % 64 == 0 && (height == width || height * 2 == width)
 }
 
-#[tauri::command]
-fn list_locker_skins() -> Result<Vec<LockerSkin>, String> {
+fn list_locker_skins_blocking() -> Result<Vec<LockerSkin>, String> {
     use base64::Engine;
     let directory = skins_directory()?;
     let mut skins = read_skin_index();
@@ -1383,7 +1419,13 @@ fn list_locker_skins() -> Result<Vec<LockerSkin>, String> {
 }
 
 #[tauri::command]
-fn save_locker_skin(name: String, bytes: Vec<u8>) -> Result<LockerSkin, String> {
+async fn list_locker_skins() -> Result<Vec<LockerSkin>, String> {
+    tauri::async_runtime::spawn_blocking(list_locker_skins_blocking)
+        .await
+        .map_err(|error| format!("The skin library reader stopped unexpectedly: {error}"))?
+}
+
+fn save_locker_skin_blocking(name: String, bytes: Vec<u8>) -> Result<LockerSkin, String> {
     if bytes.len() > 4 * 1024 * 1024 {
         return Err("Skin files must be smaller than 4 MB.".into());
     }
@@ -1418,10 +1460,17 @@ fn save_locker_skin(name: String, bytes: Vec<u8>) -> Result<LockerSkin, String> 
         serde_json::to_vec_pretty(&index).map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())?;
-    list_locker_skins()?
+    list_locker_skins_blocking()?
         .into_iter()
         .find(|item| item.id == id)
         .ok_or("Bloom saved the skin but could not reload it.".into())
+}
+
+#[tauri::command]
+async fn save_locker_skin(name: String, bytes: Vec<u8>) -> Result<LockerSkin, String> {
+    tauri::async_runtime::spawn_blocking(move || save_locker_skin_blocking(name, bytes))
+        .await
+        .map_err(|error| format!("The skin importer stopped unexpectedly: {error}"))?
 }
 
 #[tauri::command]
@@ -1631,8 +1680,7 @@ fn apply_autotune_to_config(
     )
 }
 
-#[tauri::command]
-fn apply_autotune_profile(profile: AutoTuneProfile) -> Result<usize, String> {
+fn apply_autotune_profile_blocking(profile: AutoTuneProfile) -> Result<usize, String> {
     let data = bloom_data_dir()?;
     std::fs::write(
         data.join("autotune-profile.json"),
@@ -1663,6 +1711,13 @@ fn apply_autotune_profile(profile: AutoTuneProfile) -> Result<usize, String> {
     Ok(applied)
 }
 
+#[tauri::command]
+async fn apply_autotune_profile(profile: AutoTuneProfile) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || apply_autotune_profile_blocking(profile))
+        .await
+        .map_err(|error| format!("The AutoTune writer stopped unexpectedly: {error}"))?
+}
+
 fn java_major(path: &str) -> Option<u32> {
     let output = std::process::Command::new(path)
         .arg("-version")
@@ -1682,8 +1737,14 @@ fn java_major(path: &str) -> Option<u32> {
     }
 }
 
-#[tauri::command]
-fn detect_java_installations() -> Vec<JavaInstallation> {
+fn detect_java_installations_blocking() -> Vec<JavaInstallation> {
+    if let Ok(cache) = java_installation_cache().lock() {
+        if let Some((created_at, installations)) = cache.as_ref() {
+            if created_at.elapsed() < std::time::Duration::from_secs(120) {
+                return installations.clone();
+            }
+        }
+    }
     let mut candidates: Vec<String> = Vec::new();
     let managed = managed_java_runtimes();
     let known_managed = managed
@@ -1716,7 +1777,7 @@ fn detect_java_installations() -> Vec<JavaInstallation> {
     }
     candidates.sort();
     candidates.dedup();
-    candidates
+    let installations = candidates
         .into_iter()
         .map(|path| {
             let major_version = known_managed
@@ -1729,7 +1790,18 @@ fn detect_java_installations() -> Vec<JavaInstallation> {
                 major_version,
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    if let Ok(mut cache) = java_installation_cache().lock() {
+        *cache = Some((std::time::Instant::now(), installations.clone()));
+    }
+    installations
+}
+
+#[tauri::command]
+async fn detect_java_installations() -> Vec<JavaInstallation> {
+    tauri::async_runtime::spawn_blocking(detect_java_installations_blocking)
+        .await
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -1750,8 +1822,7 @@ async fn get_minecraft_releases() -> Result<Vec<serde_json::Value>, String> {
         .collect())
 }
 
-#[tauri::command]
-fn save_instance(config: InstanceConfig) -> Result<InstanceConfig, String> {
+fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, String> {
     if config.name.trim().is_empty() {
         return Err("Choose an instance name first.".into());
     }
@@ -1825,7 +1896,13 @@ fn save_instance(config: InstanceConfig) -> Result<InstanceConfig, String> {
 }
 
 #[tauri::command]
-fn list_instances() -> Result<Vec<InstanceConfig>, String> {
+async fn save_instance(config: InstanceConfig) -> Result<InstanceConfig, String> {
+    tauri::async_runtime::spawn_blocking(move || save_instance_blocking(config))
+        .await
+        .map_err(|error| format!("The instance creator stopped unexpectedly: {error}"))?
+}
+
+fn list_instances_blocking() -> Result<Vec<InstanceConfig>, String> {
     let folder = bloom_data_dir()?.join("instances");
     let mut entries = std::fs::read_dir(folder)
         .map_err(|error| error.to_string())?
@@ -1857,6 +1934,13 @@ fn list_instances() -> Result<Vec<InstanceConfig>, String> {
         }
     }
     Ok(instances)
+}
+
+#[tauri::command]
+async fn list_instances() -> Result<Vec<InstanceConfig>, String> {
+    tauri::async_runtime::spawn_blocking(list_instances_blocking)
+        .await
+        .map_err(|error| format!("The instance library reader stopped unexpectedly: {error}"))?
 }
 
 fn load_instance(instance_id: &str) -> Result<InstanceConfig, String> {
@@ -1915,8 +1999,7 @@ fn archive_icon(archive: &mut zip::ZipArchive<std::fs::File>, icon_path: &str) -
     ))
 }
 
-#[tauri::command]
-fn list_instance_content(
+fn list_instance_content_blocking(
     instance_id: String,
     category: String,
 ) -> Result<Vec<InstanceContentItem>, String> {
@@ -1994,6 +2077,18 @@ fn list_instance_content(
 }
 
 #[tauri::command]
+async fn list_instance_content(
+    instance_id: String,
+    category: String,
+) -> Result<Vec<InstanceContentItem>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        list_instance_content_blocking(instance_id, category)
+    })
+    .await
+    .map_err(|error| format!("The instance content reader stopped unexpectedly: {error}"))?
+}
+
+#[tauri::command]
 fn toggle_instance_content(
     instance_id: String,
     category: String,
@@ -2028,8 +2123,7 @@ fn toggle_instance_content(
     Ok(())
 }
 
-#[tauri::command]
-fn set_instance_icon(instance_id: String, icon: String) -> Result<InstanceConfig, String> {
+fn set_instance_icon_blocking(instance_id: String, icon: String) -> Result<InstanceConfig, String> {
     if !icon.starts_with("data:image/") || icon.len() > 4_000_000 {
         return Err("Choose a PNG or JPEG image smaller than about 3 MB.".into());
     }
@@ -2037,6 +2131,13 @@ fn set_instance_icon(instance_id: String, icon: String) -> Result<InstanceConfig
     config.icon = Some(icon);
     write_instance(&config)?;
     Ok(config)
+}
+
+#[tauri::command]
+async fn set_instance_icon(instance_id: String, icon: String) -> Result<InstanceConfig, String> {
+    tauri::async_runtime::spawn_blocking(move || set_instance_icon_blocking(instance_id, icon))
+        .await
+        .map_err(|error| format!("The instance icon writer stopped unexpectedly: {error}"))?
 }
 
 #[tauri::command]
@@ -2078,8 +2179,7 @@ fn open_instance_folder(instance_id: String, category: Option<String>) -> Result
     })
 }
 
-#[tauri::command]
-fn import_instance_mod_files(instance_id: String, paths: Vec<String>) -> Result<Vec<String>, String> {
+fn import_instance_mod_files_blocking(instance_id: String, paths: Vec<String>) -> Result<Vec<String>, String> {
     if paths.is_empty() { return Err("Drop one or more Fabric mod JAR files.".into()); }
     let config = load_instance(&instance_id)?;
     if !config.loader.eq_ignore_ascii_case("fabric") { return Err("Drag-and-drop mod installation currently supports Fabric instances only.".into()); }
@@ -2103,6 +2203,13 @@ fn import_instance_mod_files(instance_id: String, paths: Vec<String>) -> Result<
         imported.push(name);
     }
     Ok(imported)
+}
+
+#[tauri::command]
+async fn import_instance_mod_files(instance_id: String, paths: Vec<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || import_instance_mod_files_blocking(instance_id, paths))
+        .await
+        .map_err(|error| format!("The mod importer stopped unexpectedly: {error}"))?
 }
 
 #[tauri::command]
@@ -3255,7 +3362,7 @@ fn selected_java(
         let javaw = path.with_file_name("javaw.exe");
         return Ok(if javaw.is_file() { javaw } else { path });
     }
-    if let Some(java) = detect_java_installations()
+    if let Some(java) = detect_java_installations_blocking()
         .into_iter()
         .filter(|java| java.usable && java.major_version.unwrap_or(0) >= required)
         .min_by_key(|java| {

@@ -2359,14 +2359,7 @@ body,
 @media (prefers-reduced-motion: reduce) { .animated-folder, .animated-folder svg { transition: none; } }
 
 html[data-animations="on"] button:not(:disabled) { transform-origin: center; }
-html[data-animations="on"] button:active:not(:disabled) { transform: translateY(1.5px) scale(.96) !important; filter: brightness(.93); transition: transform 190ms cubic-bezier(.22,.7,.28,1), filter 190ms ease !important; }
-button.button-press-preview { --animate-duration: 440ms; pointer-events: none; transform-origin: center; animation-timing-function: cubic-bezier(.22,.65,.25,1) !important; }
-@keyframes pulse {
-  from { transform: scale3d(1, 1, 1); }
-  48% { transform: scale3d(1.022, 1.022, 1.022); }
-  to { transform: scale3d(1, 1, 1); }
-}
-@media (prefers-reduced-motion: reduce) { button.button-press-preview { animation: none !important; } }
+html[data-animations="on"] button:active:not(:disabled) { transform: translateY(1px) scale(.985) !important; filter: brightness(.95); transition: transform 220ms cubic-bezier(.22,.7,.28,1), filter 220ms ease !important; }
 
 /* Local skin locker */
 .locker-page { min-height: 100%; padding: 20px 18px 28px; }
