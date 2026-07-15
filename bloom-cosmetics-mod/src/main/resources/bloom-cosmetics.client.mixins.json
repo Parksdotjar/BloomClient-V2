@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "org.bloomclient.cosmetics.mixin.client",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "AbstractClientPlayerEntityMixin",
+    "LivingEntityRendererAccessor",
+    "PlayerEntityRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

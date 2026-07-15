@@ -10,6 +10,17 @@ const BACKEND_URL: &str = match option_env!("BLOOM_BACKEND_URL") {
 };
 static DOWNLOAD_WORKERS: AtomicUsize = AtomicUsize::new(3);
 
+fn command_without_console(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BackendCapabilities {
@@ -27,6 +38,117 @@ struct BackendStatus {
     api_version: String,
     capabilities: BackendCapabilities,
     timestamp: String,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomCapeCatalogItem {
+    id: String,
+    name: String,
+    collection: String,
+    texture_revision: String,
+}
+
+#[derive(serde::Deserialize)]
+struct BloomCapeCatalogResponse {
+    items: Vec<BloomCapeCatalogItem>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomCapeTextureLease {
+    url: String,
+    expires_at: u64,
+    revision: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomCapeTextureData {
+    data_url: String,
+    revision: String,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomHatCatalogItem {
+    id: String,
+    name: String,
+    collection: String,
+    model_revision: String,
+    texture_revision: String,
+    preview_revision: String,
+    offset: [f32; 3],
+    scale: f32,
+    hide_with_helmet: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct BloomHatCatalogResponse {
+    items: Vec<BloomHatCatalogItem>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomHatAssetLease {
+    url: String,
+    expires_at: u64,
+    revision: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomHatPreviewData {
+    data_url: String,
+    revision: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomHatAccountState {
+    collection_ids: Vec<String>,
+    equipped_hat_id: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomWingCatalogItem {
+    id: String,
+    name: String,
+    collection: String,
+    model_revision: String,
+    texture_revision: String,
+    preview_revision: String,
+    offset: [f32; 3],
+    scale: f32,
+    hide_cape: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct BloomWingCatalogResponse {
+    items: Vec<BloomWingCatalogItem>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomWingAssetLease {
+    url: String,
+    expires_at: u64,
+    revision: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomWingPreviewData {
+    data_url: String,
+    revision: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BloomWingAccountState {
+    collection_ids: Vec<String>,
+    equipped_wing_id: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -123,7 +245,11 @@ fn catalog_category(category: &str) -> Result<(&'static str, &'static str, &'sta
 }
 
 fn primary_modrinth_file(version: &ModrinthVersion) -> Option<&ModrinthFile> {
-    version.files.iter().find(|file| file.primary).or_else(|| version.files.first())
+    version
+        .files
+        .iter()
+        .find(|file| file.primary)
+        .or_else(|| version.files.first())
 }
 
 async fn direct_modrinth_search(
@@ -144,15 +270,31 @@ async fn direct_modrinth_search(
     }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
-        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION"), " (support@bloomclient.org)"))
+        .user_agent(concat!(
+            "BloomClient/",
+            env!("CARGO_PKG_VERSION"),
+            " (support@bloomclient.org)"
+        ))
         .build()
         .map_err(|error| error.to_string())?;
     let result = client
         .get("https://api.modrinth.com/v2/search")
         .query(&[
             ("query", query.as_str()),
-            ("facets", serde_json::to_string(&facets).map_err(|error| error.to_string())?.as_str()),
-            ("index", if query.is_empty() { "downloads" } else { "relevance" }),
+            (
+                "facets",
+                serde_json::to_string(&facets)
+                    .map_err(|error| error.to_string())?
+                    .as_str(),
+            ),
+            (
+                "index",
+                if query.is_empty() {
+                    "downloads"
+                } else {
+                    "relevance"
+                },
+            ),
             ("limit", "20"),
             ("offset", offset.to_string().as_str()),
         ])
@@ -172,15 +314,32 @@ async fn direct_modrinth_search(
         async move {
             let game_versions = serde_json::to_string(&[game_version.as_str()]).ok()?;
             let mut request = client
-                .get(format!("https://api.modrinth.com/v2/project/{}/version", hit.project_id))
-                .query(&[("game_versions", game_versions.as_str()), ("include_changelog", "false")]);
+                .get(format!(
+                    "https://api.modrinth.com/v2/project/{}/version",
+                    hit.project_id
+                ))
+                .query(&[
+                    ("game_versions", game_versions.as_str()),
+                    ("include_changelog", "false"),
+                ]);
             let loaders;
             if category == "mods" {
                 loaders = serde_json::to_string(&["fabric"]).ok()?;
                 request = request.query(&[("loaders", loaders.as_str())]);
             }
-            let versions = request.send().await.ok()?.error_for_status().ok()?.json::<Vec<ModrinthVersion>>().await.ok()?;
-            let version = versions.iter().find(|version| version.version_type == "release").or_else(|| versions.first())?;
+            let versions = request
+                .send()
+                .await
+                .ok()?
+                .error_for_status()
+                .ok()?
+                .json::<Vec<ModrinthVersion>>()
+                .await
+                .ok()?;
+            let version = versions
+                .iter()
+                .find(|version| version.version_type == "release")
+                .or_else(|| versions.first())?;
             let file = primary_modrinth_file(version)?;
             Some(CatalogMod {
                 provider: "modrinth".into(),
@@ -201,7 +360,12 @@ async fn direct_modrinth_search(
         }
     });
     let items = join_all(requests).await.into_iter().flatten().collect();
-    Ok(CatalogSearchResult { items, offset: result.offset, limit: result.limit, total: result.total_hits })
+    Ok(CatalogSearchResult {
+        items,
+        offset: result.offset,
+        limit: result.limit,
+        total: result.total_hits,
+    })
 }
 
 #[tauri::command]
@@ -220,6 +384,432 @@ async fn get_backend_status() -> Result<BackendStatus, String> {
         .json::<BackendStatus>()
         .await
         .map_err(|error| format!("Bloom backend returned an invalid response: {error}"))
+}
+
+#[tauri::command]
+async fn list_bloom_capes() -> Result<Vec<BloomCapeCatalogItem>, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{}/v1/capes", BACKEND_URL.trim_end_matches('/')))
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's cape catalog is unavailable: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's cape catalog rejected the request: {error}"))?
+        .json::<BloomCapeCatalogResponse>()
+        .await
+        .map(|response| response.items)
+        .map_err(|error| format!("Bloom's cape catalog returned invalid data: {error}"))
+}
+
+#[tauri::command]
+async fn lease_bloom_cape_texture(cape_id: String) -> Result<BloomCapeTextureLease, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!(
+            "{}/v1/capes/{}/texture",
+            BACKEND_URL.trim_end_matches('/'),
+            cape_id
+        ))
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's cape texture is unavailable: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's cape texture could not be opened: {error}"))?
+        .json::<BloomCapeTextureLease>()
+        .await
+        .map_err(|error| format!("Bloom's cape service returned invalid data: {error}"))
+}
+
+#[tauri::command]
+async fn load_bloom_cape_texture_data(cape_id: String) -> Result<BloomCapeTextureData, String> {
+    use base64::Engine;
+
+    let lease = lease_bloom_cape_texture(cape_id).await?;
+    let response = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(&lease.url)
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's cape texture could not be downloaded: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's cape texture download was rejected: {error}"))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Bloom's cape texture was incomplete: {error}"))?;
+    if bytes.len() > 8 * 1024 * 1024 {
+        return Err("Bloom's cape texture is unexpectedly large.".into());
+    }
+
+    Ok(BloomCapeTextureData {
+        data_url: format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        ),
+        revision: lease.revision,
+    })
+}
+
+async fn send_bloom_cape_equip(
+    session: &MinecraftSession,
+    cape_id: &Option<String>,
+) -> Result<reqwest::Response, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?
+        .put(format!(
+            "{}/v1/capes/equipped",
+            BACKEND_URL.trim_end_matches('/')
+        ))
+        .bearer_auth(&session.access_token)
+        .json(&serde_json::json!({ "capeId": cape_id }))
+        .send()
+        .await
+        .map_err(|error| format!("Bloom could not update your cape: {error}"))
+}
+
+#[tauri::command]
+async fn set_bloom_equipped_cape(
+    state: tauri::State<'_, LauncherState>,
+    cape_id: Option<String>,
+) -> Result<(), String> {
+    let stored = state
+        .session
+        .lock()
+        .map_err(|_| "Bloom could not read the active Minecraft account.")?
+        .clone()
+        .or_else(saved_session)
+        .ok_or("Sign in with Microsoft before equipping a cape.")?;
+
+    let mut session = stored.clone();
+    let mut response = send_bloom_cape_equip(&session, &cape_id).await?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        session = refresh_minecraft_session(&stored)
+            .await
+            .map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
+        response = send_bloom_cape_equip(&session, &cape_id).await?;
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        let details = response.text().await.unwrap_or_default();
+        return Err(if details.is_empty() {
+            format!("Bloom's cape service rejected the change ({status}).")
+        } else {
+            format!("Bloom's cape service rejected the change ({status}): {details}")
+        });
+    }
+
+    if session.access_token != stored.access_token {
+        save_account_session(&session, true)?;
+        *state
+            .session
+            .lock()
+            .map_err(|_| "Bloom could not save the refreshed Minecraft account.")? =
+            Some(session);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_bloom_hats() -> Result<Vec<BloomHatCatalogItem>, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{}/v1/hats", BACKEND_URL.trim_end_matches('/')))
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's hat catalog is unavailable: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's hat catalog rejected the request: {error}"))?
+        .json::<BloomHatCatalogResponse>()
+        .await
+        .map(|response| response.items)
+        .map_err(|error| format!("Bloom's hat catalog returned invalid data: {error}"))
+}
+
+#[tauri::command]
+async fn load_bloom_hat_preview_data(hat_id: String) -> Result<BloomHatPreviewData, String> {
+    use base64::Engine;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let lease = client
+        .get(format!("{}/v1/hats/{}/preview", BACKEND_URL.trim_end_matches('/'), hat_id))
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's hat preview is unavailable: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's hat preview could not be opened: {error}"))?
+        .json::<BloomHatAssetLease>()
+        .await
+        .map_err(|error| format!("Bloom's hat service returned invalid data: {error}"))?;
+    let bytes = client
+        .get(&lease.url)
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's hat preview could not be downloaded: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's hat preview download was rejected: {error}"))?
+        .bytes()
+        .await
+        .map_err(|error| format!("Bloom's hat preview was incomplete: {error}"))?;
+    if bytes.len() > 3 * 1024 * 1024 {
+        return Err("Bloom's hat preview is unexpectedly large.".into());
+    }
+    Ok(BloomHatPreviewData {
+        data_url: format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)),
+        revision: lease.revision,
+    })
+}
+
+async fn send_bloom_hat_request(
+    session: &MinecraftSession,
+    method: reqwest::Method,
+    path: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<reqwest::Response, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let request = client
+        .request(method, format!("{}{}", BACKEND_URL.trim_end_matches('/'), path))
+        .bearer_auth(&session.access_token);
+    let request = if let Some(value) = body { request.json(value) } else { request };
+    request.send().await.map_err(|error| format!("Bloom's hat service is unavailable: {error}"))
+}
+
+fn launcher_session(state: &tauri::State<'_, LauncherState>) -> Result<MinecraftSession, String> {
+    state
+        .session
+        .lock()
+        .map_err(|_| "Bloom could not read the active Minecraft account.".to_string())?
+        .clone()
+        .or_else(saved_session)
+        .ok_or_else(|| "Sign in with Microsoft before changing your cosmetic collection.".to_string())
+}
+
+fn save_refreshed_launcher_session(
+    state: &tauri::State<'_, LauncherState>,
+    original: &MinecraftSession,
+    session: MinecraftSession,
+) -> Result<(), String> {
+    if session.access_token != original.access_token {
+        save_account_session(&session, true)?;
+        *state.session.lock().map_err(|_| "Bloom could not save the refreshed Minecraft account.")? = Some(session);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_bloom_hat_account_state(state: tauri::State<'_, LauncherState>) -> Result<BloomHatAccountState, String> {
+    let stored = launcher_session(&state)?;
+    let mut session = stored.clone();
+    let mut response = send_bloom_hat_request(&session, reqwest::Method::GET, "/v1/hats/me", None).await?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        session = refresh_minecraft_session(&stored).await.map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
+        response = send_bloom_hat_request(&session, reqwest::Method::GET, "/v1/hats/me", None).await?;
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        return Err(format!("Bloom's hat service rejected the account state ({status})."));
+    }
+    let result = response.json::<BloomHatAccountState>().await.map_err(|error| format!("Bloom's hat service returned invalid account data: {error}"))?;
+    save_refreshed_launcher_session(&state, &stored, session)?;
+    Ok(result)
+}
+
+#[tauri::command]
+async fn add_bloom_hats_to_collection(
+    state: tauri::State<'_, LauncherState>,
+    hat_ids: Vec<String>,
+) -> Result<(), String> {
+    let stored = launcher_session(&state)?;
+    let mut session = stored.clone();
+    let body = serde_json::json!({ "hatIds": hat_ids });
+    let mut response = send_bloom_hat_request(&session, reqwest::Method::PUT, "/v1/hats/collection", Some(&body)).await?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        session = refresh_minecraft_session(&stored).await.map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
+        response = send_bloom_hat_request(&session, reqwest::Method::PUT, "/v1/hats/collection", Some(&body)).await?;
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(if detail.is_empty() { format!("Bloom could not add the hats ({status}).") } else { format!("Bloom could not add the hats ({status}): {detail}") });
+    }
+    save_refreshed_launcher_session(&state, &stored, session)
+}
+
+#[tauri::command]
+async fn set_bloom_equipped_hat(
+    state: tauri::State<'_, LauncherState>,
+    hat_id: Option<String>,
+) -> Result<(), String> {
+    let stored = launcher_session(&state)?;
+    let mut session = stored.clone();
+    let body = serde_json::json!({ "hatId": hat_id });
+    let mut response = send_bloom_hat_request(&session, reqwest::Method::PUT, "/v1/hats/equipped", Some(&body)).await?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        session = refresh_minecraft_session(&stored).await.map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
+        response = send_bloom_hat_request(&session, reqwest::Method::PUT, "/v1/hats/equipped", Some(&body)).await?;
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(if detail.is_empty() { format!("Bloom could not equip the hat ({status}).") } else { format!("Bloom could not equip the hat ({status}): {detail}") });
+    }
+    save_refreshed_launcher_session(&state, &stored, session)
+}
+
+#[tauri::command]
+async fn list_bloom_wings() -> Result<Vec<BloomWingCatalogItem>, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(format!("{}/v1/wings", BACKEND_URL.trim_end_matches('/')))
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's wing catalog is unavailable: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's wing catalog rejected the request: {error}"))?
+        .json::<BloomWingCatalogResponse>()
+        .await
+        .map(|response| response.items)
+        .map_err(|error| format!("Bloom's wing catalog returned invalid data: {error}"))
+}
+
+#[tauri::command]
+async fn load_bloom_wing_preview_data(wing_id: String) -> Result<BloomWingPreviewData, String> {
+    use base64::Engine;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let lease = client
+        .get(format!("{}/v1/wings/{}/preview", BACKEND_URL.trim_end_matches('/'), wing_id))
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's wing preview is unavailable: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's wing preview could not be opened: {error}"))?
+        .json::<BloomWingAssetLease>()
+        .await
+        .map_err(|error| format!("Bloom's wing service returned invalid data: {error}"))?;
+    let bytes = client
+        .get(&lease.url)
+        .send()
+        .await
+        .map_err(|error| format!("Bloom's wing preview could not be downloaded: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Bloom's wing preview download was rejected: {error}"))?
+        .bytes()
+        .await
+        .map_err(|error| format!("Bloom's wing preview was incomplete: {error}"))?;
+    if bytes.len() > 3 * 1024 * 1024 {
+        return Err("Bloom's wing preview is unexpectedly large.".into());
+    }
+    Ok(BloomWingPreviewData {
+        data_url: format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)),
+        revision: lease.revision,
+    })
+}
+
+async fn send_bloom_wing_request(
+    session: &MinecraftSession,
+    method: reqwest::Method,
+    path: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<reqwest::Response, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let request = client
+        .request(method, format!("{}{}", BACKEND_URL.trim_end_matches('/'), path))
+        .bearer_auth(&session.access_token);
+    let request = if let Some(value) = body { request.json(value) } else { request };
+    request.send().await.map_err(|error| format!("Bloom's wing service is unavailable: {error}"))
+}
+
+#[tauri::command]
+async fn get_bloom_wing_account_state(state: tauri::State<'_, LauncherState>) -> Result<BloomWingAccountState, String> {
+    let stored = launcher_session(&state)?;
+    let mut session = stored.clone();
+    let mut response = send_bloom_wing_request(&session, reqwest::Method::GET, "/v1/wings/me", None).await?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        session = refresh_minecraft_session(&stored).await.map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
+        response = send_bloom_wing_request(&session, reqwest::Method::GET, "/v1/wings/me", None).await?;
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        return Err(format!("Bloom's wing service rejected the account state ({status})."));
+    }
+    let result = response.json::<BloomWingAccountState>().await.map_err(|error| format!("Bloom's wing service returned invalid account data: {error}"))?;
+    save_refreshed_launcher_session(&state, &stored, session)?;
+    Ok(result)
+}
+
+#[tauri::command]
+async fn add_bloom_wings_to_collection(
+    state: tauri::State<'_, LauncherState>,
+    wing_ids: Vec<String>,
+) -> Result<(), String> {
+    let stored = launcher_session(&state)?;
+    let mut session = stored.clone();
+    let body = serde_json::json!({ "wingIds": wing_ids });
+    let mut response = send_bloom_wing_request(&session, reqwest::Method::PUT, "/v1/wings/collection", Some(&body)).await?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        session = refresh_minecraft_session(&stored).await.map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
+        response = send_bloom_wing_request(&session, reqwest::Method::PUT, "/v1/wings/collection", Some(&body)).await?;
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(if detail.is_empty() { format!("Bloom could not add the wings ({status}).") } else { format!("Bloom could not add the wings ({status}): {detail}") });
+    }
+    save_refreshed_launcher_session(&state, &stored, session)
+}
+
+#[tauri::command]
+async fn set_bloom_equipped_wing(
+    state: tauri::State<'_, LauncherState>,
+    wing_id: Option<String>,
+) -> Result<(), String> {
+    let stored = launcher_session(&state)?;
+    let mut session = stored.clone();
+    let body = serde_json::json!({ "wingId": wing_id });
+    let mut response = send_bloom_wing_request(&session, reqwest::Method::PUT, "/v1/wings/equipped", Some(&body)).await?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        session = refresh_minecraft_session(&stored).await.map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
+        response = send_bloom_wing_request(&session, reqwest::Method::PUT, "/v1/wings/equipped", Some(&body)).await?;
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(if detail.is_empty() { format!("Bloom could not equip the wings ({status}).") } else { format!("Bloom could not equip the wings ({status}): {detail}") });
+    }
+    save_refreshed_launcher_session(&state, &stored, session)
 }
 
 #[tauri::command]
@@ -293,6 +883,29 @@ struct LauncherState {
     session: Arc<Mutex<Option<MinecraftSession>>>,
     launch_active: Arc<Mutex<bool>>,
     cancel_requested: Arc<AtomicBool>,
+    content_install_queue: Arc<Mutex<std::collections::VecDeque<QueuedContentInstall>>>,
+    content_install_active: Arc<AtomicBool>,
+}
+
+#[derive(Clone)]
+struct QueuedContentInstall {
+    instance_id: String,
+    project_id: String,
+    category: String,
+    title: String,
+    version: String,
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ContentInstallFinished {
+    instance_id: String,
+    project_id: String,
+    category: String,
+    state: String,
+    message: String,
+    title: String,
+    version: String,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -928,11 +1541,12 @@ struct JavaInstallation {
     usable: bool,
 }
 
-static JAVA_INSTALLATION_CACHE: OnceLock<Mutex<Option<(std::time::Instant, Vec<JavaInstallation>)>>> =
-    OnceLock::new();
+static JAVA_INSTALLATION_CACHE: OnceLock<
+    Mutex<Option<(std::time::Instant, Vec<JavaInstallation>)>>,
+> = OnceLock::new();
 
-fn java_installation_cache(
-) -> &'static Mutex<Option<(std::time::Instant, Vec<JavaInstallation>)>> {
+fn java_installation_cache() -> &'static Mutex<Option<(std::time::Instant, Vec<JavaInstallation>)>>
+{
     JAVA_INSTALLATION_CACHE.get_or_init(|| Mutex::new(None))
 }
 
@@ -1245,7 +1859,7 @@ struct HardwareReport {
 
 fn detect_hardware_report_blocking() -> Result<HardwareReport, String> {
     let script = r#"$cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $system=Get-CimInstance Win32_ComputerSystem; $video=@(Get-CimInstance Win32_VideoController); [pscustomobject]@{cpu=[string]$cpu.Name;cores=[uint32]$cpu.NumberOfCores;threads=[uint32]$cpu.NumberOfLogicalProcessors;ramBytes=[uint64]$system.TotalPhysicalMemory;gpus=@($video | ForEach-Object {[string]$_.Name});refreshRate=[uint32](($video | Measure-Object CurrentRefreshRate -Maximum).Maximum)} | ConvertTo-Json -Compress"#;
-    let output = std::process::Command::new("powershell.exe")
+    let output = command_without_console("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .output()
         .map_err(|error| format!("Hardware scan could not start: {error}"))?;
@@ -1475,7 +2089,7 @@ async fn save_locker_skin(name: String, bytes: Vec<u8>) -> Result<LockerSkin, St
 
 #[tauri::command]
 fn open_skins_folder() -> Result<(), String> {
-    std::process::Command::new("explorer.exe")
+    command_without_console("explorer.exe")
         .arg(skins_directory()?)
         .spawn()
         .map_err(|error| format!("The skins folder could not be opened: {error}"))?;
@@ -1537,7 +2151,8 @@ async fn apply_locker_skin(
     *state
         .session
         .lock()
-        .map_err(|_| "Bloom could not save the refreshed Minecraft account.")? = Some(session.clone());
+        .map_err(|_| "Bloom could not save the refreshed Minecraft account.")? =
+        Some(session.clone());
     Ok(serde_json::json!({ "id": session.uuid, "name": session.username }))
 }
 
@@ -1719,7 +2334,7 @@ async fn apply_autotune_profile(profile: AutoTuneProfile) -> Result<usize, Strin
 }
 
 fn java_major(path: &str) -> Option<u32> {
-    let output = std::process::Command::new(path)
+    let output = command_without_console(path)
         .arg("-version")
         .output()
         .ok()?;
@@ -1879,6 +2494,7 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
         }
     }
     config.directory = target.to_string_lossy().to_string();
+    sync_bloom_cosmetics_mod(&config)?;
     if config.visible {
         if let Some(profile) = saved_autotune_profile() {
             apply_autotune_to_config(&mut config, &profile)?;
@@ -1927,6 +2543,7 @@ fn list_instances_blocking() -> Result<Vec<InstanceConfig>, String> {
             if let Ok(bytes) = std::fs::read(entry.path()) {
                 if let Ok(instance) = serde_json::from_slice::<InstanceConfig>(&bytes) {
                     if instance.visible {
+                        let _ = sync_bloom_cosmetics_mod(&instance);
                         instances.push(instance);
                     }
                 }
@@ -2170,35 +2787,70 @@ fn open_instance_folder(instance_id: String, category: Option<String>) -> Result
         std::path::PathBuf::from(config.directory)
     };
     std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
-    let target = target.canonicalize().map_err(|error| {
-        format!("Bloom could not resolve this instance folder: {error}")
-    })?;
+    let target = target
+        .canonicalize()
+        .map_err(|error| format!("Bloom could not resolve this instance folder: {error}"))?;
 
-    tauri_plugin_opener::open_path(&target, None::<&str>).map_err(|error| {
-        format!("Bloom could not open this instance folder: {error}")
-    })
+    tauri_plugin_opener::open_path(&target, None::<&str>)
+        .map_err(|error| format!("Bloom could not open this instance folder: {error}"))
 }
 
-fn import_instance_mod_files_blocking(instance_id: String, paths: Vec<String>) -> Result<Vec<String>, String> {
-    if paths.is_empty() { return Err("Drop one or more Fabric mod JAR files.".into()); }
+fn import_instance_mod_files_blocking(
+    instance_id: String,
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    if paths.is_empty() {
+        return Err("Drop one or more Fabric mod JAR files.".into());
+    }
     let config = load_instance(&instance_id)?;
-    if !config.loader.eq_ignore_ascii_case("fabric") { return Err("Drag-and-drop mod installation currently supports Fabric instances only.".into()); }
+    if !config.loader.eq_ignore_ascii_case("fabric") {
+        return Err(
+            "Drag-and-drop mod installation currently supports Fabric instances only.".into(),
+        );
+    }
     let mods = content_folder(&config, "mods")?;
     std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
     let mut imported = Vec::new();
     for raw in paths {
         let source = std::path::PathBuf::from(raw);
-        if !source.is_file() || !source.extension().and_then(|value| value.to_str()).map(|value| value.eq_ignore_ascii_case("jar")).unwrap_or(false) { return Err("Only .jar mod files can be dropped into Mods.".into()); }
-        let file = std::fs::File::open(&source).map_err(|error| format!("Could not read {}: {error}", source.display()))?;
-        let mut archive = zip::ZipArchive::new(file).map_err(|_| format!("{} is not a valid mod JAR.", source.display()))?;
-        if archive.by_name("fabric.mod.json").is_err() { return Err(format!("{} is not a Fabric mod.", source.file_name().and_then(|value| value.to_str()).unwrap_or("That file"))); }
-        let name = source.file_name().and_then(|value| value.to_str()).ok_or("A dropped mod has an invalid filename.")?.to_string();
+        if !source.is_file()
+            || !source
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.eq_ignore_ascii_case("jar"))
+                .unwrap_or(false)
+        {
+            return Err("Only .jar mod files can be dropped into Mods.".into());
+        }
+        let file = std::fs::File::open(&source)
+            .map_err(|error| format!("Could not read {}: {error}", source.display()))?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|_| format!("{} is not a valid mod JAR.", source.display()))?;
+        if archive.by_name("fabric.mod.json").is_err() {
+            return Err(format!(
+                "{} is not a Fabric mod.",
+                source
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("That file")
+            ));
+        }
+        let name = source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or("A dropped mod has an invalid filename.")?
+            .to_string();
         let destination = mods.join(&name);
         if source.canonicalize().ok() != destination.canonicalize().ok() {
             let temporary = mods.join(format!(".{name}.bloom-import"));
-            std::fs::copy(&source, &temporary).map_err(|error| format!("Could not import {name}: {error}"))?;
-            if destination.exists() { std::fs::remove_file(&destination).map_err(|error| format!("Could not replace {name}: {error}"))?; }
-            std::fs::rename(&temporary, &destination).map_err(|error| format!("Could not finish importing {name}: {error}"))?;
+            std::fs::copy(&source, &temporary)
+                .map_err(|error| format!("Could not import {name}: {error}"))?;
+            if destination.exists() {
+                std::fs::remove_file(&destination)
+                    .map_err(|error| format!("Could not replace {name}: {error}"))?;
+            }
+            std::fs::rename(&temporary, &destination)
+                .map_err(|error| format!("Could not finish importing {name}: {error}"))?;
         }
         imported.push(name);
     }
@@ -2206,17 +2858,22 @@ fn import_instance_mod_files_blocking(instance_id: String, paths: Vec<String>) -
 }
 
 #[tauri::command]
-async fn import_instance_mod_files(instance_id: String, paths: Vec<String>) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || import_instance_mod_files_blocking(instance_id, paths))
-        .await
-        .map_err(|error| format!("The mod importer stopped unexpectedly: {error}"))?
+async fn import_instance_mod_files(
+    instance_id: String,
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        import_instance_mod_files_blocking(instance_id, paths)
+    })
+    .await
+    .map_err(|error| format!("The mod importer stopped unexpectedly: {error}"))?
 }
 
 #[tauri::command]
 fn open_game_folder() -> Result<(), String> {
     let target = bloom_data_dir()?.join("minecraft");
     std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
-    std::process::Command::new("explorer.exe")
+    command_without_console("explorer.exe")
         .arg(target)
         .spawn()
         .map_err(|error| error.to_string())?;
@@ -3041,6 +3698,139 @@ fn execute_download_plan(
     Ok(())
 }
 
+fn perform_modrinth_content_install(
+    app: &tauri::AppHandle,
+    task: &QueuedContentInstall,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
+    let config = load_instance(&task.instance_id)?;
+    let (_, content_label, destination_folder) = catalog_category(&task.category)?;
+    if task.category == "mods" && !config.loader.eq_ignore_ascii_case("fabric") {
+        return Err("Modrinth mod installation currently supports Fabric instances only.".into());
+    }
+    emit_launch(
+        app,
+        &task.instance_id,
+        "installing",
+        1,
+        format!("Resolving Modrinth {}", content_label.to_lowercase()),
+    );
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let plan: CatalogInstallPlan = if task.category == "mods" {
+        client
+            .get(format!(
+                "{}/v1/catalog/modrinth/{}/install",
+                BACKEND_URL.trim_end_matches('/'),
+                task.project_id
+            ))
+            .query(&[("gameVersion", config.version.as_str())])
+            .send()
+            .map_err(|error| format!("Unable to resolve the Modrinth file: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("Modrinth could not provide a compatible file: {error}"))?
+            .json()
+            .map_err(|error| format!("The mod install plan is invalid: {error}"))?
+    } else {
+        let versions: Vec<ModrinthVersion> = client
+            .get(format!(
+                "https://api.modrinth.com/v2/project/{}/version",
+                task.project_id
+            ))
+            .query(&[
+                (
+                    "game_versions",
+                    serde_json::to_string(&[config.version.as_str()])
+                        .map_err(|error| error.to_string())?,
+                ),
+                ("include_changelog", "false".into()),
+            ])
+            .send()
+            .map_err(|error| format!("Unable to resolve the Modrinth file: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("Modrinth could not provide compatible content: {error}"))?
+            .json()
+            .map_err(|error| format!("The Modrinth version response is invalid: {error}"))?;
+        let version = versions
+            .iter()
+            .find(|version| version.version_type == "release")
+            .or_else(|| versions.first())
+            .ok_or_else(|| {
+                format!(
+                    "No compatible {content_label} exists for Minecraft {}.",
+                    config.version
+                )
+            })?;
+        let file = primary_modrinth_file(version)
+            .ok_or_else(|| format!("The selected {content_label} has no downloadable file."))?;
+        let project: ModrinthProject = client
+            .get(format!(
+                "https://api.modrinth.com/v2/project/{}",
+                task.project_id
+            ))
+            .send()
+            .map_err(|error| format!("Unable to load the Modrinth project: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("Modrinth rejected the project request: {error}"))?
+            .json()
+            .map_err(|error| format!("The Modrinth project response is invalid: {error}"))?;
+        CatalogInstallPlan {
+            title: project.title,
+            files: vec![CatalogInstallFile {
+                file_name: file.filename.clone(),
+                download_url: file.url.clone(),
+                sha1: file.hashes.get("sha1").cloned(),
+            }],
+        }
+    };
+    if plan.files.is_empty() {
+        return Err(format!(
+            "The selected {content_label} has no compatible files to install."
+        ));
+    }
+    let destination = std::path::PathBuf::from(&config.directory).join(destination_folder);
+    std::fs::create_dir_all(&destination).map_err(|error| error.to_string())?;
+    let mut downloads = mc_launcher_core::net::download::DownloadPlan::default();
+    for file in plan.files {
+        if std::path::Path::new(&file.file_name)
+            .file_name()
+            .and_then(|name| name.to_str())
+            != Some(file.file_name.as_str())
+        {
+            return Err(format!(
+                "Modrinth returned an unsafe {content_label} filename."
+            ));
+        }
+        if !allowed_pack_download(&file.download_url) {
+            return Err("Modrinth returned an untrusted download address.".into());
+        }
+        downloads
+            .tasks
+            .push(mc_launcher_core::net::download::DownloadTask {
+                url: file.download_url,
+                destination: destination.join(&file.file_name),
+                checksum: file
+                    .sha1
+                    .map(mc_launcher_core::net::download::Checksum::Sha1),
+                label: file.file_name,
+            });
+    }
+    execute_download_plan(
+        app,
+        &task.instance_id,
+        &downloads,
+        cancel,
+        3,
+        99,
+        &format!("Installing {}", plan.title),
+        false,
+    )?;
+    Ok(plan.title)
+}
+
 #[tauri::command]
 fn install_modrinth_content(
     app: tauri::AppHandle,
@@ -3048,9 +3838,11 @@ fn install_modrinth_content(
     instance_id: String,
     project_id: String,
     category: String,
+    title: String,
+    version: String,
 ) -> Result<(), String> {
     let config = load_instance(&instance_id)?;
-    let (_, content_label, destination_folder) = catalog_category(&category)?;
+    catalog_category(&category)?;
     if category == "mods" && !config.loader.eq_ignore_ascii_case("fabric") {
         return Err("Modrinth mod installation currently supports Fabric instances only.".into());
     }
@@ -3061,132 +3853,126 @@ fn install_modrinth_content(
     {
         return Err("That Modrinth project ID is invalid.".into());
     }
-    {
+
+    let task = QueuedContentInstall {
+        instance_id,
+        project_id,
+        category,
+        title: title.chars().take(160).collect(),
+        version: version.chars().take(100).collect(),
+    };
+    let mut queue = state
+        .content_install_queue
+        .lock()
+        .map_err(|_| "The content queue is busy.")?;
+    if queue.iter().any(|queued| {
+        queued.instance_id == task.instance_id
+            && queued.project_id == task.project_id
+            && queued.category == task.category
+    }) {
+        return Ok(());
+    }
+    let start_worker = !state.content_install_active.load(Ordering::SeqCst);
+    if start_worker {
         let mut active = state
             .launch_active
             .lock()
             .map_err(|_| "The task manager is busy.")?;
         if *active {
-            return Err("Another download or game launch is already active.".into());
+            return Err("Minecraft is currently being installed or launched.".into());
         }
         *active = true;
+        state.cancel_requested.store(false, Ordering::SeqCst);
+        state.content_install_active.store(true, Ordering::SeqCst);
     }
-    state.cancel_requested.store(false, Ordering::SeqCst);
+    queue.push_back(task);
+    drop(queue);
+
+    if !start_worker {
+        return Ok(());
+    }
     let active = state.launch_active.clone();
     let cancel = state.cancel_requested.clone();
-    let category_for_task = category.clone();
-    std::thread::spawn(move || {
-        emit_launch(
-            &app,
-            &instance_id,
-            "installing",
-            1,
-            format!("Resolving Modrinth {}", content_label.to_lowercase()),
-        );
-        let result = (|| -> Result<String, String> {
-            let client = reqwest::blocking::Client::builder()
-                .timeout(std::time::Duration::from_secs(20))
-                .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
-                .build()
-                .map_err(|error| error.to_string())?;
-            let plan: CatalogInstallPlan = if category_for_task == "mods" {
-                client
-                    .get(format!(
-                        "{}/v1/catalog/modrinth/{}/install",
-                        BACKEND_URL.trim_end_matches('/'),
-                        project_id
-                    ))
-                    .query(&[("gameVersion", config.version.as_str())])
-                    .send()
-                    .map_err(|error| format!("Unable to resolve the Modrinth file: {error}"))?
-                    .error_for_status()
-                    .map_err(|error| format!("Modrinth could not provide a compatible file: {error}"))?
-                    .json()
-                    .map_err(|error| format!("The mod install plan is invalid: {error}"))?
-            } else {
-                let versions: Vec<ModrinthVersion> = client
-                    .get(format!("https://api.modrinth.com/v2/project/{}/version", project_id))
-                    .query(&[("game_versions", serde_json::to_string(&[config.version.as_str()]).map_err(|error| error.to_string())?), ("include_changelog", "false".into())])
-                    .send()
-                    .map_err(|error| format!("Unable to resolve the Modrinth file: {error}"))?
-                    .error_for_status()
-                    .map_err(|error| format!("Modrinth could not provide compatible content: {error}"))?
-                    .json()
-                    .map_err(|error| format!("The Modrinth version response is invalid: {error}"))?;
-                let version = versions.iter().find(|version| version.version_type == "release").or_else(|| versions.first()).ok_or_else(|| format!("No compatible {content_label} exists for Minecraft {}.", config.version))?;
-                let file = primary_modrinth_file(version).ok_or_else(|| format!("The selected {content_label} has no downloadable file."))?;
-                let project: ModrinthProject = client
-                    .get(format!("https://api.modrinth.com/v2/project/{}", project_id))
-                    .send()
-                    .map_err(|error| format!("Unable to load the Modrinth project: {error}"))?
-                    .error_for_status()
-                    .map_err(|error| format!("Modrinth rejected the project request: {error}"))?
-                    .json()
-                    .map_err(|error| format!("The Modrinth project response is invalid: {error}"))?;
-                CatalogInstallPlan {
-                    title: project.title,
-                    files: vec![CatalogInstallFile { file_name: file.filename.clone(), download_url: file.url.clone(), sha1: file.hashes.get("sha1").cloned() }],
-                }
+    let install_queue = state.content_install_queue.clone();
+    let install_active = state.content_install_active.clone();
+    std::thread::spawn(move || loop {
+        let next = {
+            let mut queue = match install_queue.lock() {
+                Ok(queue) => queue,
+                Err(_) => break,
             };
-            if plan.files.is_empty() {
-                return Err(format!("The selected {content_label} has no compatible files to install."));
-            }
-            let destination = std::path::PathBuf::from(&config.directory).join(destination_folder);
-            std::fs::create_dir_all(&destination).map_err(|error| error.to_string())?;
-            let mut downloads = mc_launcher_core::net::download::DownloadPlan::default();
-            for file in plan.files {
-                if std::path::Path::new(&file.file_name)
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    != Some(file.file_name.as_str())
-                {
-                    return Err(format!("Modrinth returned an unsafe {content_label} filename."));
+            if queue.is_empty() {
+                if let Ok(mut value) = active.lock() {
+                    *value = false;
                 }
-                if !allowed_pack_download(&file.download_url) {
-                    return Err("Modrinth returned an untrusted download address.".into());
-                }
-                downloads
-                    .tasks
-                    .push(mc_launcher_core::net::download::DownloadTask {
-                        url: file.download_url,
-                        destination: destination.join(&file.file_name),
-                        checksum: file
-                            .sha1
-                            .map(mc_launcher_core::net::download::Checksum::Sha1),
-                        label: file.file_name,
-                    });
+                install_active.store(false, Ordering::SeqCst);
+                None
+            } else {
+                queue.pop_front()
             }
-            execute_download_plan(
-                &app,
-                &instance_id,
-                &downloads,
-                &cancel,
-                3,
-                99,
-                &format!("Installing {}", plan.title),
-                false,
-            )?;
-            Ok(plan.title)
-        })();
-        match result {
-            Ok(title) => emit_launch(
-                &app,
-                &instance_id,
-                "complete",
-                100,
-                format!("Installed {title}"),
-            ),
-            Err(error) if error == "__cancelled__" => emit_launch(
-                &app,
-                &instance_id,
-                "cancelled",
-                0,
-                format!("{content_label} installation cancelled"),
-            ),
-            Err(error) => emit_launch(&app, &instance_id, "error", 0, error),
-        }
-        if let Ok(mut value) = active.lock() {
-            *value = false;
+        };
+        let Some(task) = next else { break };
+        let _ = app.emit(
+            "content-install-state",
+            ContentInstallFinished {
+                instance_id: task.instance_id.clone(),
+                project_id: task.project_id.clone(),
+                category: task.category.clone(),
+                state: "installing".into(),
+                message: format!("Installing {}", task.title),
+                title: task.title.clone(),
+                version: task.version.clone(),
+            },
+        );
+        let result = perform_modrinth_content_install(&app, &task, &cancel);
+        let (state_name, message, stop_queue) = match result {
+            Ok(title) => {
+                let message = format!("Installed {title}");
+                emit_launch(&app, &task.instance_id, "complete", 100, &message);
+                ("installed", message, false)
+            }
+            Err(error) if error == "__cancelled__" => {
+                let message = format!("{} installation cancelled", task.title);
+                emit_launch(&app, &task.instance_id, "cancelled", 0, &message);
+                ("cancelled", message, true)
+            }
+            Err(error) => {
+                emit_launch(&app, &task.instance_id, "error", 0, &error);
+                ("error", error, false)
+            }
+        };
+        let _ = app.emit(
+            "content-install-state",
+            ContentInstallFinished {
+                instance_id: task.instance_id,
+                project_id: task.project_id,
+                category: task.category,
+                state: state_name.into(),
+                message,
+                title: task.title,
+                version: task.version,
+            },
+        );
+        if stop_queue {
+            let cancelled = install_queue
+                .lock()
+                .map(|mut queue| queue.drain(..).collect::<Vec<_>>())
+                .unwrap_or_default();
+            for queued in cancelled {
+                let _ = app.emit(
+                    "content-install-state",
+                    ContentInstallFinished {
+                        instance_id: queued.instance_id,
+                        project_id: queued.project_id,
+                        category: queued.category,
+                        state: "cancelled".into(),
+                        message: "Installation queue cancelled".into(),
+                        title: queued.title,
+                        version: queued.version,
+                    },
+                );
+            }
+            cancel.store(false, Ordering::SeqCst);
         }
     });
     Ok(())
@@ -3328,6 +4114,15 @@ fn install_instance_files(
             );
             install_fabric_api(config)?;
         }
+        if config.version == "1.21.11" {
+            emit_launch(
+                app,
+                instance_id,
+                "installing",
+                scale(95),
+                "Installing Bloom Cosmetics",
+            );
+        }
     } else {
         mc_launcher_core::install::natives::extract_natives(
             &vanilla.libraries,
@@ -3336,7 +4131,46 @@ fn install_instance_files(
         )
         .map_err(|error| error.to_string())?;
     }
+    sync_bloom_cosmetics_mod(config)?;
     Ok(version_id)
+}
+
+fn sync_bloom_cosmetics_mod(config: &InstanceConfig) -> Result<(), String> {
+    const FILE_NAME: &str = "bloom-cosmetics-1.21.11.jar";
+    const JAR: &[u8] = include_bytes!("../resources/bloom-cosmetics-1.21.11.jar");
+
+    let supported = config.loader.eq_ignore_ascii_case("fabric") && config.version == "1.21.11";
+    let mods = std::path::PathBuf::from(&config.directory).join("mods");
+    if !supported && !mods.is_dir() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
+    let destination = mods.join(FILE_NAME);
+    if supported && std::fs::read(&destination)
+        .map(|existing| existing == JAR)
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
+    for entry in std::fs::read_dir(&mods).map_err(|error| error.to_string())?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        if name.starts_with("bloom-cosmetics-") && name.contains(".jar") {
+            std::fs::remove_file(entry.path()).map_err(|error| {
+                format!("Bloom could not replace an older cosmetics bridge: {error}")
+            })?;
+        }
+    }
+
+    if !supported {
+        return Ok(());
+    }
+
+    let temporary = mods.join(format!("{FILE_NAME}.part"));
+    std::fs::write(&temporary, JAR)
+        .map_err(|error| format!("Bloom could not prepare the cosmetics bridge: {error}"))?;
+    std::fs::rename(&temporary, &destination)
+        .map_err(|error| format!("Bloom could not install the cosmetics bridge: {error}"))
 }
 
 fn selected_java(
@@ -3566,11 +4400,12 @@ async fn launch_minecraft(
             for argument in config.jvm_arguments.split_whitespace().rev() {
                 args.insert(main_index, argument.to_string());
             }
-            let mut process = std::process::Command::new(command.executable);
+            let mut process = command_without_console(command.executable);
             process
                 .args(args)
                 .current_dir(command.working_dir)
                 .envs(command.env)
+                .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped());
             let mut child = process
@@ -3784,6 +4619,20 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_backend_status,
+            list_bloom_capes,
+            lease_bloom_cape_texture,
+            load_bloom_cape_texture_data,
+            set_bloom_equipped_cape,
+            list_bloom_hats,
+            load_bloom_hat_preview_data,
+            get_bloom_hat_account_state,
+            add_bloom_hats_to_collection,
+            set_bloom_equipped_hat,
+            list_bloom_wings,
+            load_bloom_wing_preview_data,
+            get_bloom_wing_account_state,
+            add_bloom_wings_to_collection,
+            set_bloom_equipped_wing,
             search_modrinth_content,
             request_microsoft_device_code,
             complete_microsoft_login,

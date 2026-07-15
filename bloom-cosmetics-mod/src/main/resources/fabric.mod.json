@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "bloom_cosmetics",
+  "version": "${version}",
+  "name": "Bloom Cosmetics",
+  "description": "Displays live Bloom Client capes, 3D hats, and torso-anchored wings for players who use the Bloom cosmetics bridge.",
+  "authors": ["Bloom Client"],
+  "contact": {
+    "homepage": "https://bloomclient.org",
+    "sources": "https://github.com/Parksdotjar/BloomClient-V2"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["org.bloomclient.cosmetics.BloomCosmeticsClient"]
+  },
+  "mixins": [
+    {
+      "config": "bloom-cosmetics.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "1.21.11",
+    "java": ">=21"
+  }
+}

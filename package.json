@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:cosmetics": "node scripts/build-cosmetics-mod.mjs",
+    "build:tauri": "npm run build && npm run build:cosmetics",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

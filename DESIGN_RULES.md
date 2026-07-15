@@ -20,7 +20,8 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Keep navigation icons and labels aligned on one consistent grid.
 - Use the same spacing rhythm and card treatment across settings, home, and future screens.
 - Sidebar branding and account areas use separate, slightly darker theme-aware surface zones, divided from navigation by short faded separators rather than full-width rules.
-- Global sidebar navigation stays focused on Home, Instances, AutoTune, and Settings; mods, resource packs, and shaders belong inside their owning instance rather than as duplicate global destinations.
+- Global sidebar navigation stays focused on Home, Instances, Shop, Locker, AutoTune, and Settings; mods, resource packs, and shaders belong inside their owning instance rather than as duplicate global destinations.
+- Advertising is a separate reserved rail. Drawers, modals, menus, dimming layers, and other overlays must stop at the ad-rail boundary and must never cover or intercept advertisements.
 - AutoTune must clearly distinguish measured results, hardware-based estimates, and future/mock capabilities. Never present an estimate or unfinished benchmark as a completed optimization.
 - AutoTune benchmark reports must name the workload they actually measured. A Bloom/WebView graphics test must never be labeled as measured Minecraft FPS; in-game claims require the dedicated Minecraft benchmark instrumentation.
 - Real AutoTune comparisons use the same Minecraft, Fabric Loader, Fabric API, benchmark-mod version, seed, world settings, warm-up duration, measurement duration, and camera path. Benchmark instances remain private and hidden from the normal instance library.
@@ -40,7 +41,7 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Toggles must follow standard semantics: off is gray with the thumb left; on is accent-colored with the thumb right.
 - Every toggle must be backed by real state and an `onChange` handler before it is added to the UI. Never ship a hardcoded toggle with a no-op handler.
 - Interactive controls need hover, focus, and pressed states.
-- Button press duration is user-configurable from 0–1000 ms (620 ms by default), but the visual must run independently through compositor animation and must never delay the button action, force layout, or schedule a React render.
+- Button press duration is user-configurable from 0–1500 ms (750 ms by default), but the visual must run independently through compositor animation and must never delay the button action, force layout, or schedule a React render.
 - Use Anime.js for purposeful UI motion, including toggle thumb movement and subtle state transitions. Respect the Show Animations setting.
 - Do not expose browser context menus or browser-looking actions inside the client.
 - Desktop window controls use Bloom's custom dim icon buttons inside a transparent draggable region; close uses a restrained red hover state, and the native operating-system title bar remains disabled.
@@ -58,6 +59,15 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Instance collection search and filters live in a taller, narrower floating surface overlapping the collection's bottom edge by roughly half its height; its icon, text, and filter scale together, and pagination sits beneath it while the list scrolls independently.
 - The full instance library uses a responsive card grid with direct Play and folder actions, while the sidebar remains a short recent-access list rather than duplicating the entire library.
 - Avoid decorative accent streaks on repeated cards; depth comes from restrained borders, surface contrast, and hover lift rather than AI-like glowing lines.
+
+## Cape shop and secure cosmetics
+
+- Bloom capes are free collection items. Never add coins, prices, premium rarity, payment language, or purchase flows to this screen.
+- The default cape catalog uses a three-by-three desktop grid with nine items per page, then reflows to two or one column before cards become cramped.
+- Empty catalogs show an intentional centered “Capes coming soon” state; never invent placeholder products that could be mistaken for released cosmetics.
+- The client stores opaque cape IDs and per-account cart, collection, and equipped state. Private storage paths, permanent bucket URLs, and privileged Supabase keys must never be embedded or persisted in the desktop client.
+- Cape textures are requested through an authenticated provider as short-lived leases. The future Supabase implementation and Fabric bridge replace that provider without changing Shop components.
+- Repeated cape cards use cached texture previews and must not create one continuous WebGL renderer per card. Reserve live 3D rendering for a focused preview when it materially improves the experience.
 
 ## Scrollbars
 

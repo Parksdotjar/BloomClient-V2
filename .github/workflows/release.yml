@@ -19,6 +19,11 @@ jobs:
           node-version: 20
           cache: npm
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Verify release tag
