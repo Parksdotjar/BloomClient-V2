@@ -13,11 +13,29 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
-        var repoIndex = Array.IndexOf(args, "--repo");
-        var repo = repoIndex >= 0 && repoIndex + 1 < args.Length
-            ? args[repoIndex + 1]
-            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-        Application.Run(new ReleaseManagerForm(repo));
+        try
+        {
+            var repoIndex = Array.IndexOf(args, "--repo");
+            var argumentRepo = repoIndex >= 0 && repoIndex + 1 < args.Length
+                ? string.Join(" ", args.Skip(repoIndex + 1))
+                : null;
+            var environmentRepo = Environment.GetEnvironmentVariable("BLOOM_RELEASE_REPO");
+            var repo = Path.GetFullPath((argumentRepo ?? environmentRepo ??
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..")).Trim('"'));
+
+            if (!File.Exists(Path.Combine(repo, "VERSION")))
+                throw new DirectoryNotFoundException($"Bloom Client was not found at:\n{repo}");
+
+            Application.Run(new ReleaseManagerForm(repo));
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(
+                error.Message,
+                "Bloom Release Manager could not start",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
     }
 }
 

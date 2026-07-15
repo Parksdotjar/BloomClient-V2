@@ -35,4 +35,5 @@ if ($needsBuild) {
     if ($LASTEXITCODE -ne 0) { throw "Bloom Release Manager could not be built." }
 }
 
-Start-Process -FilePath $exe -ArgumentList @("--repo", ('"' + $repo + '"')) -WorkingDirectory $repo
+$env:BLOOM_RELEASE_REPO = $repo
+Start-Process -FilePath $exe -ArgumentList ('--repo "{0}"' -f $repo) -WorkingDirectory $repo

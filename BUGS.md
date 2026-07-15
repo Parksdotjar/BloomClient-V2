@@ -164,6 +164,14 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 - **Fix:** Wing models now use a wing-specific mesh parser that reverses U only on north/south faces. Geometry, offsets, scale, hats, and capes remain unchanged. Bloom Cosmetics 1.2.1 was rebuilt and synchronized to the bundled resource and active test instance.
 - **Verification:** The Fabric mod build passes, and the built, bundled, and installed JARs have matching SHA-256 hashes.
 
+## BLOOM-018 — Release Manager silently failed when the repository path contained spaces
+
+- **Status:** Fixed
+- **Symptom:** `npm run release:manager` exited successfully, but no Release Manager window or lasting Task Manager process appeared.
+- **Root cause:** PowerShell split the `--repo` value at the space in `BloomClient v2`. The manager searched for `C:\Users\Parks\BloomClient\VERSION`, threw before creating its window, and had no startup error dialog.
+- **Fix:** The manager now reconstructs split repository arguments, accepts the repository through an inherited environment variable, validates the resolved directory before creating the window, and displays a visible startup error if initialization fails.
+- **Verification:** Launch with `npm run release:manager`; the process must remain open and load the current repository version.
+
 ## How to add a bug
 
 Use the next ID and record the same fields every time:
