@@ -75,192 +75,6 @@ struct BackendStatus {
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BloomCosmeticColorway {
-    id: String,
-    slug: String,
-    name: String,
-    color: String,
-    texture_revision: String,
-    #[serde(default)]
-    preview_revision: Option<String>,
-    is_default: bool,
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomCapeCatalogItem {
-    id: String,
-    name: String,
-    collection: String,
-    texture_revision: String,
-    #[serde(default)]
-    colorways: Vec<BloomCosmeticColorway>,
-}
-
-#[derive(serde::Deserialize)]
-struct BloomCapeCatalogResponse {
-    items: Vec<BloomCapeCatalogItem>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomCapeTextureLease {
-    url: String,
-    expires_at: u64,
-    revision: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomCapeTextureData {
-    data_url: String,
-    revision: String,
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomHatCatalogItem {
-    id: String,
-    name: String,
-    collection: String,
-    model_revision: String,
-    texture_revision: String,
-    preview_revision: String,
-    offset: [f32; 3],
-    scale: f32,
-    hide_with_helmet: bool,
-    #[serde(default)]
-    colorways: Vec<BloomCosmeticColorway>,
-}
-
-#[derive(serde::Deserialize)]
-struct BloomHatCatalogResponse {
-    items: Vec<BloomHatCatalogItem>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomHatAssetLease {
-    url: String,
-    expires_at: u64,
-    revision: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomHatPreviewData {
-    data_url: String,
-    revision: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomHatAccountState {
-    collection_ids: Vec<String>,
-    equipped_hat_id: Option<String>,
-    #[serde(default)]
-    equipped_hat_colorway_id: Option<String>,
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomWingCatalogItem {
-    id: String,
-    name: String,
-    collection: String,
-    model_revision: String,
-    texture_revision: String,
-    preview_revision: String,
-    offset: [f32; 3],
-    scale: f32,
-    hide_cape: bool,
-    #[serde(default)]
-    colorways: Vec<BloomCosmeticColorway>,
-}
-
-#[derive(serde::Deserialize)]
-struct BloomWingCatalogResponse {
-    items: Vec<BloomWingCatalogItem>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomWingAssetLease {
-    url: String,
-    expires_at: u64,
-    revision: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomWingPreviewData {
-    data_url: String,
-    revision: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomWingAccountState {
-    collection_ids: Vec<String>,
-    equipped_wing_id: Option<String>,
-    #[serde(default)]
-    equipped_wing_colorway_id: Option<String>,
-}
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomBraceletCatalogItem {
-    id: String,
-    name: String,
-    collection: String,
-    model_revision: String,
-    texture_revision: String,
-    preview_revision: String,
-    offset: [f32; 3],
-    rotation: [f32; 3],
-    pivot: [f32; 3],
-    scale: f32,
-    #[serde(default)]
-    colorways: Vec<BloomCosmeticColorway>,
-}
-
-#[derive(serde::Deserialize)]
-struct BloomBraceletCatalogResponse {
-    items: Vec<BloomBraceletCatalogItem>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomBraceletAssetLease {
-    url: String,
-    expires_at: u64,
-    revision: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomBraceletPreviewData {
-    data_url: String,
-    revision: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BloomBraceletAccountState {
-    collection_ids: Vec<String>,
-    equipped_bracelet_id: Option<String>,
-    #[serde(default)]
-    equipped_bracelet_colorway_id: Option<String>,
-    #[serde(default = "default_bracelet_arm")]
-    equipped_bracelet_arm: String,
-}
-
-fn default_bracelet_arm() -> String {
-    "right".into()
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct CatalogMod {
     provider: String,
     project_id: String,
@@ -326,7 +140,25 @@ struct ModrinthVersion {
     id: String,
     version_number: String,
     version_type: String,
+    #[serde(default)]
+    game_versions: Vec<String>,
+    #[serde(default)]
+    loaders: Vec<String>,
+    #[serde(default)]
+    date_published: String,
     files: Vec<ModrinthFile>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModrinthModpackRelease {
+    id: String,
+    version_number: String,
+    version_type: String,
+    game_versions: Vec<String>,
+    date_published: String,
+    file_name: String,
+    file_size: u64,
 }
 
 #[derive(serde::Deserialize)]
@@ -351,6 +183,13 @@ fn catalog_category(category: &str) -> Result<(&'static str, &'static str, &'sta
         "modpacks" => Ok(("modpack", "Fabric", "")),
         _ => Err("Unsupported Modrinth content category.".into()),
     }
+}
+
+fn valid_modrinth_project_id(value: &str) -> bool {
+    (3..=64).contains(&value.len())
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '-' || character == '_'
+        })
 }
 
 fn primary_modrinth_file(version: &ModrinthVersion) -> Option<&ModrinthFile> {
@@ -491,725 +330,6 @@ async fn get_backend_status() -> Result<BackendStatus, String> {
 }
 
 #[tauri::command]
-async fn list_bloom_capes() -> Result<Vec<BloomCapeCatalogItem>, String> {
-    bloom_backend_request(reqwest::Method::GET, "/v1/capes", 10)?
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's cape catalog is unavailable: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's cape catalog rejected the request: {error}"))?
-        .json::<BloomCapeCatalogResponse>()
-        .await
-        .map(|response| response.items)
-        .map_err(|error| format!("Bloom's cape catalog returned invalid data: {error}"))
-}
-
-#[tauri::command]
-async fn lease_bloom_cape_texture(
-    cape_id: String,
-    colorway_id: Option<String>,
-) -> Result<BloomCapeTextureLease, String> {
-    let path = colorway_id
-        .map(|id| format!("/v1/capes/{cape_id}/colorways/{id}/texture"))
-        .unwrap_or_else(|| format!("/v1/capes/{cape_id}/texture"));
-    bloom_backend_request(reqwest::Method::GET, &path, 10)?
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's cape texture is unavailable: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's cape texture could not be opened: {error}"))?
-        .json::<BloomCapeTextureLease>()
-        .await
-        .map_err(|error| format!("Bloom's cape service returned invalid data: {error}"))
-}
-
-#[tauri::command]
-async fn load_bloom_cape_texture_data(
-    cape_id: String,
-    colorway_id: Option<String>,
-) -> Result<BloomCapeTextureData, String> {
-    use base64::Engine;
-
-    let lease = lease_bloom_cape_texture(cape_id, colorway_id).await?;
-    let response = bloom_http_client()?
-        .get(&lease.url)
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's cape texture could not be downloaded: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's cape texture download was rejected: {error}"))?;
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| format!("Bloom's cape texture was incomplete: {error}"))?;
-    if bytes.len() > 8 * 1024 * 1024 {
-        return Err("Bloom's cape texture is unexpectedly large.".into());
-    }
-
-    Ok(BloomCapeTextureData {
-        data_url: format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(bytes)
-        ),
-        revision: lease.revision,
-    })
-}
-
-async fn send_bloom_authenticated_request(
-    session: &MinecraftSession,
-    method: reqwest::Method,
-    path: &str,
-    body: Option<&serde_json::Value>,
-    unavailable_message: &str,
-) -> Result<reqwest::Response, String> {
-    let request = bloom_backend_request(method, path, 12)?.bearer_auth(&session.access_token);
-    let request = if let Some(value) = body {
-        request.json(value)
-    } else {
-        request
-    };
-    request
-        .send()
-        .await
-        .map_err(|error| format!("{unavailable_message}: {error}"))
-}
-
-async fn send_bloom_cape_equip(
-    session: &MinecraftSession,
-    cape_id: &Option<String>,
-    colorway_id: &Option<String>,
-) -> Result<reqwest::Response, String> {
-    let body = serde_json::json!({ "capeId": cape_id, "colorwayId": colorway_id });
-    send_bloom_authenticated_request(
-        session,
-        reqwest::Method::PUT,
-        "/v1/capes/equipped",
-        Some(&body),
-        "Bloom could not update your cape",
-    )
-    .await
-}
-
-#[tauri::command]
-async fn set_bloom_equipped_cape(
-    state: tauri::State<'_, LauncherState>,
-    cape_id: Option<String>,
-    colorway_id: Option<String>,
-) -> Result<(), String> {
-    let stored = state
-        .session
-        .lock()
-        .map_err(|_| "Bloom could not read the active Minecraft account.")?
-        .clone()
-        .or_else(saved_session)
-        .ok_or("Sign in with Microsoft before equipping a cape.")?;
-
-    let mut session = stored.clone();
-    let mut response = send_bloom_cape_equip(&session, &cape_id, &colorway_id).await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored).await.map_err(|error| {
-            format!("Your selected Microsoft account needs to reconnect: {error}")
-        })?;
-        response = send_bloom_cape_equip(&session, &cape_id, &colorway_id).await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        let details = response.text().await.unwrap_or_default();
-        return Err(if details.is_empty() {
-            format!("Bloom's cape service rejected the change ({status}).")
-        } else {
-            format!("Bloom's cape service rejected the change ({status}): {details}")
-        });
-    }
-
-    if session.access_token != stored.access_token {
-        save_account_session(&session, true)?;
-        *state
-            .session
-            .lock()
-            .map_err(|_| "Bloom could not save the refreshed Minecraft account.")? = Some(session);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn list_bloom_hats() -> Result<Vec<BloomHatCatalogItem>, String> {
-    bloom_backend_request(reqwest::Method::GET, "/v1/hats", 10)?
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's hat catalog is unavailable: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's hat catalog rejected the request: {error}"))?
-        .json::<BloomHatCatalogResponse>()
-        .await
-        .map(|response| response.items)
-        .map_err(|error| format!("Bloom's hat catalog returned invalid data: {error}"))
-}
-
-#[tauri::command]
-async fn load_bloom_hat_preview_data(
-    hat_id: String,
-    colorway_id: Option<String>,
-) -> Result<BloomHatPreviewData, String> {
-    use base64::Engine;
-    let client = bloom_http_client()?;
-    let path = colorway_id
-        .map(|id| format!("/v1/hats/{hat_id}/colorways/{id}/preview"))
-        .unwrap_or_else(|| format!("/v1/hats/{hat_id}/preview"));
-    let lease = client
-        .get(format!("{}{}", BACKEND_URL.trim_end_matches('/'), path))
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's hat preview is unavailable: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's hat preview could not be opened: {error}"))?
-        .json::<BloomHatAssetLease>()
-        .await
-        .map_err(|error| format!("Bloom's hat service returned invalid data: {error}"))?;
-    let bytes = client
-        .get(&lease.url)
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's hat preview could not be downloaded: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's hat preview download was rejected: {error}"))?
-        .bytes()
-        .await
-        .map_err(|error| format!("Bloom's hat preview was incomplete: {error}"))?;
-    if bytes.len() > 3 * 1024 * 1024 {
-        return Err("Bloom's hat preview is unexpectedly large.".into());
-    }
-    Ok(BloomHatPreviewData {
-        data_url: format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(bytes)
-        ),
-        revision: lease.revision,
-    })
-}
-
-async fn send_bloom_hat_request(
-    session: &MinecraftSession,
-    method: reqwest::Method,
-    path: &str,
-    body: Option<&serde_json::Value>,
-) -> Result<reqwest::Response, String> {
-    send_bloom_authenticated_request(
-        session,
-        method,
-        path,
-        body,
-        "Bloom's hat service is unavailable",
-    )
-    .await
-}
-
-fn launcher_session(state: &tauri::State<'_, LauncherState>) -> Result<MinecraftSession, String> {
-    state
-        .session
-        .lock()
-        .map_err(|_| "Bloom could not read the active Minecraft account.".to_string())?
-        .clone()
-        .or_else(saved_session)
-        .ok_or_else(|| {
-            "Sign in with Microsoft before changing your cosmetic collection.".to_string()
-        })
-}
-
-fn save_refreshed_launcher_session(
-    state: &tauri::State<'_, LauncherState>,
-    original: &MinecraftSession,
-    session: MinecraftSession,
-) -> Result<(), String> {
-    if session.access_token != original.access_token {
-        save_account_session(&session, true)?;
-        *state
-            .session
-            .lock()
-            .map_err(|_| "Bloom could not save the refreshed Minecraft account.")? = Some(session);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-async fn get_bloom_hat_account_state(
-    state: tauri::State<'_, LauncherState>,
-) -> Result<BloomHatAccountState, String> {
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let mut response =
-        send_bloom_hat_request(&session, reqwest::Method::GET, "/v1/hats/me", None).await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored).await.map_err(|error| {
-            format!("Your selected Microsoft account needs to reconnect: {error}")
-        })?;
-        response =
-            send_bloom_hat_request(&session, reqwest::Method::GET, "/v1/hats/me", None).await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        return Err(format!(
-            "Bloom's hat service rejected the account state ({status})."
-        ));
-    }
-    let result = response
-        .json::<BloomHatAccountState>()
-        .await
-        .map_err(|error| format!("Bloom's hat service returned invalid account data: {error}"))?;
-    save_refreshed_launcher_session(&state, &stored, session)?;
-    Ok(result)
-}
-
-#[tauri::command]
-async fn add_bloom_hats_to_collection(
-    state: tauri::State<'_, LauncherState>,
-    hat_ids: Vec<String>,
-) -> Result<(), String> {
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let body = serde_json::json!({ "hatIds": hat_ids });
-    let mut response = send_bloom_hat_request(
-        &session,
-        reqwest::Method::PUT,
-        "/v1/hats/collection",
-        Some(&body),
-    )
-    .await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored).await.map_err(|error| {
-            format!("Your selected Microsoft account needs to reconnect: {error}")
-        })?;
-        response = send_bloom_hat_request(
-            &session,
-            reqwest::Method::PUT,
-            "/v1/hats/collection",
-            Some(&body),
-        )
-        .await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        let detail = response.text().await.unwrap_or_default();
-        return Err(if detail.is_empty() {
-            format!("Bloom could not add the hats ({status}).")
-        } else {
-            format!("Bloom could not add the hats ({status}): {detail}")
-        });
-    }
-    save_refreshed_launcher_session(&state, &stored, session)
-}
-
-#[tauri::command]
-async fn set_bloom_equipped_hat(
-    state: tauri::State<'_, LauncherState>,
-    hat_id: Option<String>,
-    colorway_id: Option<String>,
-) -> Result<(), String> {
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let body = serde_json::json!({ "hatId": hat_id, "colorwayId": colorway_id });
-    let mut response = send_bloom_hat_request(
-        &session,
-        reqwest::Method::PUT,
-        "/v1/hats/equipped",
-        Some(&body),
-    )
-    .await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored).await.map_err(|error| {
-            format!("Your selected Microsoft account needs to reconnect: {error}")
-        })?;
-        response = send_bloom_hat_request(
-            &session,
-            reqwest::Method::PUT,
-            "/v1/hats/equipped",
-            Some(&body),
-        )
-        .await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        let detail = response.text().await.unwrap_or_default();
-        return Err(if detail.is_empty() {
-            format!("Bloom could not equip the hat ({status}).")
-        } else {
-            format!("Bloom could not equip the hat ({status}): {detail}")
-        });
-    }
-    save_refreshed_launcher_session(&state, &stored, session)
-}
-
-#[tauri::command]
-async fn list_bloom_wings() -> Result<Vec<BloomWingCatalogItem>, String> {
-    bloom_backend_request(reqwest::Method::GET, "/v1/wings", 10)?
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's wing catalog is unavailable: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's wing catalog rejected the request: {error}"))?
-        .json::<BloomWingCatalogResponse>()
-        .await
-        .map(|response| response.items)
-        .map_err(|error| format!("Bloom's wing catalog returned invalid data: {error}"))
-}
-
-#[tauri::command]
-async fn load_bloom_wing_preview_data(
-    wing_id: String,
-    colorway_id: Option<String>,
-) -> Result<BloomWingPreviewData, String> {
-    use base64::Engine;
-    let client = bloom_http_client()?;
-    let path = colorway_id
-        .map(|id| format!("/v1/wings/{wing_id}/colorways/{id}/preview"))
-        .unwrap_or_else(|| format!("/v1/wings/{wing_id}/preview"));
-    let lease = client
-        .get(format!("{}{}", BACKEND_URL.trim_end_matches('/'), path))
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's wing preview is unavailable: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's wing preview could not be opened: {error}"))?
-        .json::<BloomWingAssetLease>()
-        .await
-        .map_err(|error| format!("Bloom's wing service returned invalid data: {error}"))?;
-    let bytes = client
-        .get(&lease.url)
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's wing preview could not be downloaded: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's wing preview download was rejected: {error}"))?
-        .bytes()
-        .await
-        .map_err(|error| format!("Bloom's wing preview was incomplete: {error}"))?;
-    if bytes.len() > 3 * 1024 * 1024 {
-        return Err("Bloom's wing preview is unexpectedly large.".into());
-    }
-    Ok(BloomWingPreviewData {
-        data_url: format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(bytes)
-        ),
-        revision: lease.revision,
-    })
-}
-
-async fn send_bloom_wing_request(
-    session: &MinecraftSession,
-    method: reqwest::Method,
-    path: &str,
-    body: Option<&serde_json::Value>,
-) -> Result<reqwest::Response, String> {
-    send_bloom_authenticated_request(
-        session,
-        method,
-        path,
-        body,
-        "Bloom's wing service is unavailable",
-    )
-    .await
-}
-
-#[tauri::command]
-async fn get_bloom_wing_account_state(
-    state: tauri::State<'_, LauncherState>,
-) -> Result<BloomWingAccountState, String> {
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let mut response =
-        send_bloom_wing_request(&session, reqwest::Method::GET, "/v1/wings/me", None).await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored).await.map_err(|error| {
-            format!("Your selected Microsoft account needs to reconnect: {error}")
-        })?;
-        response =
-            send_bloom_wing_request(&session, reqwest::Method::GET, "/v1/wings/me", None).await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        return Err(format!(
-            "Bloom's wing service rejected the account state ({status})."
-        ));
-    }
-    let result = response
-        .json::<BloomWingAccountState>()
-        .await
-        .map_err(|error| format!("Bloom's wing service returned invalid account data: {error}"))?;
-    save_refreshed_launcher_session(&state, &stored, session)?;
-    Ok(result)
-}
-
-#[tauri::command]
-async fn add_bloom_wings_to_collection(
-    state: tauri::State<'_, LauncherState>,
-    wing_ids: Vec<String>,
-) -> Result<(), String> {
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let body = serde_json::json!({ "wingIds": wing_ids });
-    let mut response = send_bloom_wing_request(
-        &session,
-        reqwest::Method::PUT,
-        "/v1/wings/collection",
-        Some(&body),
-    )
-    .await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored).await.map_err(|error| {
-            format!("Your selected Microsoft account needs to reconnect: {error}")
-        })?;
-        response = send_bloom_wing_request(
-            &session,
-            reqwest::Method::PUT,
-            "/v1/wings/collection",
-            Some(&body),
-        )
-        .await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        let detail = response.text().await.unwrap_or_default();
-        return Err(if detail.is_empty() {
-            format!("Bloom could not add the wings ({status}).")
-        } else {
-            format!("Bloom could not add the wings ({status}): {detail}")
-        });
-    }
-    save_refreshed_launcher_session(&state, &stored, session)
-}
-
-#[tauri::command]
-async fn set_bloom_equipped_wing(
-    state: tauri::State<'_, LauncherState>,
-    wing_id: Option<String>,
-    colorway_id: Option<String>,
-) -> Result<(), String> {
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let body = serde_json::json!({ "wingId": wing_id, "colorwayId": colorway_id });
-    let mut response = send_bloom_wing_request(
-        &session,
-        reqwest::Method::PUT,
-        "/v1/wings/equipped",
-        Some(&body),
-    )
-    .await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored).await.map_err(|error| {
-            format!("Your selected Microsoft account needs to reconnect: {error}")
-        })?;
-        response = send_bloom_wing_request(
-            &session,
-            reqwest::Method::PUT,
-            "/v1/wings/equipped",
-            Some(&body),
-        )
-        .await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        let detail = response.text().await.unwrap_or_default();
-        return Err(if detail.is_empty() {
-            format!("Bloom could not equip the wings ({status}).")
-        } else {
-            format!("Bloom could not equip the wings ({status}): {detail}")
-        });
-    }
-    save_refreshed_launcher_session(&state, &stored, session)
-}
-
-#[tauri::command]
-async fn list_bloom_bracelets() -> Result<Vec<BloomBraceletCatalogItem>, String> {
-    bloom_backend_request(reqwest::Method::GET, "/v1/bracelets", 10)?
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's bracelet catalog is unavailable: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's bracelet catalog rejected the request: {error}"))?
-        .json::<BloomBraceletCatalogResponse>()
-        .await
-        .map(|response| response.items)
-        .map_err(|error| format!("Bloom's bracelet catalog returned invalid data: {error}"))
-}
-
-#[tauri::command]
-async fn load_bloom_bracelet_preview_data(
-    bracelet_id: String,
-    colorway_id: Option<String>,
-) -> Result<BloomBraceletPreviewData, String> {
-    use base64::Engine;
-    let client = bloom_http_client()?;
-    let path = colorway_id
-        .map(|id| format!("/v1/bracelets/{bracelet_id}/colorways/{id}/preview"))
-        .unwrap_or_else(|| format!("/v1/bracelets/{bracelet_id}/preview"));
-    let lease = client
-        .get(format!("{}{}", BACKEND_URL.trim_end_matches('/'), path))
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's bracelet preview is unavailable: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's bracelet preview could not be opened: {error}"))?
-        .json::<BloomBraceletAssetLease>()
-        .await
-        .map_err(|error| format!("Bloom's bracelet service returned invalid data: {error}"))?;
-    let bytes = client
-        .get(&lease.url)
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
-        .await
-        .map_err(|error| format!("Bloom's bracelet preview could not be downloaded: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Bloom's bracelet preview download was rejected: {error}"))?
-        .bytes()
-        .await
-        .map_err(|error| format!("Bloom's bracelet preview was incomplete: {error}"))?;
-    if bytes.len() > 3 * 1024 * 1024 {
-        return Err("Bloom's bracelet preview is unexpectedly large.".into());
-    }
-    Ok(BloomBraceletPreviewData {
-        data_url: format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(bytes)
-        ),
-        revision: lease.revision,
-    })
-}
-
-async fn send_bloom_bracelet_request(
-    session: &MinecraftSession,
-    method: reqwest::Method,
-    path: &str,
-    body: Option<&serde_json::Value>,
-) -> Result<reqwest::Response, String> {
-    send_bloom_authenticated_request(
-        session,
-        method,
-        path,
-        body,
-        "Bloom's bracelet service is unavailable",
-    )
-    .await
-}
-
-#[tauri::command]
-async fn get_bloom_bracelet_account_state(
-    state: tauri::State<'_, LauncherState>,
-) -> Result<BloomBraceletAccountState, String> {
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let mut response =
-        send_bloom_bracelet_request(&session, reqwest::Method::GET, "/v1/bracelets/me", None)
-            .await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored)
-            .await
-            .map_err(|e| format!("Your selected Microsoft account needs to reconnect: {e}"))?;
-        response =
-            send_bloom_bracelet_request(&session, reqwest::Method::GET, "/v1/bracelets/me", None)
-                .await?;
-    }
-    if !response.status().is_success() {
-        return Err(format!(
-            "Bloom's bracelet service rejected the account state ({}).",
-            response.status()
-        ));
-    }
-    let result = response
-        .json::<BloomBraceletAccountState>()
-        .await
-        .map_err(|e| format!("Bloom's bracelet service returned invalid account data: {e}"))?;
-    save_refreshed_launcher_session(&state, &stored, session)?;
-    Ok(result)
-}
-
-#[tauri::command]
-async fn add_bloom_bracelets_to_collection(
-    state: tauri::State<'_, LauncherState>,
-    bracelet_ids: Vec<String>,
-) -> Result<(), String> {
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let body = serde_json::json!({ "braceletIds": bracelet_ids });
-    let mut response = send_bloom_bracelet_request(
-        &session,
-        reqwest::Method::PUT,
-        "/v1/bracelets/collection",
-        Some(&body),
-    )
-    .await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored)
-            .await
-            .map_err(|e| format!("Your selected Microsoft account needs to reconnect: {e}"))?;
-        response = send_bloom_bracelet_request(
-            &session,
-            reqwest::Method::PUT,
-            "/v1/bracelets/collection",
-            Some(&body),
-        )
-        .await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        let detail = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "Bloom could not add the bracelets ({status}): {detail}"
-        ));
-    }
-    save_refreshed_launcher_session(&state, &stored, session)
-}
-
-#[tauri::command]
-async fn set_bloom_equipped_bracelet(
-    state: tauri::State<'_, LauncherState>,
-    bracelet_id: Option<String>,
-    colorway_id: Option<String>,
-    arm: String,
-) -> Result<(), String> {
-    if arm != "left" && arm != "right" {
-        return Err("Bracelet arm must be left or right.".into());
-    }
-    let stored = launcher_session(&state)?;
-    let mut session = stored.clone();
-    let body =
-        serde_json::json!({ "braceletId": bracelet_id, "colorwayId": colorway_id, "arm": arm });
-    let mut response = send_bloom_bracelet_request(
-        &session,
-        reqwest::Method::PUT,
-        "/v1/bracelets/equipped",
-        Some(&body),
-    )
-    .await?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        session = refresh_minecraft_session(&stored)
-            .await
-            .map_err(|e| format!("Your selected Microsoft account needs to reconnect: {e}"))?;
-        response = send_bloom_bracelet_request(
-            &session,
-            reqwest::Method::PUT,
-            "/v1/bracelets/equipped",
-            Some(&body),
-        )
-        .await?;
-    }
-    if !response.status().is_success() {
-        let status = response.status();
-        let detail = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "Bloom could not equip the bracelet ({status}): {detail}"
-        ));
-    }
-    save_refreshed_launcher_session(&state, &stored, session)
-}
-
-#[tauri::command]
 async fn search_modrinth_content(
     query: String,
     game_version: String,
@@ -1243,6 +363,72 @@ async fn search_modrinth_content(
         .json::<CatalogSearchResult>()
         .await
         .map_err(|error| format!("The Bloom mod catalog returned invalid data: {error}"))
+}
+
+#[tauri::command]
+async fn list_modrinth_modpack_releases(
+    project_id: String,
+) -> Result<Vec<ModrinthModpackRelease>, String> {
+    let project_id = project_id.trim();
+    if !valid_modrinth_project_id(project_id) {
+        return Err("That Modrinth modpack selection is invalid.".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent(concat!(
+            "BloomClient/",
+            env!("CARGO_PKG_VERSION"),
+            " (support@bloomclient.org)"
+        ))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let loaders = serde_json::to_string(&["fabric"]).map_err(|error| error.to_string())?;
+    let versions = client
+        .get(format!(
+            "https://api.modrinth.com/v2/project/{project_id}/version"
+        ))
+        .query(&[
+            ("loaders", loaders.as_str()),
+            ("include_changelog", "false"),
+        ])
+        .send()
+        .await
+        .map_err(|error| format!("Bloom could not load that modpack's releases: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Modrinth rejected that modpack release request: {error}"))?
+        .json::<Vec<ModrinthVersion>>()
+        .await
+        .map_err(|error| format!("Modrinth returned invalid modpack release data: {error}"))?;
+
+    Ok(versions
+        .into_iter()
+        .filter_map(|version| {
+            if !version.loaders.iter().any(|loader| loader == "fabric") {
+                return None;
+            }
+            let file = version
+                .files
+                .iter()
+                .find(|file| {
+                    file.primary && file.filename.to_ascii_lowercase().ends_with(".mrpack")
+                })
+                .or_else(|| {
+                    version
+                        .files
+                        .iter()
+                        .find(|file| file.filename.to_ascii_lowercase().ends_with(".mrpack"))
+                })?;
+            Some(ModrinthModpackRelease {
+                id: version.id,
+                version_number: version.version_number,
+                version_type: version.version_type,
+                game_versions: version.game_versions,
+                date_published: version.date_published,
+                file_name: file.filename.clone(),
+                file_size: file.size,
+            })
+        })
+        .collect())
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -2442,184 +1628,6 @@ async fn load_custom_background() -> Result<Option<String>, String> {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct LockerSkin {
-    id: String,
-    name: String,
-    created_at: u64,
-    #[serde(default)]
-    data_url: String,
-}
-
-fn skins_directory() -> Result<std::path::PathBuf, String> {
-    let directory = bloom_data_dir()?.join("skins");
-    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    Ok(directory)
-}
-
-fn skins_index_path() -> Result<std::path::PathBuf, String> {
-    Ok(skins_directory()?.join("skins.json"))
-}
-
-fn read_skin_index() -> Vec<LockerSkin> {
-    skins_index_path()
-        .ok()
-        .and_then(|path| std::fs::read(path).ok())
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
-}
-
-fn valid_skin_png(bytes: &[u8]) -> bool {
-    if bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" {
-        return false;
-    }
-    let width = u32::from_be_bytes(bytes[16..20].try_into().unwrap_or_default());
-    let height = u32::from_be_bytes(bytes[20..24].try_into().unwrap_or_default());
-    width >= 64 && width <= 1024 && width % 64 == 0 && (height == width || height * 2 == width)
-}
-
-fn list_locker_skins_blocking() -> Result<Vec<LockerSkin>, String> {
-    use base64::Engine;
-    let directory = skins_directory()?;
-    let mut skins = read_skin_index();
-    skins.retain(|skin| directory.join(format!("{}.png", skin.id)).is_file());
-    for skin in &mut skins {
-        let bytes = std::fs::read(directory.join(format!("{}.png", skin.id)))
-            .map_err(|error| error.to_string())?;
-        skin.data_url = format!(
-            "data:image/png;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(bytes)
-        );
-    }
-    skins.sort_by_key(|skin| std::cmp::Reverse(skin.created_at));
-    Ok(skins)
-}
-
-#[tauri::command]
-async fn list_locker_skins() -> Result<Vec<LockerSkin>, String> {
-    tauri::async_runtime::spawn_blocking(list_locker_skins_blocking)
-        .await
-        .map_err(|error| format!("The skin library reader stopped unexpectedly: {error}"))?
-}
-
-fn save_locker_skin_blocking(name: String, bytes: Vec<u8>) -> Result<LockerSkin, String> {
-    if bytes.len() > 4 * 1024 * 1024 {
-        return Err("Skin files must be smaller than 4 MB.".into());
-    }
-    if !valid_skin_png(&bytes) {
-        return Err("Choose a valid 64×64 or 64×32 Minecraft PNG skin.".into());
-    }
-    let created_at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|error| error.to_string())?
-        .as_millis() as u64;
-    let id = format!("skin-{created_at}");
-    let clean_name = name.trim().trim_end_matches(".png").trim();
-    let skin = LockerSkin {
-        id: id.clone(),
-        name: if clean_name.is_empty() {
-            "Custom Skin".into()
-        } else {
-            clean_name.chars().take(48).collect()
-        },
-        created_at,
-        data_url: String::new(),
-    };
-    let directory = skins_directory()?;
-    let temporary = directory.join(format!("{id}.png.part"));
-    std::fs::write(&temporary, bytes).map_err(|error| error.to_string())?;
-    std::fs::rename(&temporary, directory.join(format!("{id}.png")))
-        .map_err(|error| error.to_string())?;
-    let mut index = read_skin_index();
-    index.push(skin.clone());
-    std::fs::write(
-        skins_index_path()?,
-        serde_json::to_vec_pretty(&index).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
-    list_locker_skins_blocking()?
-        .into_iter()
-        .find(|item| item.id == id)
-        .ok_or("Bloom saved the skin but could not reload it.".into())
-}
-
-#[tauri::command]
-async fn save_locker_skin(name: String, bytes: Vec<u8>) -> Result<LockerSkin, String> {
-    tauri::async_runtime::spawn_blocking(move || save_locker_skin_blocking(name, bytes))
-        .await
-        .map_err(|error| format!("The skin importer stopped unexpectedly: {error}"))?
-}
-
-#[tauri::command]
-fn open_skins_folder() -> Result<(), String> {
-    command_without_console("explorer.exe")
-        .arg(skins_directory()?)
-        .spawn()
-        .map_err(|error| format!("The skins folder could not be opened: {error}"))?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn apply_locker_skin(
-    state: tauri::State<'_, LauncherState>,
-    skin_id: String,
-    variant: String,
-) -> Result<serde_json::Value, String> {
-    if !matches!(variant.as_str(), "classic" | "slim") {
-        return Err("Skin model must be Classic or Slim.".into());
-    }
-    let skin = read_skin_index()
-        .into_iter()
-        .find(|item| item.id == skin_id)
-        .ok_or("That skin is no longer in your locker.")?;
-    let bytes = std::fs::read(skins_directory()?.join(format!("{}.png", skin.id)))
-        .map_err(|error| format!("Bloom could not read that skin: {error}"))?;
-    if !valid_skin_png(&bytes) {
-        return Err("That skin file is not a valid Minecraft skin PNG.".into());
-    }
-    let stored = state
-        .session
-        .lock()
-        .map_err(|_| "Bloom could not read the active Minecraft account.")?
-        .clone()
-        .or_else(saved_session)
-        .ok_or("Sign in with Microsoft before applying a skin.")?;
-    let session = refresh_minecraft_session(&stored)
-        .await
-        .map_err(|error| format!("Your selected Microsoft account needs to reconnect: {error}"))?;
-    let file = reqwest::multipart::Part::bytes(bytes)
-        .file_name(format!("{}.png", skin.name))
-        .mime_str("image/png")
-        .map_err(|error| format!("Bloom could not prepare the skin upload: {error}"))?;
-    let form = reqwest::multipart::Form::new()
-        .text("variant", variant)
-        .part("file", file);
-    let response = reqwest::Client::new()
-        .post("https://api.minecraftservices.com/minecraft/profile/skins")
-        .bearer_auth(&session.access_token)
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|error| format!("Minecraft skin upload could not start: {error}"))?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let details = response.text().await.unwrap_or_default();
-        return Err(if details.is_empty() {
-            format!("Minecraft rejected the skin upload ({status}).")
-        } else {
-            format!("Minecraft rejected the skin upload ({status}): {details}")
-        });
-    }
-    save_account_session(&session, true)?;
-    *state
-        .session
-        .lock()
-        .map_err(|_| "Bloom could not save the refreshed Minecraft account.")? =
-        Some(session.clone());
-    Ok(serde_json::json!({ "id": session.uuid, "name": session.username }))
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
 struct AutoTuneProfile {
     target_fps: u32,
     memory_mb: u32,
@@ -2899,6 +1907,33 @@ async fn get_minecraft_releases() -> Result<Vec<serde_json::Value>, String> {
         .collect())
 }
 
+fn resolve_instance_target(
+    directory: &str,
+    instance_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    let game_dir = if directory.starts_with(".minecraft") {
+        std::env::var("APPDATA")
+            .map_err(|_| "APPDATA is unavailable.".to_string())?
+            .into()
+    } else {
+        std::path::PathBuf::from(directory)
+    };
+    let mut target = if directory.starts_with(".minecraft") {
+        game_dir.join(directory)
+    } else {
+        game_dir.join(instance_id)
+    };
+    if target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.eq_ignore_ascii_case("instances"))
+        .unwrap_or(false)
+    {
+        target = target.join(instance_id);
+    }
+    Ok(target)
+}
+
 fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, String> {
     if config.name.trim().is_empty() {
         return Err("Choose an instance name first.".into());
@@ -2921,26 +1956,7 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
     if config.id.is_empty() {
         return Err("Choose an instance name containing letters or numbers.".into());
     }
-    let game_dir = if config.directory.starts_with(".minecraft") {
-        std::env::var("APPDATA")
-            .map_err(|_| "APPDATA is unavailable.".to_string())?
-            .into()
-    } else {
-        std::path::PathBuf::from(&config.directory)
-    };
-    let mut target = if config.directory.starts_with(".minecraft") {
-        game_dir.join(&config.directory)
-    } else {
-        game_dir.join(&config.id)
-    };
-    if target
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.eq_ignore_ascii_case("instances"))
-        .unwrap_or(false)
-    {
-        target = target.join(&config.id);
-    }
+    let target = resolve_instance_target(&config.directory, &config.id)?;
     std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
     for (enabled, folder) in [
         (
@@ -2956,7 +1972,7 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
         }
     }
     config.directory = target.to_string_lossy().to_string();
-    sync_bloom_cosmetics_mod(&config)?;
+    remove_bloom_cosmetics_mod(&config)?;
     if config.visible {
         if let Some(profile) = saved_autotune_profile() {
             apply_autotune_to_config(&mut config, &profile)?;
@@ -3005,7 +2021,7 @@ fn list_instances_blocking() -> Result<Vec<InstanceConfig>, String> {
             if let Ok(bytes) = std::fs::read(entry.path()) {
                 if let Ok(instance) = serde_json::from_slice::<InstanceConfig>(&bytes) {
                     if instance.visible {
-                        let _ = sync_bloom_cosmetics_mod(&instance);
+                        let _ = remove_bloom_cosmetics_mod(&instance);
                         instances.push(instance);
                     }
                 }
@@ -3320,21 +2336,32 @@ fn open_instance_folder(instance_id: String, category: Option<String>) -> Result
         .map_err(|error| format!("Bloom could not open this instance folder: {error}"))
 }
 
-fn import_instance_mod_files_blocking(
+fn content_import_details(category: &str) -> Result<(&'static str, &'static str), String> {
+    match category {
+        "mods" => Ok(("jar", "mod")),
+        "resourcepacks" => Ok(("zip", "resource pack")),
+        "shaderpacks" => Ok(("zip", "shader")),
+        _ => Err("Unsupported instance content category.".into()),
+    }
+}
+
+fn import_instance_content_files_blocking(
     instance_id: String,
+    category: String,
     paths: Vec<String>,
 ) -> Result<Vec<String>, String> {
+    let (extension, item_label) = content_import_details(&category)?;
     if paths.is_empty() {
-        return Err("Drop one or more Fabric mod JAR files.".into());
+        return Err(format!("Drop one or more {item_label} files."));
     }
     let config = load_instance(&instance_id)?;
-    if !config.loader.eq_ignore_ascii_case("fabric") {
+    if category == "mods" && !config.loader.eq_ignore_ascii_case("fabric") {
         return Err(
             "Drag-and-drop mod installation currently supports Fabric instances only.".into(),
         );
     }
-    let mods = content_folder(&config, "mods")?;
-    std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
+    let target_folder = content_folder(&config, &category)?;
+    std::fs::create_dir_all(&target_folder).map_err(|error| error.to_string())?;
     let mut imported = Vec::new();
     for raw in paths {
         let source = std::path::PathBuf::from(raw);
@@ -3342,16 +2369,23 @@ fn import_instance_mod_files_blocking(
             || !source
                 .extension()
                 .and_then(|value| value.to_str())
-                .map(|value| value.eq_ignore_ascii_case("jar"))
+                .map(|value| value.eq_ignore_ascii_case(extension))
                 .unwrap_or(false)
         {
-            return Err("Only .jar mod files can be dropped into Mods.".into());
+            return Err(format!(
+                "Only .{extension} files can be dropped into {}.",
+                match category.as_str() {
+                    "mods" => "Mods",
+                    "resourcepacks" => "Resource Packs",
+                    _ => "Shaders",
+                }
+            ));
         }
         let file = std::fs::File::open(&source)
             .map_err(|error| format!("Could not read {}: {error}", source.display()))?;
         let mut archive = zip::ZipArchive::new(file)
-            .map_err(|_| format!("{} is not a valid mod JAR.", source.display()))?;
-        if archive.by_name("fabric.mod.json").is_err() {
+            .map_err(|_| format!("{} is not a valid archive.", source.display()))?;
+        if category == "mods" && archive.by_name("fabric.mod.json").is_err() {
             return Err(format!(
                 "{} is not a Fabric mod.",
                 source
@@ -3363,11 +2397,11 @@ fn import_instance_mod_files_blocking(
         let name = source
             .file_name()
             .and_then(|value| value.to_str())
-            .ok_or("A dropped mod has an invalid filename.")?
+            .ok_or_else(|| format!("A dropped {item_label} has an invalid filename."))?
             .to_string();
-        let destination = mods.join(&name);
+        let destination = target_folder.join(&name);
         if source.canonicalize().ok() != destination.canonicalize().ok() {
-            let temporary = mods.join(format!(".{name}.bloom-import"));
+            let temporary = target_folder.join(format!(".{name}.bloom-import"));
             std::fs::copy(&source, &temporary)
                 .map_err(|error| format!("Could not import {name}: {error}"))?;
             if destination.exists() {
@@ -3382,6 +2416,13 @@ fn import_instance_mod_files_blocking(
     Ok(imported)
 }
 
+fn import_instance_mod_files_blocking(
+    instance_id: String,
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    import_instance_content_files_blocking(instance_id, "mods".into(), paths)
+}
+
 #[tauri::command]
 async fn import_instance_mod_files(
     instance_id: String,
@@ -3392,6 +2433,19 @@ async fn import_instance_mod_files(
     })
     .await
     .map_err(|error| format!("The mod importer stopped unexpectedly: {error}"))?
+}
+
+#[tauri::command]
+async fn import_instance_content_files(
+    instance_id: String,
+    category: String,
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        import_instance_content_files_blocking(instance_id, category, paths)
+    })
+    .await
+    .map_err(|error| format!("The content importer stopped unexpectedly: {error}"))?
 }
 
 #[tauri::command]
@@ -4721,15 +3775,6 @@ fn install_instance_files(
             );
             install_fabric_api(config)?;
         }
-        if config.version == "1.21.11" {
-            emit_launch(
-                app,
-                instance_id,
-                "installing",
-                scale(95),
-                "Installing Bloom Cosmetics",
-            );
-        }
     } else {
         mc_launcher_core::install::natives::extract_natives(
             &vanilla.libraries,
@@ -4738,29 +3783,15 @@ fn install_instance_files(
         )
         .map_err(|error| error.to_string())?;
     }
-    sync_bloom_cosmetics_mod(config)?;
+    remove_bloom_cosmetics_mod(config)?;
     Ok(version_id)
 }
 
-fn sync_bloom_cosmetics_mod(config: &InstanceConfig) -> Result<(), String> {
-    const FILE_NAME: &str = "bloom-cosmetics-1.21.11.jar";
-    const JAR: &[u8] = include_bytes!("../resources/bloom-cosmetics-1.21.11.jar");
-
-    let supported = config.loader.eq_ignore_ascii_case("fabric") && config.version == "1.21.11";
+fn remove_bloom_cosmetics_mod(config: &InstanceConfig) -> Result<(), String> {
     let mods = std::path::PathBuf::from(&config.directory).join("mods");
-    if !supported && !mods.is_dir() {
+    if !mods.is_dir() {
         return Ok(());
     }
-    std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
-    let destination = mods.join(FILE_NAME);
-    if supported
-        && std::fs::read(&destination)
-            .map(|existing| existing == JAR)
-            .unwrap_or(false)
-    {
-        return Ok(());
-    }
-
     for entry in std::fs::read_dir(&mods)
         .map_err(|error| error.to_string())?
         .flatten()
@@ -4768,20 +3799,11 @@ fn sync_bloom_cosmetics_mod(config: &InstanceConfig) -> Result<(), String> {
         let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
         if name.starts_with("bloom-cosmetics-") && name.contains(".jar") {
             std::fs::remove_file(entry.path()).map_err(|error| {
-                format!("Bloom could not replace an older cosmetics bridge: {error}")
+                format!("Bloom could not remove the retired cosmetics bridge: {error}")
             })?;
         }
     }
-
-    if !supported {
-        return Ok(());
-    }
-
-    let temporary = mods.join(format!("{FILE_NAME}.part"));
-    std::fs::write(&temporary, JAR)
-        .map_err(|error| format!("Bloom could not prepare the cosmetics bridge: {error}"))?;
-    std::fs::rename(&temporary, &destination)
-        .map_err(|error| format!("Bloom could not install the cosmetics bridge: {error}"))
+    Ok(())
 }
 
 fn selected_java(
@@ -5230,37 +4252,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_backend_status,
-            list_bloom_capes,
-            lease_bloom_cape_texture,
-            load_bloom_cape_texture_data,
-            set_bloom_equipped_cape,
-            list_bloom_hats,
-            load_bloom_hat_preview_data,
-            get_bloom_hat_account_state,
-            add_bloom_hats_to_collection,
-            set_bloom_equipped_hat,
-            list_bloom_wings,
-            load_bloom_wing_preview_data,
-            get_bloom_wing_account_state,
-            add_bloom_wings_to_collection,
-            set_bloom_equipped_wing,
-            list_bloom_bracelets,
-            load_bloom_bracelet_preview_data,
-            get_bloom_bracelet_account_state,
-            add_bloom_bracelets_to_collection,
-            set_bloom_equipped_bracelet,
             save_custom_background,
             load_custom_background,
             search_modrinth_content,
+            list_modrinth_modpack_releases,
             request_microsoft_device_code,
             complete_microsoft_login,
             detect_java_installations,
             list_managed_java_runtimes,
             remove_managed_java_runtime,
-            list_locker_skins,
-            save_locker_skin,
-            open_skins_folder,
-            apply_locker_skin,
             detect_hardware_report,
             apply_autotune_profile,
             get_minecraft_releases,
@@ -5274,6 +4274,7 @@ pub fn run() {
             update_instance_settings,
             open_instance_folder,
             import_instance_mod_files,
+            import_instance_content_files,
             open_game_folder,
             install_autotune_benchmark,
             get_autotune_benchmark_result,
@@ -5299,8 +4300,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        account_credential_name, allowed_pack_download, patch_options, safe_pack_path,
-        split_credential_secret, valid_skin_png,
+        account_credential_name, allowed_pack_download, content_import_details, patch_options,
+        resolve_instance_target, safe_pack_path, split_credential_secret,
     };
 
     #[test]
@@ -5325,22 +4326,26 @@ mod tests {
     }
 
     #[test]
-    fn locker_accepts_minecraft_png_dimensions_only() {
-        let mut standard = vec![0; 24];
-        standard[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
-        standard[16..20].copy_from_slice(&64u32.to_be_bytes());
-        standard[20..24].copy_from_slice(&64u32.to_be_bytes());
-        assert!(valid_skin_png(&standard));
-        standard[16..20].copy_from_slice(&65u32.to_be_bytes());
-        assert!(!valid_skin_png(&standard));
-    }
-
-    #[test]
     fn modpack_paths_stay_inside_the_instance() {
         assert!(safe_pack_path("mods/example.jar").is_ok());
         assert!(safe_pack_path("../outside.jar").is_err());
         assert!(safe_pack_path("C:\\outside.jar").is_err());
         assert!(safe_pack_path("/outside.jar").is_err());
+    }
+
+    #[test]
+    fn selected_instance_directory_is_used_as_the_real_parent() {
+        let selected = std::env::temp_dir().join("bloom-selected-game-directory");
+        let target = resolve_instance_target(&selected.to_string_lossy(), "my-instance").unwrap();
+        assert_eq!(target, selected.join("my-instance"));
+    }
+
+    #[test]
+    fn dropped_content_uses_the_active_category_file_type() {
+        assert_eq!(content_import_details("mods").unwrap().0, "jar");
+        assert_eq!(content_import_details("resourcepacks").unwrap().0, "zip");
+        assert_eq!(content_import_details("shaderpacks").unwrap().0, "zip");
+        assert!(content_import_details("settings").is_err());
     }
 
     #[test]

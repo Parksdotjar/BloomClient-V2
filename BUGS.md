@@ -23,6 +23,27 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 | BLOOM-009 | Fixed | Instance content | Resource-pack and shader tabs could not browse or install from Modrinth |
 | BLOOM-010 | Fixed | Performance | Low-end PCs had delayed buttons and freezes during log output or Skin Locker rendering |
 | BLOOM-011 | Fixed | Performance | Packaged client froze during navigation while browser development stayed responsive |
+| BLOOM-012 | Fixed | Native tasks | Child processes briefly flashed terminal windows |
+| BLOOM-013 | Fixed | Cape Shop | Uploaded capes lost metadata and did not appear in the catalog |
+| BLOOM-014 | Fixed | Bloom Cosmetics | Equipped Bloom cape fell back to the Minecraft account cape |
+| BLOOM-015 | Fixed | Cosmetics Manager | Minecraft JSON hat textures sampled the wrong pixels |
+| BLOOM-016 | Fixed | Cosmetics services | Rapid category switching caused account-service failures |
+| BLOOM-017 | Fixed | Bloom Cosmetics | In-game wings rendered inside out |
+| BLOOM-018 | Fixed | Release Manager | Repository paths containing spaces prevented startup |
+| BLOOM-019 | Fixed | Bloom Cosmetics | Fabric Loader 0.19.2 was incorrectly rejected |
+| BLOOM-020 | Fixed | Downloads | Sidebar download badge became stuck at 99 |
+| BLOOM-021 | Fixed | Startup | A white screen appeared for roughly 15 seconds |
+| BLOOM-022 | Fixed | Bloom Cosmetics | Wing placement reset after proxy server transfers |
+| BLOOM-023 | Fixed | Cosmetics | Services duplicated network work and reused stale placement data |
+| BLOOM-024 | Fixed | Cosmetics Manager | Java Block/Item wing groups were not recognized as hinges |
+| BLOOM-025 | Fixed | Cosmetics Manager | Republishing an existing wing returned 502 Bad Gateway |
+| BLOOM-026 | Fixed | Settings | Enabled toggle thumb could remain on the left |
+| BLOOM-027 | Fixed | Accounts | Custom profile picture reset when Microsoft accounts changed |
+| BLOOM-028 | Fixed | Settings | Profile status text and dropdown menus could be clipped |
+| BLOOM-029 | Fixed | Settings | Profile account selector was not centered against its card |
+| BLOOM-030 | Fixed | Modrinth import | Import button label had insufficient contrast and visual weight |
+| BLOOM-031 | Fixed | Modrinth browser | Header X sometimes teleported downward and corrupted its next state |
+| BLOOM-032 | Fixed | Instance creation | Game Directory folder button was a mock control and did not change the real destination |
 
 ---
 
@@ -257,3 +278,155 @@ Use the next ID and record the same fields every time:
 - **Fix:** Wing publishing is now idempotent by slug. A matching wing is updated in place with new model, texture, preview, placement, and publication metadata while preserving its database ID, ownership, equipped state, and added colorways. Its default colorway follows the replacement texture, old core files are cleaned up only after the database update succeeds, and failed updates roll back safely.
 - **Verification:** A live republish of `angel-wings` now returns HTTP 200, preserves the original wing ID, retains its default colorway, and the deployed API health endpoint reports `ok`.
 - **Do not repeat:** Do not implement owner-side cosmetic replacement as delete-and-recreate or as an unconditional insert; both break stable references and turn expected revisions into duplicate-key failures.
+
+## BLOOM-026 — Enabled toggle thumb could remain on the left
+
+- **Status:** Fixed
+- **Area:** Settings / toggles
+- **Symptom:** Some enabled toggles showed an accent-colored track while their white thumb remained in the off position.
+- **Root cause:** JavaScript animation could leave a stale inline transform on the thumb, overriding the transform associated with the current React state class.
+- **Fix:** Toggle position now comes exclusively from the on/off state classes. CSS transitions animate between those two authoritative positions, and protected selectors prevent stale inline transforms from winning.
+- **Verification:** Check every toggle while animations are enabled, disabled, and in Ultra Performance Mode; off must always be left and on must always be right.
+- **Do not repeat:** Never use a persistent inline animation transform as the source of truth for a stateful control.
+
+## BLOOM-027 — Custom profile picture reset when Microsoft accounts changed
+
+- **Status:** Fixed
+- **Area:** Accounts / profile picture
+- **Symptom:** A custom profile picture disappeared after switching, adding, signing out of, or signing back into a Microsoft account.
+- **Root cause:** Account lifecycle handlers cleared profile-picture state even though the picture was intended to customize Bloom Client itself rather than one Minecraft account.
+- **Fix:** The profile picture uses one launcher-wide local storage key and is no longer cleared by Microsoft account lifecycle actions. Both profile avatar locations read the same shared state.
+- **Verification:** Set a picture, switch accounts, add an account, sign out and in, restart Bloom, and select the same image again; the picture must remain consistent.
+- **Do not repeat:** Do not key launcher-wide visual preferences to a Microsoft account or clear them during account authentication changes.
+
+## BLOOM-028 — Profile status text and dropdown menus could be clipped
+
+- **Status:** Fixed
+- **Area:** Settings / My Profile
+- **Symptom:** The profile-picture success message was cut off below the account selector, and dropdown content could be covered or cropped by nearby elements.
+- **Root cause:** Status text was positioned outside the card's reserved flow while rendering containment and ancestor overflow could crop both it and locally rendered floating menus.
+- **Fix:** Status text now participates in the picker layout, wraps safely, and increases the card height. Shared dropdowns and follow-up popovers render in a document-level layer, measure available viewport space, flip upward when needed, and scroll internally when space is limited.
+- **Verification:** Test success and error text, long account names, menus near every viewport edge, short viewports, and minimum supported width. Nothing may overlap or crop the text or menu.
+- **Do not repeat:** Do not place helper text outside a contained card's normal flow or render floating menus inside a clipping ancestor.
+
+## BLOOM-029 — Profile account selector was not centered against its card
+
+- **Status:** Fixed
+- **Area:** Settings / My Profile
+- **Symptom:** The account label was initially too small and vertically offset; after that was corrected, the selector still sat slightly right of the card's true horizontal center.
+- **Root cause:** A broad descendant rule overrode the selector label's typography and margin. The row then centered the selector in flex space remaining between a 47px avatar and a 43px add button, so it was not centered against the full card.
+- **Fix:** The selector owns explicit typography, line height, and two-axis centering; its chevron is positioned independently. The normal profile row uses equal outer grid tracks around a centered middle track, so unequal side-control widths cannot move the selector.
+- **Verification:** Compare the selector and card center coordinates on both axes in the normal state, with a long account name, with a visible status message, during add-account flow, and at default and minimum widths. Typecheck and production build must pass.
+- **Do not repeat:** Never use leftover flex space as the reference frame for a central control when the siblings on each side differ in width.
+
+## BLOOM-030 — Import button label had insufficient contrast and visual weight
+
+- **Status:** Fixed
+- **Area:** Modrinth modpack import
+- **Symptom:** The compact Import action was difficult to read, especially when a light accent color placed white text on a similarly bright fill.
+- **Root cause:** The fill used 82% of the selected accent and referenced an undefined contrast-color variable. The control was also only 45px tall with narrow horizontal padding.
+- **Fix:** The action now uses an explicit white foreground over a 55% accent-to-black mix, a 132px minimum width, 50px height, larger type, and wider spacing. It keeps the existing dark border and adds no glow.
+- **Verification:** The lightest selectable case, Bloom green, has approximately 4.87:1 contrast against white; the other accent choices exceed that. Typecheck and production build must pass.
+- **Do not repeat:** Never assume one light foreground works on a raw user-selectable accent or reference an undefined contrast token.
+
+## BLOOM-031 — Modpacks header X teleported downward and corrupted its next state
+
+- **Status:** Fixed
+- **Area:** Modrinth modpack browser
+- **Symptom:** The red X sometimes jumped downward while being pressed or failed to behave normally. Returning from a modpack's version selector could leave the next close-button state visibly unstable.
+- **Root cause:** The X used `translate: 0 -50%` for vertical centering while Bloom's shared press animation temporarily owns the same `translate` property. The version-back and browser-close meanings also reused one DOM button, allowing an in-progress press animation to survive the state change.
+- **Fix:** The header now uses a symmetric three-column grid to center the title and place the X without any positional transform. Back and close states use distinct React keys, so changing meaning remounts a clean button and discards the old interaction animation.
+- **Verification:** Open and close the browser repeatedly, enter a modpack version selector, press X to return, then immediately press the new X to close. Repeat with the press duration at 0ms and 1500ms; the button must stay centered and every click must perform its current action. Typecheck and production build must pass.
+- **Do not repeat:** Never position an interactive button with the transform longhands owned by a shared interaction animation, and never reuse an animated element when its semantic state changes mid-animation.
+
+## BLOOM-032 — New Instance directory picker did not change the real destination
+
+- **Status:** Fixed
+- **Area:** Instance creation / filesystem
+- **Symptom:** Clicking the folder icon beside Game Directory did nothing, and the displayed path never changed.
+- **Root cause:** The button was shipped with placeholder tooltip text and no click handler even though the native `choose_game_directory` command already existed.
+- **Fix:** The button now opens the operating system's native folder picker, writes the selected absolute folder into the draft, and reports picker failures in the page's normal status area. Instance creation resolves that selected folder as the real parent and creates the instance inside `<selected folder>/<instance id>` before saving the resolved path to Bloom's instance record.
+- **Verification:** Select a different drive/folder, confirm the field changes immediately, create an instance, confirm the instance directory and enabled component folders exist beneath the selected folder, restart Bloom, and confirm the saved instance still points there. The native path-resolution regression test asserts the selected directory remains the parent.
+- **Do not repeat:** Every visible action must have a real handler and an end-to-end native effect before it ships; placeholder tooltips are not an implementation.
+
+## BLOOM-033 — Drag-and-drop content was limited to the Fabric Modrinth browser
+
+- **Status:** Fixed
+- **Area:** Instance content / filesystem
+- **Symptom:** The drop overlay only appeared while browsing Fabric mods. Resource Packs and Shaders had no drop state or importer, and installed-content views could not accept files directly.
+- **Root cause:** Both the window drag listener and native importer were gated to the Modrinth Mods state, with a hard-coded mods destination and JAR validation.
+- **Fix:** The drag listener now follows any active content tab, while the native importer derives the real destination and accepted archive type from Mods, Resource Packs, or Shaders. The old Fabric mod command remains as a compatibility wrapper.
+- **Verification:** Drop a Fabric JAR on Mods, a ZIP on Resource Packs, and a ZIP on Shaders from both installed and browsing views. Confirm each appears in its active list and real instance folder; reject wrong extensions and invalid archives without copying them.
+- **Do not repeat:** Shared content UI must derive behavior from the active category rather than enabling one category through a screen-specific special case.
+
+## BLOOM-034 — Signed-out account flow did not share the account dock
+
+- **Status:** Fixed
+- **Area:** Sidebar / Microsoft authentication
+- **Symptom:** Signed-out users saw an old transparent login row with a fake blue M, then a detached sign-in panel that did not match the signed-in account drawer.
+- **Root cause:** The signed-out state retained its original standalone component after the signed-in footer was redesigned into a sliding dock with a stationary masked drawer.
+- **Fix:** Both states now share the same dock geometry, rise animation, underlap, clipping, and outside/Escape closing behavior. The signed-out drawer presents sequential Copy code and Open Microsoft sign-in actions and uses a bundled four-color Microsoft mark.
+- **Verification:** Open and close by trigger, outside click, and Escape; confirm only the dock moves. Before copying, the redirect row stays dim and disabled. After copying, the first row reads “Copied” and dims while the redirect row enables. Confirm Settings can still add another account through its inline variant.
+- **Do not repeat:** When a persistent shell component is redesigned, audit authenticated, unauthenticated, loading, error, and alternate-entry states before considering it complete.
+
+## BLOOM-035 — Microsoft mark aligned to the top of its identity tile
+
+- **Status:** Fixed
+- **Area:** Sidebar / signed-out account dock
+- **Symptom:** The Microsoft identity tile filled the dock correctly, but its four-color mark sat against the tile's top instead of its center.
+- **Root cause:** The older `.profile span` descendant selector has greater specificity than `.microsoft-mark` and changed the tile from a grid into a normal block while also adding a top margin.
+- **Fix:** The Microsoft tile now overrides the legacy selector with profile-scoped display, margin, font, and explicit child placement rules. The logo is centered by layout on both axes with no positional offsets.
+- **Verification:** Compare the logo and tile center coordinates horizontally and vertically in both closed and raised states; they must match. Test default and minimum window sizes.
+- **Do not repeat:** Before compensating for misalignment, compare selector specificity and computed display/margins for every ancestor and child involved.
+
+## BLOOM-036 — Custom-background surfaces used unrelated opacity and blur rules
+
+- **Status:** Fixed
+- **Area:** Appearance / custom backgrounds
+- **Symptom:** The center became fully transparent, side rails used different theme colors and optional blur state, and many filled controls stayed opaque even when button blur was enabled.
+- **Root cause:** Image opacity, sidebar opacity, sidebar blur, and button blur evolved as independent settings backed by incomplete selector lists rather than one shared surface model.
+- **Fix:** Custom-background mode now keeps the sharp center and blurred side rails on one constrained Interface Darkness value, while blurred controls use their own constrained Element Darkness value and retain accent meaning.
+- **Follow-up:** Element Darkness is stored separately from Interface Darkness, so users can tune control opacity without unexpectedly changing the canvas or side rails. The approved custom-background defaults are now 100% image opacity, 92% interface darkness, and 35% element darkness; a one-time migration updates only the untouched legacy 78%/83% pair and preserves intentional custom values.
+- **Regression fix:** Transparent black controls composited over the already-dark interface and appeared fully black at every slider value. The low end now resolves toward translucent charcoal, and selector coverage includes inactive sidebar actions, settings tabs/layout, the account card, and instance tabs.
+- **Verification:** Test every theme at 55%, the default 78%, and 92% darkness with image opacity at 25%, 50%, and 100%. Confirm the center is never blurred, both rails match its darkness, filled controls remain readable, and Ultra Performance Mode removes blur without removing the dark tint.
+- **Do not repeat:** Background transparency controls must be tokenized globally; never add a new surface with its own unrelated opacity formula or opt-in blur toggle.
+
+## BLOOM-037 — Instances creation plus shifted after revealing
+
+- **Status:** Fixed
+- **Area:** Sidebar / Instances heading
+- **Symptom:** The plus tile appeared to jump left as its hover scale-in animation reached the final frame.
+- **Root cause:** The first implementation transformed an absolutely positioned button. Separating the visual scale still left its hitbox on a fractional percentage-based coordinate; Chromium could round that coordinate differently when the compositor layer was removed after the transition.
+- **Fix:** The control now participates in a centered two-column grid. Hover expands its track from 0px to 30px and the inner tile uses a symmetric clip reveal, eliminating percentage positioning and scale transforms from the complete reveal.
+- **Verification:** Repeatedly enter and leave the complete Instances heading, focus the plus by keyboard, and click it at multiple Button Pop Duration values. The tile must grow and shrink around one stable center without a final-frame shift.
+- **Do not repeat:** Never animate the transform of an absolutely positioned reveal control when a stable inner visual wrapper can own that animation instead.
+
+## BLOOM-038 — AutoTune dots did not advance when benchmark installation completed
+
+- **Status:** Fixed
+- **Area:** AutoTune / workflow progress
+- **Symptom:** The interface changed from installing the benchmark to “Ready to test,” but the active progress dot remained in the same position, making the indicator appear cosmetic.
+- **Root cause:** The dots represented four persisted high-level milestones while the benchmark installer and benchmark runner were collapsed into one parent phase. Live benchmark states such as permission, installing, ready, and running never reached the indicator.
+- **Fix:** Progress now represents five user-facing stages: Scan hardware, Install benchmark, Run test, Build profile, and Apply. The benchmark indicator is derived from its authoritative live stage; ready, running, and result activate dot 3, while an error preserves the stage that actually failed.
+- **Verification:** Accept and scan, start installation, wait for Ready to test, launch the benchmark, generate the profile, and reach Apply. The active dot must move 1 → 2 → 3 → 4 → 5, with completed dots retained. Force errors during installation and execution and confirm they retain dots 2 and 3 respectively.
+- **Do not repeat:** A progress indicator must subscribe to the same state machine that renders the visible step. Never infer progress only from coarse persistence flags when one phase contains multiple user-facing screens.
+
+## BLOOM-039 — Compact action menus overlapped their owning cards
+
+- **Status:** Fixed
+- **Area:** Instance content, instance library, and instance header overflow menus
+- **Symptom:** A three-dot menu positioned itself from the small trigger, so its first action began alongside or inside the mod row instead of beneath the row. The trigger's expanded blue surface also had sharp corners.
+- **Root cause:** Shared floating-menu placement used the trigger bounds and could flip above based on viewport space. Action menus inherited the attached-select shape even though they are detached from a full card.
+- **Fix:** Compact action menus now measure their complete owning row, card, or raised header and use a dedicated downward-only placement function. The menu underlaps the owner's lower edge by 1px, has no visible gap, uses a recessed square top plus rounded lower corners, and adds a downward black inset shadow so it appears to emerge from behind the raised card. Short action menus size to their content and expose no scrollbar track or thumb. Expanded three-dot triggers use an explicit 9px radius.
+- **Verification:** Open menus from the first, middle, and last installed Mod, Resource Pack, and Shader rows; from every full instance card; and from the instance header. Confirm each menu emerges directly from behind its complete owner with no air gap, the owner reads above it, every action is visible without a mini scrollbar, the menu follows scroll/resize, and the trigger highlight stays rounded.
+- **Do not repeat:** Do not use generic select-menu placement for a card action menu. The visual owner—not the icon-sized trigger—is the anchor.
+
+## BLOOM-040 — Windows taskbar icon appeared tiny and blurry
+
+- **Status:** Fixed
+- **Area:** Native Windows branding
+- **Symptom:** The taskbar showed a fuzzy, undersized Bloom flower inside a dark square even though the repository contained high-resolution logo artwork.
+- **Root cause:** The bundled `icon.ico` was stale. Its small native layers contained an older padded dark-square treatment, so Windows faithfully selected already-blurry artwork rather than the clean transparent logo.
+- **Fix:** Regenerated the complete Tauri icon family from `bloom-square-source.png`. The Windows ICO now includes clean transparent 16, 24, 32, 48, 64, and 256px layers, allowing Windows to choose a native-size taskbar image instead of rescaling one bitmap.
+- **Verification:** Inspect the ICO directory and render its 16, 24, 32, and 48px frames. Each frame must be transparent outside the flower, fill the available canvas, and contain no dark rounded plate. Confirm the next native Tauri launch at standard and high-DPI Windows scaling.
+- **Do not repeat:** Rebuild every platform icon from the canonical transparent source when branding changes; replacing only a PNG does not update the icon embedded in the Windows executable.

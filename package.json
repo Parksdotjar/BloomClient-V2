@@ -1,13 +1,13 @@
 {
   "name": "bloom-client-v2",
   "private": true,
-  "version": "1.1.3",
+  "version": "1.1.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:cosmetics": "node scripts/build-cosmetics-mod.mjs",
-    "build:tauri": "npm run build && npm run build:cosmetics",
+    "build:tauri": "npm run build",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -24,8 +24,7 @@
     "animejs": "^4.5.0",
     "lucide-react": "^1.24.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "skinview3d": "^3.4.2"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",

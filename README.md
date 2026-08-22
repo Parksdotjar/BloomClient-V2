@@ -68,6 +68,9 @@ Windows, files, downloads, Java, and Minecraft
 | `src/` | React screens, interface components, frontend services, and shared types |
 | `src-tauri/` | Rust launcher implementation and native platform integration |
 | `benchmark-mod/` | Fabric mod used by the Bloom AutoTune Minecraft benchmark |
+| `bloom-cosmetics-mod/` | Dormant Fabric cosmetics renderer retained for the future VPS restoration |
+| `SHOP_LOCKER_RESTORATION.md` | Shop/Locker behavior, API contracts, migration order, and restoration tests |
+| `COSMETICS_RENDERING_ARCHITECTURE.md` | Manager-to-game rendering flow, 3D attachment/pivots, wing bones, and cape animation atlases |
 | `.github/workflows/` | Automated checks and desktop build workflows |
 
 ## Development

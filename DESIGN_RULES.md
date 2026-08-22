@@ -2,6 +2,8 @@
 
 These rules apply to every future screen, component, and interaction in Bloom Client.
 
+Before revising an existing interface, also review `GOOD_DESIGNS.md` for explicitly approved visual references and `UI_CHANGE_HISTORY.md` for the user's current decisions and the fixes that already proved reliable.
+
 ## Visual language
 
 - Use the existing dark Bloom Client visual system: layered charcoal surfaces, soft borders, restrained shadows, and the active accent color.
@@ -18,16 +20,31 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 
 - The left sidebar is viewport-locked. Its navigation, downloads, logs, and account area must not move when the main page gets taller.
 - Only the main content pane scrolls. Long pages must never increase the sidebar height or create a page-level scrollbar.
+- Check horizontal and vertical alignment separately. When the user asks for an element to be centered, verify both axes unless they explicitly limit the request to one.
+- Define the intended reference frame before centering: control, row, card, content pane, or viewport. A central control must be centered against that reference frame, not merely the flex space left between unequal siblings.
+- Rows with unequal controls on opposite sides use equal outer grid tracks (or another explicitly symmetric layout) around the center content. Changing either side control must not shift the visual center.
 - Keep navigation icons and labels aligned on one consistent grid.
 - Use the same spacing rhythm and card treatment across settings, home, and future screens.
-- Sidebar branding and account areas use separate, slightly darker theme-aware surface zones, divided from navigation by short faded separators rather than full-width rules.
-- Global sidebar navigation stays focused on Home, Instances, Shop, Locker, AutoTune, and Settings; mods, resource packs, and shaders belong inside their owning instance rather than as duplicate global destinations.
+- Sidebar branding and account areas use separate, slightly darker theme-aware surface zones, divided from navigation by short faded separators rather than full-width rules. The brand contains only the Bloom logo and “Bloom Client”; the complete logo-and-name group is centered within the sidebar, and the name is vertically centered against the logo with no subtitle.
+- Instance creation lives in the sidebar's Instances section heading rather than as a separate action beneath the brand. At rest the heading shows only centered `INSTANCES`; hovering or focusing the heading scales in a compact accent plus on its left while the label slides right to make room. Only the plus opens New Instance, and the reveal must not move the recent-instance list.
+- When the sidebar has no instances, replace generic dashed empty copy with one account-dock-style creation card. It uses a full-height accent plus tile at left, one bold `Create instance` label, and a restrained disclosure chevron; the complete card opens New Instance and contains no redundant “no instances” subtitle.
+- Reveal controls keep their interactive hitbox in normal grid layout and reveal only an inner visual tile. Do not place a scaled control from a percentage-based absolute coordinate: compositor layer removal can round that fractional coordinate differently on the final frame. Expand a centered grid track and use a symmetric clip reveal instead.
+- Global sidebar navigation currently stays focused on Home, Instances, AutoTune, and Settings. Shop and Locker are intentionally dormant until the VPS cosmetics restoration checklist is complete; mods, resource packs, and shaders belong inside their owning instance rather than as duplicate global destinations.
 - Home supports a full Dashboard layout and a focused Spotlight launcher layout. Changing layouts only replaces the center home content; the locked sidebar and reserved advertising rail remain structurally unchanged.
+- Spotlight is the bare launcher view: one selected-instance artwork tile and bold name, one wide Play button, and the slightly narrower instance selector stacked directly beneath it. It contains no welcome eyebrow, marketing headline, instructional paragraph, surrounding dashboard card, or duplicated version copy outside the selector.
+- Changing the Spotlight selection may softly refresh only the artwork/name identity. The Play and selector controls remain fixed in place, and all motion respects the existing animation settings.
 - Advertising is a separate reserved rail. Drawers, modals, menus, dimming layers, and other overlays must stop at the ad-rail boundary and must never cover or intercept advertisements.
 - AutoTune must clearly distinguish measured results, hardware-based estimates, and future/mock capabilities. Never present an estimate or unfinished benchmark as a completed optimization.
 - AutoTune benchmark reports must name the workload they actually measured. A Bloom/WebView graphics test must never be labeled as measured Minecraft FPS; in-game claims require the dedicated Minecraft benchmark instrumentation.
 - Real AutoTune comparisons use the same Minecraft, Fabric Loader, Fabric API, benchmark-mod version, seed, world settings, warm-up duration, measurement duration, and camera path. Benchmark instances remain private and hidden from the normal instance library.
 - AutoTune Phase 3 decisions combine measured Minecraft throughput, 1% lows, frame-time percentiles, peak Java memory, display refresh rate, and hardware limits. Every recommendation must include a plain-language reason and remain local until Phase 4 receives explicit apply confirmation.
+- AutoTune's first-run explanation is a calm centered onboarding view: one plain-language title, one short summary, four compact explanation rows, and Bloom's explicit Accept and scan action. Do not expose phase dashboards, dense consent copy, pagination dots, or arrow navigation before the user accepts.
+- First-run explanation rows use the current theme surfaces and accent color. They explain hardware scanning, the controlled Minecraft benchmark, profile creation, and user approval without copying reference-product language or colors.
+- After acceptance, AutoTune shows only the current step. Use one short centered step title, one result-or-action surface, and five small progress dots beneath the active content for Scan hardware, Install benchmark, Run test, Build profile, and Apply; never show a numeric fraction, line segments, or stack completed phase dashboards above the next task.
+- AutoTune progress is derived from the authoritative live workflow state, not a decorative phase index. Installing activates dot 2; the ready/running/result benchmark states activate dot 3; errors retain the stage that failed; profile and apply activate dots 4 and 5.
+- AutoTune steps keep only copy needed to understand the immediate action or its consequence. Hardware facts, benchmark internals, tuning reasons, and confirmation detail may remain in saved data, but they must not crowd the primary flow.
+- Permission steps must still explain their effect fairly. Keep the always-visible summary concise, then use a `Show details` disclosure for downloads, duration, measurement scope, privacy, replacement behavior, or other facts needed for informed consent.
+- Completing hardware, benchmark, or profile work advances the same focused shell without moving the surrounding launcher layout. The final Apply step still requires explicit confirmation before any instance is changed.
 
 ## Borders and separators
 
@@ -44,7 +61,7 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Depth comes from a restrained black shadow beneath the raised plane's curved lower edge. The shadow must follow that curve, remain darker than the recessed surface, extend only far enough to read clearly, and fade softly downward.
 - A recessed lower plane runs straight upward behind the raised header and remains square across its top edge. Only the lighter raised header curves downward; never round the lower plane's top corners or place a second rounded page slab behind the composition.
 - Never outline the entire layered workspace with a heavy shadow or bright border, and never substitute an accent glow for surface depth.
-- Use this pattern consistently for instance headers, Settings category headers, Shop navigation/catalog workspaces, and View All instance cards.
+- Use this pattern consistently for instance headers, Settings category headers, Modrinth pack browsers, any restored Shop navigation/catalog workspace, and View All instance cards.
 - Empty states use a recessed dark well with one softly raised central action card or button instead of a large plain or dashed empty box.
 
 ## Controls and interaction
@@ -52,42 +69,83 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Never use native browser dropdown menus. Use the Bloom custom dropdown component so the open menu matches the client.
 - Toggles must follow standard semantics: off is gray with the thumb left; on is accent-colored with the thumb right.
 - Every toggle must be backed by real state and an `onChange` handler before it is added to the UI. Never ship a hardcoded toggle with a no-op handler.
+- React state and state classes are authoritative for toggle position. Never leave an inline transform or animation fill value that can override the current on/off position.
 - Interactive controls need hover, focus, and pressed states.
 - Buttons never use outer glows or accent-colored drop shadows. Use background color, restrained borders, and press motion for emphasis instead.
+- Accent-filled buttons with light text must retain at least 4.5:1 text contrast across every selectable accent. Darken the fill when needed instead of adding a bright outline or glow.
 - Button press duration is user-configurable from 0–1500 ms (750 ms by default), but the visual must run independently through compositor animation and must never delay the button action, force layout, or schedule a React render.
-- Use Anime.js for purposeful UI motion, including toggle thumb movement and subtle state transitions. Respect the Show Animations setting.
+- Never use the `translate` or `scale` longhands to position a button in its resting layout because the shared press animation owns those properties. Center and place buttons with grid, flexbox, or inset geometry so interaction motion cannot move their baseline position.
+- Use Anime.js for purposeful UI motion only when it cannot compete with an authoritative CSS or React state. Toggle thumb movement uses a CSS transition between state classes. All motion respects Show Animations, Ultra Performance Mode, and reduced-motion preferences.
 - Do not expose browser context menus or browser-looking actions inside the client.
 - Desktop window controls use Bloom's custom dim icon buttons inside a transparent draggable region; close uses a restrained red hover state, and the native operating-system title bar remains disabled.
 - Compact filters belong behind a recognizable filter icon when showing every option inline would clutter a toolbar; the active filter is indicated with a muted accent state.
 - Dropdown menus and their follow-up confirmation popovers render through a document-level overlay with a top-layer stack order so cards, scroll regions, paint containment, and parent overflow can never cover or clip them.
+- Compact three-dot action menus are anchored to the complete card or raised platform that owns the trigger—not to the trigger's small rectangle. They begin one pixel behind the owner's lower edge with no visible air gap, use a square recessed top and rounded lower corners, and add a downward black inset shadow so the owner reads as physically raised above the revealed menu.
+- Short action menus must size to their actions and never show a scrollbar track or thumb. If a future action menu genuinely needs many items, reconsider the menu structure before adding a visible mini scrollbar.
+- A three-dot trigger's expanded accent surface uses the same rounded-square radius as the resting control. Opening a menu must never expose a sharp rectangular highlight behind a rounded icon button.
+- Helper, success, and error messages stay in normal layout flow, wrap safely, and reserve their own height. Never position status text outside a contained card where it can be cropped or overlap the next section.
 - File imports must use a clearly labeled accent-colored action and report genuine native progress through Downloads; never simulate import progress.
+- File and folder controls must invoke a real native picker, update the visible value after selection, and feed that exact value into the filesystem operation. Never ship a mock picker, placeholder tooltip, or UI-only path change.
 - New-instance provider browsers open as a centered top-layer panel while only the underlying main content dims and blurs. Reuse the same catalog rows, search surface, provider-link action, and accent plus action as instance content browsers; selecting a pack must enter the real native import and Downloads pipeline.
+- New Instance uses progressive disclosure. Its first view contains only identity/version/directory choices, component folders, and the visible Create action. Java selection, memory, JVM arguments, resolution, launcher visibility, and shortcuts live in one collapsed “Show advanced options” section.
+- The advanced disclosure sits after the essential choices and before the action row. Opening it expands the page and moves the action row downward naturally; closing it restores the compact layout. Never position the Create action below always-visible expert settings.
 
 ## Large collections
 
 - Content libraries such as mods, resource packs, and shaders show at most 20 entries per page.
 - Installed content lists use restrained alternating row surfaces to make adjacent files easier to track. Per-item overflow menus stay above the list and use semantic hover colors: green for provider links and red for deletion.
 - Search, sorting, and filters apply before pagination, and changing any of them returns the user to page one.
-- Pagination controls use Bloom's custom button styling and remain theme- and accent-aware.
+- Every paginated collection uses the same friendly pagination control; never leave one library with older “Previous” and “Next” text buttons.
+- Pagination uses large 44px rounded-square arrow buttons without dark outlines. Between them, a matching borderless status surface reads only `current / total`, with no “Page” label. Buttons remain theme-aware and retain accessible labels and titles.
 - Provider catalogs must filter by the instance's exact Minecraft version and loader before showing an install action.
-- Catalog installation uses the accent-filled plus action and reports genuine byte progress through Downloads; returning to the installed list uses a compact red Back action with a rounded left-arrow icon.
+- Catalog installation uses an accent-filled rounded-square plus action matching the neighboring provider-link radius and reports genuine byte progress through Downloads; it is never a circular control. Returning to the installed list uses a compact red Back action with a rounded left-arrow icon.
 - Catalog rows place a compact neutral provider-link icon beside the install action. It opens the exact provider project, turns green with dark icon contrast on hover, and never replaces the primary install button.
 - Instance collection search and filters live in a taller, narrower floating surface overlapping the collection's bottom edge by roughly half its height; its icon, text, and filter scale together, and pagination sits beneath it while the list scrolls independently.
+- The Modrinth modpack browser uses that floating-search pattern more prominently: the search surface is a large 70px-tall, up-to-800px-wide control pulled upward into the list, uses a visibly raised dark `--panel-strong` surface with a pure-black 2px edge, and casts a broad two-layer soft black shadow. Its icon uses the current accent and its 14px placeholder has readable muted contrast. It must remain clearly separated from pagination without a bright or accent-colored outline or glow.
+- Clicking anywhere on the modpack search surface focuses its input. While focused, the whole surface scales smoothly to 1.025; when focus leaves, it eases back to 1. The scale changes no colors and is disabled by Show Animations off, reduced motion, and Ultra Performance Mode.
+- The Modpacks raised header uses the same 16px radius on all four corners. Its top and bottom curves must match exactly.
 - The full instance library uses a responsive card grid with direct Play and folder actions, while the sidebar remains a short recent-access list rather than duplicating the entire library.
+- The instance-library toolbar contains only the flexible search field and a filter control aligned at the far right. Do not add a redundant visible instance-count label beside the filter.
+- Full instance-library cards use a pointer cursor across the complete clickable block and scale to 1.025 as one unit on hover with Bloom's 800ms ease and no color change. The action row retains a visibly comfortable gap beneath the raised identity platform rather than touching its curved shadow.
+- Clicking a full instance-library card uses the same configurable press-and-spring animation as ordinary buttons. Nested Play, Folder, and More controls animate themselves rather than triggering a second card press.
 - Full instance cards expose View Instance, Add Mods, Settings, and destructive Delete through a top-layer three-dot menu. Full deletion requires an explicit second confirmation and removes both the native instance directory and Bloom's library record.
 - Optional double-click launching behaves consistently across sidebar, Home, and library instance cards. It is disabled by default; when enabled, a quick double-click launches while a single click still opens the instance after only the short double-click recognition window. Dedicated Play buttons always remain immediate.
-- The selected sidebar instance uses one subtly raised neutral-gray identity tile with a restrained gray border and shadow; it must not inherit the accent color, while unselected instances remain flat against the sidebar.
+- Sidebar instance entries use compact horizontal two-surface cards derived from the instance-page header: a darker rounded-square media block on the left and a `--panel` identity surface on the right. A custom instance icon fills the entire media block; missing icons use a large, thick, rounded question mark in theme-muted colors.
+- The sidebar instance media block reaches the card's full top, bottom, and left edges for both uploaded artwork and the fallback question mark. The card outline is an inset shadow rather than layout-consuming border space, preventing a 1px gap on each edge while preserving the visible card boundary.
+- The instance-page Mods, Resource Packs, and Shaders segmented control uses rounded-rectangle corners matching the adjacent Settings button: 13px on the outer control and 9px on the inset selection. It is never pill-shaped.
+- The lifted instance header platform uses one uniform 12px radius on all four corners. Its top and bottom curves must match exactly while the shadow supplies the visual depth.
+- Uploaded instance artwork in the lifted header occupies a full 112px square flush with the header's top, bottom, and left edges. It uses the same panel surface around it—never a contrasting two-tone media platform—and casts a restrained shadow only toward the text side; the identity copy is explicitly layered above that shadow.
+- Instance artwork has no permanently overlapping edit badge and does not use the shared lift/pop motion. Hovering or keyboard-focusing the artwork dims it substantially and reveals one centered horizontal-switch icon; leaving restores the artwork cleanly. The overlay animation respects reduced motion, disabled animations, and Ultra Performance Mode.
+- Sidebar instance names use the profile account selector's visual weight at 13px and 800 weight, with the Minecraft version directly underneath. Long names truncate safely. Selection uses only a slightly stronger neutral border—never an accent fill, position shift, or glow.
+- Primary sidebar navigation labels use the same bold 800-weight typography as sidebar instance names and account selectors. Active navigation changes color and surface only; it does not change the label's weight or cause a text reflow.
+- The signed-in sidebar footer is a compact account dock: full-bleed avatar at left, vertically centered bold account name, and one disclosure chevron. It has no presence decoration, provider subtitle, or redundant Settings gear.
+- The account hub is a bottom-anchored drawer, never a detached popover above the profile. The recessed action UI remains completely stationary in its final position; opening moves only the existing account dock upward while a clip-mask reveals the controls beneath it. The complete drawer overlays Downloads and Logs without moving either link. Closing, outside click, or choosing an action reverses the mask and returns the dock to its original position.
+- Avatars that anchor an account card use the established full-bleed left media treatment: they fill the card height and touch its top, bottom, and left clipping edges instead of floating inside an inset frame.
+- The signed-out Microsoft action is the empty state of the exact same sliding account dock, not a separate banner or floating panel. Its closed label is only “Sign In,” with the real four-color Microsoft mark centered in the full-height left tile. Opening moves only that dock upward and reveals the same stationary clipped drawer beneath it.
+- The Microsoft mark needs its standard light presentation surface. Do not float the small four-color grid directly on the dark account card; center a 27px mark inside the full-height soft-white identity tile so its visual weight matches a full-bleed profile image.
+- The signed-out drawer contains two sequential actions: copy the displayed device code, then open Microsoft sign-in. Copying permanently dims the first row and changes its label to “Copied”; only then may the second row undim and become interactive.
+- Do not add supporting subtext when a concise label already communicates the purpose. Account names do not need “Microsoft account” or “Microsoft connected”; actions such as Profile & Accounts, Client Settings, and Log out do not need explanations unless a future behavior is genuinely ambiguous or consequential.
+- While open, the moved account dock itself becomes the edge-to-edge raised identity platform, matching Settings, Modpacks, and instance headers. Its curved shadow falls onto the attached recessed action drawer below.
+- The expanded account dock is one continuous full-width surface. Outer padding must never expose a separate rounded strip beside the chevron; optional update controls receive their own internal margin without changing the platform's outer silhouette.
+- The recessed account drawer extends upward behind the raised dock by at least the dock's lower-corner radius. Its surface must remain visible beneath both rounded corners with no black triangular cutouts; action positions remain below the overlap rather than shifting upward.
 - Active downloads use one compact accent-filled circular sidebar badge containing the real integer progress without a percent symbol. Completion replaces the number with a universally green check, holds briefly, then fades away after three seconds.
 - The Downloads link eases upward as its progress badge scales in and eases back down as completion disappears. A separate green completion ghost expands beyond the badge and fades fully without changing layout.
 - Avoid decorative accent streaks on repeated cards; depth comes from restrained borders, surface contrast, and hover lift rather than AI-like glowing lines.
+- Each instance content collection (Mods, Resource Packs, and Shaders) uses the same raised top platform. Keep only the category name, item count, compact sort control, and primary Add action; omit decorative title icons and explanatory file-location subtext.
+- A content browser is a state of that same shared platform, not a separately styled screen. Preserve the platform silhouette while changing the title and replacing sort/add with the Back action.
+- Sort dropdowns use one familiar chevron. Do not pair that chevron with a second decorative sort/arrows icon; competing indicators make the control harder to scan.
+- External file dragging uses one shared content drop state for Mods, Resource Packs, and Shaders. Dim the content workspace and scale one white drop-box icon into its center, mirroring the instance/profile artwork hover language; do not add a card, border, instructions, or file-type badge. Derive the real destination from the active tab.
 
-## Cape shop and secure cosmetics
+## Dormant Shop and secure cosmetics
+
+- Shop and Locker are currently removed from the shipped client. Do not restore navigation, launcher services, native commands, renderer bundling, or per-instance renderer injection independently; follow `SHOP_LOCKER_RESTORATION.md` and restore the complete tested pipeline.
+- The source in `bloom-cosmetics-mod/` and the cosmetics authoring guides are dormant restoration material, not an active client feature.
 
 - Bloom capes are free collection items. Never add coins, prices, premium rarity, payment language, or purchase flows to this screen.
 - The default cape catalog uses a three-by-three desktop grid with nine items per page, then reflows to two or one column before cards become cramped.
 - Empty catalogs show an intentional centered “Capes coming soon” state; never invent placeholder products that could be mistaken for released cosmetics.
 - The client stores opaque cape IDs and per-account cart, collection, and equipped state. Private storage paths, permanent bucket URLs, and privileged Supabase keys must never be embedded or persisted in the desktop client.
-- Cape textures are requested through an authenticated provider as short-lived leases. The future Supabase implementation and Fabric bridge replace that provider without changing Shop components.
+- Cape textures must be requested through the restored VPS provider as short-lived leases. Private object URLs and privileged storage/database credentials never belong in the launcher or Fabric mod.
 - Repeated cape cards use cached texture previews and must not create one continuous WebGL renderer per card. Reserve live 3D rendering for a focused preview when it materially improves the experience.
 
 ## Scrollbars
@@ -103,10 +161,21 @@ These rules apply to every future screen, component, and interaction in Bloom Cl
 - Test the home screen at the default window size and at the minimum supported window size.
 
 - Test the screen at a short viewport and a tall viewport.
+- Top-level page platforms keep intentional breathing room beneath the window chrome. Settings uses the same 20px top inset as the instance workspace rather than letting its raised header touch the content viewport edge.
+- Verify centered layouts on both axes and measure them against the intended parent, not the remaining space between siblings.
+- Test unequal side controls, long labels, visible helper/error text, and alternate states that replace or add controls. Reflow the layout before readable text must shrink.
+- Audit the computed CSS cascade for broad descendant selectors before adding compensating margins, transforms, or font rules to a specialized control.
 - Verify the sidebar stays fixed while the content scrolls.
 - Verify theme and accent changes affect every intended highlight.
 - Verify dropdowns, toggles, and inputs work without browser-default UI.
 - Dropdown menus attach directly beneath their triggers with no gap, use a slightly inset width, omit top corner rounding, and remain above surrounding content. Their optimized Anime.js reveal expands downward with ease-in-out motion and staggers only currently visible options; Ultra Performance Mode opens them immediately.
 - Toggle thumbs must keep equal inset spacing from the track edge in both off and on states; derive the on-state travel from track width, thumb size, and padding rather than visually guessing it.
 - Custom-background transparency and blur controls must override every theme surface consistently. Button blur applies only to filled controls, preserves accent meaning, and remains disabled by Ultra Performance Mode.
+- Custom-background mode uses one shared darkness value across the entire shell. The left sidebar and advertising rail use that dark translucent surface with blur; the center uses the exact same tint and opacity without blur; filled controls use a slightly denser version with blur. Do not expose separate blur switches that let these regions drift into incompatible states.
+- The custom-background Interface Darkness control is constrained to a readable 55–92% range. Its displayed percentage and track fill are normalized to that range, while Image Opacity remains an independent 0–100% control for the artwork itself.
+- Custom-background surface controls stay independent: Interface Darkness controls the equally dark center and blurred side rails, while Element Darkness controls the opacity of buttons, dropdowns, cards, slider readouts, and related glass controls. Element Darkness is constrained to 35–98% and must never silently inherit Interface Darkness.
+- New custom backgrounds begin at 100% Image Opacity, 92% Interface Darkness, and 35% Element Darkness. These are defaults, not forced values: once a user adjusts a control, future launches preserve that choice.
+- Element Darkness must produce a visible tonal change even when an element sits on an already-dark parent. Its low end therefore blends toward a translucent charcoal glass floor instead of transparent black, which would visually collapse back into the parent surface. Apply it to all sidebar actions, settings navigation tabs, account cards, raised page shells, and instance content tabs—not only active states.
+- For user-directed UI revisions and regressions, update `UI_CHANGE_HISTORY.md`; add a durable bug entry to `BUGS.md` when a concrete failure and fix are identified.
+- Native Windows branding must come from the clean transparent high-resolution Bloom mark. The `.ico` must contain dedicated 16, 24, 32, 48, 64, and 256px layers; never ship a stale padded plate or rely on Windows to shrink one large bitmap for the taskbar.
 - Run `npm run typecheck` and `npm run build` before committing.

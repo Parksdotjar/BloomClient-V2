@@ -1,4 +1,6 @@
 import http from "node:http";
+import https from "node:https";
+import fs from "node:fs";
 
 const port = Number(process.env.PORT || 8110);
 const service = "bloom-minecraft-api";
@@ -134,7 +136,7 @@ const resolveInstallPlan = async (projectId, gameVersion) => {
   return { provider: "modrinth", title: rootTitle, gameVersion, loader: "Fabric", files };
 };
 
-const server = http.createServer(async (request, response) => {
+const requestHandler = async (request, response) => {
   try {
     const url = new URL(request.url || "/", "http://localhost");
     const pathname = url.pathname.startsWith("/minecraft/") ? url.pathname.slice("/minecraft".length) : url.pathname;
@@ -169,9 +171,15 @@ const server = http.createServer(async (request, response) => {
     console.error(error);
     return sendJson(response, 502, { error: "provider_unavailable", message: String(error?.message || error) });
   }
-});
+};
 
-server.listen(port, "0.0.0.0", () => console.log(`${service} listening on ${port}`));
+const tlsKeyPath = process.env.TLS_KEY_PATH;
+const tlsCertPath = process.env.TLS_CERT_PATH;
+const server = tlsKeyPath && tlsCertPath
+  ? https.createServer({ key: fs.readFileSync(tlsKeyPath), cert: fs.readFileSync(tlsCertPath) }, requestHandler)
+  : http.createServer(requestHandler);
+
+server.listen(port, "0.0.0.0", () => console.log(`${service} listening on ${port}${tlsKeyPath ? " with TLS" : ""}`));
 const shutdown = () => server.close(() => process.exit(0));
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
