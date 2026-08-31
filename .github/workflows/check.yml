@@ -1,18 +1,52 @@
 name: Check
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
+    name: frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Enforce repository boundaries
+        shell: bash
+        run: |
+          if [ -n "$(git ls-files 'tools/release-manager/**')" ]; then
+            echo "Owner-only Release Manager files must never be committed."
+            exit 1
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            changed_files="$(git diff --name-only '${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}')"
+            if printf '%s\n' "$changed_files" | grep -qx 'VERSION'; then
+              echo "VERSION changes are owner-only and are created by the Release Manager."
+              exit 1
+            fi
+          fi
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
-      - run: npm install
+      - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+
   rust:
+    name: rust
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo check --manifest-path src-tauri/Cargo.toml
+      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml

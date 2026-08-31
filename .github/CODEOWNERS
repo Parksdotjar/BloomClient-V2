@@ -1,0 +1,7 @@
+# Parks owns final review across Bloom Client.
+* @Parksdotjar
+
+# Protect the ownership and release policy themselves.
+/.github/ @Parksdotjar
+/VERSION @Parksdotjar
+/scripts/sync-version.mjs @Parksdotjar

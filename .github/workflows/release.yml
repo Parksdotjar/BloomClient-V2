@@ -10,9 +10,12 @@ permissions:
 
 jobs:
   release-windows:
+    if: github.actor == 'Parksdotjar'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -29,6 +32,12 @@ jobs:
       - name: Verify release tag
         shell: pwsh
         run: |
+          git fetch origin main:refs/remotes/origin/main --depth=1
+          $tagCommit = (git rev-parse HEAD).Trim()
+          $mainCommit = (git rev-parse origin/main).Trim()
+          if ($tagCommit -ne $mainCommit) {
+            throw "Release tags must point at the current origin/main commit."
+          }
           $expected = (Get-Content VERSION -Raw).Trim()
           if ($expected -ne "${{ github.ref_name }}") {
             throw "VERSION says $expected, but this release tag is ${{ github.ref_name }}. They must match exactly."
