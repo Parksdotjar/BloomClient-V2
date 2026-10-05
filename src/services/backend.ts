@@ -5,6 +5,7 @@ export type BackendCapabilities = {
   modrinth: boolean;
   curseforge: boolean;
   modpacks: boolean;
+  cosmetics?: boolean;
 };
 
 export type BackendStatus = {

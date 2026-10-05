@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:cosmetics": "node scripts/build-cosmetics-mod.mjs",
-    "build:tauri": "npm run build",
+    "build:tauri": "npm run build:cosmetics && npm run build",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -23,7 +23,8 @@
     "animejs": "^4.5.0",
     "lucide-react": "^1.24.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "skinview3d": "^3.4.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",

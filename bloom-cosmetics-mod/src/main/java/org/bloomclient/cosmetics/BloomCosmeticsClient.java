@@ -6,8 +6,6 @@ public final class BloomCosmeticsClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         BloomCapeService.get().start();
-        BloomHatService.get().start();
-        BloomWingService.get().start();
-        BloomBraceletService.get().start();
+        BloomPresence.start();
     }
 }

@@ -2,7 +2,11 @@
 
 This directory contains the small public API boundary used by Bloom Client. It exposes health and capability discovery plus the Fabric-only Modrinth catalog adapter. CurseForge remains disabled until a server-side API key and rate-limit policy are available.
 
-The API runs inside the isolated Minecraft Supabase Compose project on the Mac VM. It must not receive DEFYND credentials or expose Postgres, Supavisor, Supabase Studio, or service-role keys.
+The live API is now confirmed on the Pterodactyl VPS. See
+[`CAPES_VPS_DEPLOYMENT.md`](CAPES_VPS_DEPLOYMENT.md) for its private SQLite cape
+storage and deployment/rollback procedure. The Mac/Supabase instructions below
+are historical and are not the current deployment target. Never use DEFYND
+credentials or expose database/admin interfaces.
 
 Public endpoint: `https://api.north.bloomclient.org/minecraft`
 
@@ -15,7 +19,7 @@ Current routes:
 
 The catalog normalizes Modrinth results, caches provider responses briefly, resolves an exact Fabric/game-version file, and includes required Modrinth dependencies in its install plan. CurseForge and remote modpack capability flags remain `false`.
 
-Deploy or update the API from `/opt/minecraft-supabase` with:
+Historical Supabase deployment (not the current VPS):
 
 ```sh
 sudo docker compose --env-file .env -p minecraft-supabase \

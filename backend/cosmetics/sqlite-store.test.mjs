@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { SqliteCosmeticsStore } from './sqlite-store.mjs';
+
+test('VPS storage survives restart, rolls back failed drafts and revokes leases', async t => {
+  const directory=mkdtempSync(join(tmpdir(),'bloom-sqlite-test-'));
+  let now=Date.now();
+  const options={directory,publicUrl:'https://api.example/minecraft',now:()=>now};
+  let store=new SqliteCosmeticsStore(options);
+  t.after(()=>{store.close();rmSync(directory,{recursive:true});});
+  const cape=randomUUID(), revision=randomUUID(), owner='a'.repeat(32);
+  const record={id:revision,cape_id:cape,owner_uuid:owner,name:'Test',texture_path:`${cape}/${revision}/cape.png`,atlas_path:null};
+  await store.commitDraft(record,Buffer.from('test bytes'),null);
+  await store.publish(cape,revision,owner);
+  await store.equip(owner,cape);
+  await store.badge(owner,false);
+  const token=(await store.lease(record.texture_path)).split('/').pop();
+  store.close();store=new SqliteCosmeticsStore(options);
+  assert.equal((await store.players([owner]))[0].badge_visible,false);
+  assert.equal((await store.players([owner]))[0].cape_id,cape);
+  assert.equal((await store.leasedAsset(token)).toString(),'test bytes');
+  const failed={...record,id:randomUUID()};
+  await assert.rejects(store.commitDraft(failed,Buffer.from('conflicting object'),null));
+  assert.equal(await store.revision(failed.id),null);
+  await assert.rejects(store.leasedAsset('../capes.sqlite'));
+  now+=300001;await assert.rejects(store.leasedAsset(token));
+  const token2=(await store.lease(record.texture_path)).split('/').pop();
+  await store.unpublish(cape);await assert.rejects(store.leasedAsset(token2));
+  assert.ok(await store.revision(revision));
+  await store.checkReadiness();
+});

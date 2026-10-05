@@ -5,7 +5,6 @@ import net.minecraft.entity.player.SkinTextures;
 import net.minecraft.util.AssetInfo;
 import net.minecraft.util.Identifier;
 import org.bloomclient.cosmetics.BloomCapeService;
-import org.bloomclient.cosmetics.BloomWingService;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -17,18 +16,9 @@ public abstract class AbstractClientPlayerEntityMixin {
     private void bloom$applyCape(CallbackInfoReturnable<SkinTextures> callback) {
         AbstractClientPlayerEntity player = (AbstractClientPlayerEntity) (Object) this;
         SkinTextures current = callback.getReturnValue();
-        if (BloomWingService.get().shouldHideCape(player.getUuid())) {
-            callback.setReturnValue(new SkinTextures(
-                current.body(),
-                null,
-                null,
-                current.model(),
-                current.secure()
-            ));
-            return;
-        }
         Identifier cape = BloomCapeService.get().textureFor(player.getUuid());
         if (cape == null) return;
+        Identifier elytra = BloomCapeService.get().elytraTextureFor(player.getUuid());
 
         AssetInfo.TextureAsset bloomCape = new AssetInfo.TextureAsset() {
             @Override
@@ -41,10 +31,17 @@ public abstract class AbstractClientPlayerEntityMixin {
                 return cape;
             }
         };
+        AssetInfo.TextureAsset bloomElytra = new AssetInfo.TextureAsset() {
+            @Override
+            public Identifier id() { return elytra == null ? cape : elytra; }
+
+            @Override
+            public Identifier texturePath() { return elytra == null ? cape : elytra; }
+        };
         callback.setReturnValue(new SkinTextures(
             current.body(),
             bloomCape,
-            bloomCape,
+            bloomElytra,
             current.model(),
             current.secure()
         ));

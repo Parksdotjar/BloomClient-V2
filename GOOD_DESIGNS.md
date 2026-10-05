@@ -18,7 +18,7 @@ Before designing a related interface, review this file alongside `DESIGN_RULES.m
 - The resting state contains no permanent edit badge, corner bubble, or overlapping control.
 - Hovering dims the full artwork by a meaningful amount and reveals one centered horizontal-switch icon. The icon fades in while scaling from slightly smaller to full size.
 - Leaving reverses the same animation cleanly. Keyboard focus exposes the same affordance.
-- Because the artwork is full-bleed, it does not use Bloom's shared lift or click-pop transforms; moving or shrinking it would expose gaps along the card edge.
+- Because the artwork is full-bleed, it does not use positional hover or click-pop transforms; moving or shrinking it would expose gaps along the card edge.
 - Reduced Motion, Show Animations off, and Ultra Performance Mode remove the transition without removing the affordance.
 
 ### Reuse this pattern for

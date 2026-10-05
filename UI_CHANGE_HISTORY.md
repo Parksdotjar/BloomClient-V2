@@ -1,5 +1,36 @@
 # Bloom Client UI Decision and Fix History
 
+## October 2026 — instance collection bottom fade
+
+- Mods, Resource Packs, Shaders, and their shared catalog state now use one edge-to-edge curved fade from the final visible rows into a darker solid pagination well instead of ending at a hard horizontal cutoff behind the floating search surface.
+- The fade rises higher at both panel walls, dips softly through the center, begins above the search overlap, and reaches every edge of the lower panel. It does not capture input; search, filters, page controls, messages, and the collection scrollbar remain functional and visually sharp above it.
+- The rejected first pass was an inset rectangular overlay that read as a solid footer block and left the lighter parent surface exposed at both edges. Do not recreate that treatment.
+- The curved mask must be fully transparent across its complete top edge before interpolating continuously to full opacity. Partial opacity at the overlay boundary creates a visible horizontal seam and stepped bands even when the remaining gradient is smooth.
+
+## October 2026 — sidebar artwork Play action
+
+- Instance artwork in the sidebar is now its own real Play target. Hovering or keyboard-focusing the PNG dims only that media square and fades/scales in one larger white Play icon with no colored or circular backing tile.
+- Clicking the artwork launches that exact instance through the existing launch pipeline and shared click-pop response. Clicking the name/rest of the row still opens the instance page, preserving double-click-to-play behavior there.
+- The instance row and artwork never move on hover. Show Animations off, Reduced Motion, and Ultra Performance Mode remove the reveal transition without removing the Play action.
+
+## October 2026 — Locker categories and Minecraft wardrobe
+
+- Retained the centered Locker platform; added a compact darker underlapping shelf for Cloaks / Capes / Skins and a separate catalog box below a 22px gap.
+- Renamed the visible custom catalog to Cloaks without changing backend cape identifiers or URLs.
+- Added authenticated Minecraft cape ownership and equip/unequip through native commands; a public UUID response is not treated as the full owned collection.
+- Added account-scoped PNG imports, Classic/Slim selection, cached angled skin thumbnails and one focused live preview. Only Use skin sends the upload to Minecraft.
+- New controls remain stationary on hover; the pre-existing cloak reveal was corrected to opacity-only feedback with no glow. Account switches discard stale view results.
+- Checks: frontend typecheck/build and locked Cargo check passed. Native live account changes still require signed-in acceptance; no test cape/skin was applied to the user's account automatically.
+
+## Free cape restoration — integration checkpoint
+
+- Added free Locker and separate local Cape Studio with raised headers, recessed content, bold identity text and focused 3D previews.
+- Equip and badge preferences use verified backend state. No prices, cart, claims or cosmetic-only success states.
+- Installed Studio was opened and visually inspected. Live publishing and multiplayer acceptance remain gated; see `CAPES_IMPLEMENTATION_STATUS.md`.
+- **Locker correction:** The first integration pass used a flat utility screen and two custom checkbox controls above the catalog. Those controls duplicated Settings and did not follow Bloom's established row/toggle system. The Locker now uses one raised identity header over a recessed catalog workspace, a restrained centered empty state, responsive cape collection cards, one focused preview, and standard pagination. Cosmetics integration and the ParksVAL badge preference moved into a dedicated Cosmetics category in Settings and use the shared authoritative toggle component.
+- **Regression checks:** Locker loading, empty, offline, signed-out, populated, selected, equipped, and saving states; nine-item desktop pages; narrow reflow; theme/custom-background parity; Settings scrolling; disabled integration; account switching; failed reconcile and failed badge saves.
+- **Cape Studio correction:** Replaced the first dense UV-first utility layout with a restrained project rail, raised project header, recessed editor workspace, and focused live preview. PNG import now opens a genuine draggable cape-ratio frame with a longer zoom range, clear 256/512/1024/2K output choices, mirrored back option, and automatic edge wrapping. Cape and elytra views update from the same draft; exact pixel editing remains a separate mode rather than cluttering image placement.
+
 This is the durable record of user-directed UI decisions, regressions, and proven fixes. Review it before changing an existing component. Update it whenever a UI request changes a visual rule, fixes a regression, or establishes a reusable interaction pattern.
 
 ## Required workflow for UI changes
@@ -16,10 +47,10 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 
 ### Buttons
 
-- Hover motion applies to buttons only—not sidebar navigation, dropdown triggers/options, or non-button surfaces.
-- Hovering does not change a button’s color. It lifts by 2px and scales slightly with an 800ms ease; unhovering must use the same smooth return rather than snapping.
-- Click-pop motion must not overwrite the CSS hover transform. Press motion uses independent transform longhands so both motions can compose.
-- Button layout must not use those same `translate` or `scale` longhands for resting placement. Use grid or flexbox for centering so click-pop can never teleport a control.
+- Hover and focus do not move interface geometry. Buttons, cards, search fields, menu triggers, and menu rows remain at their exact resting coordinates and use restrained color, surface, border, or opacity feedback instead.
+- Do not add shared CSS hover transforms. A prior global `translateY(-2px) scale(1.025)` rule repeatedly reintroduced the unwanted lift across unrelated features.
+- Click-pop remains an independent pointer-down response where appropriate, but it is not used by window controls, title-bar menus, dropdown options, full-bleed artwork, or any control whose geometry must remain fixed.
+- Button layout must not use `translate` or `scale` longhands for resting placement. Use grid or flexbox for centering so optional press feedback can never teleport a control.
 - Accent-color swatches do not use click-pop compression. The swatch and selected ring remain enlarged together until unhover, then scale down as one unit.
 
 ### Accent selection ring
@@ -42,12 +73,10 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 
 ## Current visual decisions
 
-### Sidebar brand alignment
+### Retired sidebar brand alignment
 
-- The sidebar brand shows only the Bloom logo and “Bloom Client.” The “Minecraft Client” subtitle is removed.
-- The client name uses the logo's full 38px row as its vertical reference so the text is centered against the logo rather than aligned to the former two-line text block.
-- The logo and name are centered together as one group within the sidebar. The name is 20px normally and 17px in the compact sidebar.
-- The name receives a 2px upward optical correction because its font baseline reads lower than the logo's visual center even when their layout boxes are mathematically centered.
+- The former logo-and-name lockup is no longer part of the client. Home begins beneath the draggable title-menu region, as recorded in “Brandless sidebar and fourth sponsored slot.”
+- Keep this record only as a superseded decision. Do not restore the Bloom wordmark, its dedicated surface, separator, subtitle, optical offsets, or reserved height.
 
 ### Primary sidebar navigation typography
 
@@ -106,6 +135,7 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 ### OLED Dark
 
 - OLED Dark uses the original hierarchy: a true-black page with near-black sidebar, panel, control, border, and advertising surfaces. Do not apply the experimental inverted charcoal-canvas treatment unless explicitly requested again.
+- OLED Black is now the sole selectable theme. Saved Dark or Dusk values migrate to OLED automatically; the Theme dropdown remains visible with a disabled “Coming soon” row so future expansion has a clear home without exposing unfinished palettes.
 
 ### Modrinth modpack browser
 
@@ -151,17 +181,28 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 - Added an independent Element Darkness slider for custom backgrounds. It changes the opacity/darkness of glass buttons, dropdowns, cards, slider readouts, and similar controls without altering the center canvas or either sidebar.
 - Corrected Element Darkness so low values remain visibly different over dark parent surfaces. Coverage now includes every sidebar navigation button, bottom sidebar action, account card, settings shell and navigation tabs, plus instance content tabs; the center settings shell remains sharp rather than blurred.
 - Updated custom-background defaults to the approved 100% image opacity, 92% interface darkness, and 35% element darkness. A one-time migration moves untouched legacy 78%/83% surface defaults to the new values while preserving custom values users already chose.
-- Redesigned the sidebar New Instance action as a compact two-surface creation card. A full-height accent-tinted plus tile anchors the left edge, the main surface carries only a centered bold label, and restrained sideways depth replaces the old thin outlined button. The whole action uses Bloom's 800ms no-color-change hover lift and the existing configurable click-pop behavior.
+- Redesigned the sidebar New Instance action as a compact two-surface creation card. A full-height accent-tinted plus tile anchors the left edge, the main surface carries only a centered bold label, and restrained sideways depth replaces the old thin outlined button. The later global hover correction supersedes its original lift behavior; it now remains stationary and uses color/surface feedback plus the optional click-pop response.
 - Follow-up moved instance creation into the section heading and removed the separate top action entirely. `INSTANCES` is centered at rest; section hover/focus scales in a rounded accent plus on its left and slides the label right without reflowing the list. Only that plus opens New Instance.
 - Fixed the Instances-heading plus shifting left at the end of its reveal. Its 30px button hitbox now remains fixed while only an inner visual tile scales, preventing reveal, focus, and click-pop transforms from competing for the positioned element.
 - Final reveal correction removed the fractional absolute position and scale compositor entirely. The heading now expands a centered `0px → 30px` grid track beside the label, while the plus tile reveals symmetrically through clipping; this slides the label naturally and leaves no final-frame coordinate to snap.
 - Replaced the sidebar's no-instance dashed placeholder and explanatory subtext with an account-dock-style creation card. A full-height accent plus tile anchors the left, `Create instance` is the only label, a restrained chevron closes the row, and clicking anywhere on the card opens the real New Instance UI.
 - Rebuilt Spotlight Home as Bloom's bare launcher view. Removed the welcome eyebrow, giant “Ready when you are” headline, helper sentence, and rounded stage slab. The center now contains only the selected instance's 88px artwork and bold name, a wide darkened-accent `Play` action, and the existing slightly narrower selector stacked below. Selection refreshes only the identity with a short compositor entrance, while the controls stay fixed.
+- Spotlight scale follow-up enlarged the complete focused stack: 112px instance artwork, stronger 27px identity, taller/wider launch and selector controls, and larger selector metadata. The Play label and triangle receive an additional size/weight increase so they remain the primary action inside the expanded surface.
+- Tightened the Locker detail footer by roughly half, bringing the selected-cape label and action closer to the cape preview while reducing the dead space below the action.
 - Rebuilt every post-acceptance AutoTune state into one shared focused flow. Completed phase dashboards no longer remain stacked on screen; one centered title leads to a single action, progress, result, or confirmation surface for hardware scan, benchmark installation, the Minecraft test, profile generation, and final apply. Five small dots sit beneath that content with no numeric step label or line-style progress bar. They are driven by those real workflow states, including the installation-to-ready transition, rather than by a coarse decorative phase number. The benchmark install step keeps a concise honest summary visible and provides optional details covering exact downloads, the roughly 75-second workload, measured data, local privacy, and benchmark-world replacement. The native benchmark, saved measurements, profile calculation, and explicit apply confirmation remain real and unchanged beneath the simpler presentation.
 - Standardized compact overflow menus across installed content rows, full instance-library cards, and the instance header. Each portaled menu now begins directly behind the complete owning card/platform with a 1px underlap and no air gap. Its square recessed top, rounded lower corners, and short downward black shadow make the card read as the raised layer in 3D space rather than a detached menu positioned lower in 2D. Short menus size to their actions and hide scrollbar tracks/thumbs. Expanded three-dot controls keep a rounded accent overlay.
 - Regenerated Bloom's complete native icon family from the clean transparent 1024px flower source. The Windows taskbar icon now has dedicated 16, 24, 32, 48, 64, and 256px layers with the flower filling the canvas instead of the old padded dark-square artwork being scaled down.
+- Extended the sidebar's darker account-footer backing surface through the full account section so it meets the divider instead of ending below it. Locker navigation now uses a purpose-built hanger mark rather than reusing the cosmetics feather.
 
 ## Regression records
+
+### Locker gallery and account-aware preview
+
+- **Reported:** The first restored Locker looked like a generic two-panel admin screen. Its title was left aligned with redundant helper copy and a large Refresh button, cape tiles were short raw texture crops with bright selected outlines, and the selected preview used a placeholder player instead of the signed-in account.
+- **Decision:** Locker now uses the exact centered Settings-style raised header with only the page title. Refresh moves to a compact icon beside the catalog count. Catalog entries become taller instance-inspired cards with a lighter media stage and a curved near-black raised name base; selection uses typography and depth instead of an accent outline.
+- **Interaction:** Catalog cards retain the efficient cape-only texture render. Hover/focus fades the name base into a real Equip/Unequip button with a restrained hover bloom and the client-wide configurable press response. The focused side panel renders the selected cape on the active account's official Minecraft skin, looked up from its UUID through the native client. Drag rotation uses damping so a release glides briefly instead of stopping abruptly.
+- **Notification correction:** Transient launcher outcomes no longer appear as detached top cards. One full-width bottom bar rises from below the window, centers the outcome copy, uses green for normal/success states, and switches to the error surface for failures. Locker equip failures and successes use this same path instead of inserting an extra alert into the catalog layout.
+- **Regression checks:** Nine-item pagination, animated cape frames, official/default/slim skins, account switching, drag inertia, Equip/Unequip, signed-out messaging, loading/offline states, narrow layouts, custom themes, disabled animations, and Ultra Performance Mode.
 
 ### Profile selector typography and centering
 
@@ -190,3 +231,46 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 - **Cause:** JavaScript animation left a stale inline `translateX(0)` that competed with the CSS on-state.
 - **Fix:** Remove JavaScript thumb positioning and use authoritative CSS state transforms with a transition.
 - **Regression checks:** Every toggle must show left/off and right/on correctly with animations enabled, disabled, and in Ultra Performance Mode.
+
+### Bottom-edge updater and development preview
+
+- **Requested:** Present an available update from the bottom of the client, then let the blue surface rise over the whole window while the update runs.
+- **Fix:** The real signed updater now owns one bottom action bar and one expanding full-screen progress state, with retry handling on failure. A development-only mock can be opened with `Ctrl+Shift+U` or the more reliable `Ctrl+Shift+F10`; it is registered in capture phase so focused controls cannot swallow it and is compiled out of production.
+- **Regression checks:** Automatic and manual update discovery, download progress, install handoff, failure/retry, ad-rail widths, reduced motion, Ultra Performance Mode, focused text fields, and production builds with no mock shortcut.
+
+### OLED-only theme selector
+
+- **Requested:** Remove unfinished alternate themes while keeping the existing Theme control structurally intact.
+- **Fix:** OLED Black is the sole selectable theme. The dropdown retains one disabled Coming soon row so future complete themes have an intentional home without exposing partial palettes.
+- **Regression checks:** Restart persistence, custom backgrounds, every settings category, dropdown keyboard navigation, and disabled-row behavior. No alternate palette may remain selectable through stale storage.
+
+### Spotlight scale correction
+
+- **Requested:** Make the centered Spotlight identity, artwork, Play action, type, and selector meaningfully larger without expanding the surrounding home layout.
+- **Fix:** Increased the internal scale and weight of the existing composition while preserving its centered reference frame, open space, and fixed control stack. Selection dropdowns keep an attached lighter lower surface with no accent outline on the closed trigger.
+- **Regression checks:** Default and minimum window sizes, long instance names, open selector, three or more instances, ad rail present/hidden, and no hover lift.
+
+### Sidebar Bloom wordmark
+
+- **Requested:** Make the logo-and-name area at the top of the sidebar feel like a real Bloom lockup instead of a small generic label.
+- **Fix:** Use one horizontal PNG lockup with the original flower preserved pixel-for-pixel and clean rounded `Bloom Client` lettering on the same line. Trim transparent asset padding before centering so the visible artwork—not its canvas—is centered and can fill the fixed-height header without moving the separator. The darker brand-zone surface reaches that existing separator instead of ending above it.
+- **Regression checks:** Default and minimum sidebar widths, text/logo vertical alignment, custom backgrounds, accent changes, and Windows display scaling.
+
+### Brandless sidebar and fourth sponsored slot
+
+- **Requested:** Remove the complete sidebar wordmark area, make Home the first usable item at the top, and use the remaining sponsored-rail height for a fourth ad slot.
+- **Fix:** Delete the brand markup, top brand surface, and separator. Navigation now starts immediately below the fixed window drag region without changing the lower account dock. The sponsored rail renders four identical slots and drops the final slot's unused bottom margin.
+- **Regression checks:** Home remains clickable below the drag region, sidebar spacing holds at responsive widths, the account dock stays bottom-aligned, and four ad slots remain independently visible or scrollable at supported viewport heights.
+
+### Functional title-bar menus
+
+- **Requested:** Use the empty space above Home for simple File/Edit/View/Help text menus with real attached dropdowns instead of another brand block.
+- **Fix:** Add text-only title triggers with no resting or active container. Their darker OLED dropdowns reveal downward from the trigger and route to existing instance, settings, profile, navigation, updater, and Java actions.
+- **Regression checks:** Every command performs its existing action, only one menu opens at once, outside click and Escape close it, title-bar dragging remains available, window controls remain clear, and reduced-motion modes reveal immediately.
+
+### Global hover-lift removal
+
+- **Reported:** CSS hover lifts kept reappearing on newly added controls despite repeated requests for stationary color-only interaction feedback.
+- **Cause:** The stylesheet contained a broad button selector that translated and scaled most buttons, while older design-history text still described that lift as the preferred behavior. Several profile, instance, and search rules repeated the same pattern locally.
+- **Fix:** Remove the global hover transform and the remaining one-off profile-action, empty-instance, instance-card, and search-field lifts. Update the durable design rule to prohibit positional hover/focus motion. Title-bar menus are also excluded from the optional pointer-down pop and reveal through clipping/opacity without translating their rows.
+- **Regression checks:** Hover and focus every primary button, menu trigger/row, profile action, empty-instance action, instance card, and search field at normal, disabled-animation, reduced-motion, and Ultra Performance settings; no control may change screen position or scale.
