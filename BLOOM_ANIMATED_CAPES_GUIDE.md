@@ -1,5 +1,7 @@
 # Bloom Animated Capes Guide
 
+> Current Studio: `C:/Users/Parks/Documents/Bloom-Cape-Studio`. In addition to the limits below, decoded animation frames must fit 32 MiB. Publication requires the configured owner account and reachable backend. Automatic injection exists in the gated integration branch, not the currently running main client. See `CAPES_IMPLEMENTATION_STATUS.md` before treating this guide as production behavior.
+
 Bloom's animated-cape pipeline turns a short MP4, WebM, or GIF into a normal Minecraft cape texture plus a private animation atlas. The first frame remains a regular static cape, so older Bloom Cosmetics versions still show a valid fallback.
 
 ## Recommended source

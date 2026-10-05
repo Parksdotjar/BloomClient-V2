@@ -1,13 +1,15 @@
 import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
+import { initializeCosmetics } from "./cosmetics/readiness.mjs";
 
 const port = Number(process.env.PORT || 8110);
 const service = "bloom-minecraft-api";
 const apiVersion = "v1";
 const modrinthBase = "https://api.modrinth.com/v2";
 const userAgent = "BloomClient/0.1.0 (support@bloomclient.org)";
-const capabilities = Object.freeze({ catalog: true, modrinth: true, curseforge: false, modpacks: false });
+const cosmetics = await initializeCosmetics();
+const capabilities = Object.freeze({ catalog: true, modrinth: true, curseforge: false, modpacks: false, cosmetics: cosmetics.enabled });
 const cache = new Map();
 
 const sendJson = (response, status, body, cacheControl = "no-store") => {
@@ -140,6 +142,7 @@ const requestHandler = async (request, response) => {
   try {
     const url = new URL(request.url || "/", "http://localhost");
     const pathname = url.pathname.startsWith("/minecraft/") ? url.pathname.slice("/minecraft".length) : url.pathname;
+    if (await cosmetics.handle(request, response, pathname, url)) return;
     if (request.method !== "GET") {
       response.setHeader("allow", "GET");
       return sendJson(response, 405, { error: "method_not_allowed" });

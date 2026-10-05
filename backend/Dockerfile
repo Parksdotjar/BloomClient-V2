@@ -2,6 +2,7 @@ FROM node:22-alpine
 
 WORKDIR /app
 COPY --chown=node:node server.mjs /app/server.mjs
+COPY --chown=node:node cosmetics /app/cosmetics
 USER node
 EXPOSE 8110
 

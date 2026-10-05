@@ -1,5 +1,11 @@
 # Bloom Client Design Rules
 
+> Locker changes must also follow `LOCKER_DESIGN_RULES.md`.
+
+## Free Locker restoration (integration branch)
+
+The restoration replaces Shop/cart/ownership concepts with one free Locker and direct Equip/Unequip. Every cosmetic category remains free. Cape Studio is a separate local authoring app, never a release tool. Follow `CAPES_IMPLEMENTATION_STATUS.md` for activation gates; dormant statements below refer to the previously shipped state. Never present unpublished drafts, offline failures or failed equip requests as released/saved cosmetics.
+
 These rules apply to every future screen, component, and interaction in Bloom Client.
 
 Before revising an existing interface, also review `GOOD_DESIGNS.md` for explicitly approved visual references and `UI_CHANGE_HISTORY.md` for the user's current decisions and the fixes that already proved reliable.
@@ -10,10 +16,9 @@ Before revising an existing interface, also review `GOOD_DESIGNS.md` for explici
 - Use Lucide icons consistently. Do not introduce text-symbol icons, emoji, or mixed icon families.
 - Keep controls slightly rounded, compact, and intentional. Avoid browser-default controls.
 - Every green highlight must use the shared `--accent` variable so themes and accent choices remain coherent.
-- Themes must be complete surface systems. Adding or changing a theme must update the page background, sidebar, content panels, settings cards, controls, ad rail, borders, muted text, active states, hover states, and scrollbars together.
+- OLED Black is the only active client theme. Keep the Theme dropdown present with OLED Black selected and one disabled “Coming soon” row; do not expose unfinished alternate themes. Any future theme must be a complete surface system covering the page background, sidebar, content panels, settings cards, controls, ad rail, borders, muted text, active states, hover states, and scrollbars together.
 - Custom backgrounds are local-only assets stored in Bloom's application-data folder. Their opacity fades into black, while optional translucent sidebars use the same user-controlled surface opacity and a restrained backdrop blur.
-- OLED Dark should use true-black outer surfaces with slightly lifted dark-gray panels and sidebar surfaces so hierarchy remains visible.
-- Dusk should use coordinated blue-gray surfaces across every client region, not only the main content background.
+- OLED Black uses true-black outer surfaces with slightly lifted dark-gray panels and sidebar surfaces so hierarchy remains visible.
 - Use clear visual hierarchy: page title, section title, helper text, then the control.
 
 ## Layout
@@ -25,11 +30,12 @@ Before revising an existing interface, also review `GOOD_DESIGNS.md` for explici
 - Rows with unequal controls on opposite sides use equal outer grid tracks (or another explicitly symmetric layout) around the center content. Changing either side control must not shift the visual center.
 - Keep navigation icons and labels aligned on one consistent grid.
 - Use the same spacing rhythm and card treatment across settings, home, and future screens.
-- Sidebar branding and account areas use separate, slightly darker theme-aware surface zones, divided from navigation by short faded separators rather than full-width rules. The brand contains only the Bloom logo and “Bloom Client”; the complete logo-and-name group is centered within the sidebar, and the name is vertically centered against the logo with no subtitle.
+- The global sidebar begins directly with Home beneath the draggable title region. Do not reserve a separate logo, wordmark, brand surface, or brand separator above navigation. The account area remains its own darker theme-aware surface at the bottom.
+- The frameless title region may contain File, Edit, View, and Help as compact text-only menus. Triggers use color changes only—no pills, outlines, or active blocks. Each attached dark dropdown must expose real existing actions, use the shared downward reveal, and leave enough unoccupied title area for window dragging.
 - Instance creation lives in the sidebar's Instances section heading rather than as a separate action beneath the brand. At rest the heading shows only centered `INSTANCES`; hovering or focusing the heading scales in a compact accent plus on its left while the label slides right to make room. Only the plus opens New Instance, and the reveal must not move the recent-instance list.
 - When the sidebar has no instances, replace generic dashed empty copy with one account-dock-style creation card. It uses a full-height accent plus tile at left, one bold `Create instance` label, and a restrained disclosure chevron; the complete card opens New Instance and contains no redundant “no instances” subtitle.
 - Reveal controls keep their interactive hitbox in normal grid layout and reveal only an inner visual tile. Do not place a scaled control from a percentage-based absolute coordinate: compositor layer removal can round that fractional coordinate differently on the final frame. Expand a centered grid track and use a symmetric clip reveal instead.
-- Global sidebar navigation currently stays focused on Home, Instances, AutoTune, and Settings. Shop and Locker are intentionally dormant until the VPS cosmetics restoration checklist is complete; mods, resource packs, and shaders belong inside their owning instance rather than as duplicate global destinations.
+- Global sidebar navigation contains Home, Instances, AutoTune, Locker, and Settings. Locker is the single global cosmetics destination; Shop remains removed. Mods, resource packs, and shaders belong inside their owning instance rather than as duplicate global destinations.
 - Home supports a full Dashboard layout and a focused Spotlight launcher layout. Changing layouts only replaces the center home content; the locked sidebar and reserved advertising rail remain structurally unchanged.
 - Spotlight is the bare launcher view: one selected-instance artwork tile and bold name, one wide Play button, and the slightly narrower instance selector stacked directly beneath it. It contains no welcome eyebrow, marketing headline, instructional paragraph, surrounding dashboard card, or duplicated version copy outside the selector.
 - Changing the Spotlight selection may softly refresh only the artwork/name identity. The Play and selector controls remain fixed in place, and all motion respects the existing animation settings.
@@ -71,13 +77,14 @@ Before revising an existing interface, also review `GOOD_DESIGNS.md` for explici
 - Every toggle must be backed by real state and an `onChange` handler before it is added to the UI. Never ship a hardcoded toggle with a no-op handler.
 - React state and state classes are authoritative for toggle position. Never leave an inline transform or animation fill value that can override the current on/off position.
 - Interactive controls need hover, focus, and pressed states.
+- Hover and focus feedback must never lift, translate, or scale buttons, cards, search fields, menu triggers, or menu rows. Use color, surface, border, opacity, or content crossfades while preserving the element's exact geometry. Never add a broad shared CSS hover-transform rule. Movement is allowed only for an explicitly requested interaction whose meaning depends on motion, such as a disclosure reveal or draggable preview.
 - Buttons never use outer glows or accent-colored drop shadows. Use background color, restrained borders, and press motion for emphasis instead.
 - Accent-filled buttons with light text must retain at least 4.5:1 text contrast across every selectable accent. Darken the fill when needed instead of adding a bright outline or glow.
 - Button press duration is user-configurable from 0–1500 ms (750 ms by default), but the visual must run independently through compositor animation and must never delay the button action, force layout, or schedule a React render.
 - Never use the `translate` or `scale` longhands to position a button in its resting layout because the shared press animation owns those properties. Center and place buttons with grid, flexbox, or inset geometry so interaction motion cannot move their baseline position.
 - Use Anime.js for purposeful UI motion only when it cannot compete with an authoritative CSS or React state. Toggle thumb movement uses a CSS transition between state classes. All motion respects Show Animations, Ultra Performance Mode, and reduced-motion preferences.
 - Do not expose browser context menus or browser-looking actions inside the client.
-- Desktop window controls use Bloom's custom dim icon buttons inside a transparent draggable region; close uses a restrained red hover state, and the native operating-system title bar remains disabled.
+- Desktop window controls are standalone bold rounded marks inside the transparent draggable region, never boxed button tiles. They never lift, scale, slide, or use the shared press-pop animation. Hover/focus softly fades only the mark color: yellow for minimize, green for expand/restore, and red for close. The native operating-system title bar remains disabled.
 - Compact filters belong behind a recognizable filter icon when showing every option inline would clutter a toolbar; the active filter is indicated with a muted accent state.
 - Dropdown menus and their follow-up confirmation popovers render through a document-level overlay with a top-layer stack order so cards, scroll regions, paint containment, and parent overflow can never cover or clip them.
 - Compact three-dot action menus are anchored to the complete card or raised platform that owns the trigger—not to the trigger's small rectangle. They begin one pixel behind the owner's lower edge with no visible air gap, use a square recessed top and rounded lower corners, and add a downward black inset shadow so the owner reads as physically raised above the revealed menu.
@@ -115,7 +122,7 @@ Before revising an existing interface, also review `GOOD_DESIGNS.md` for explici
 - The instance-page Mods, Resource Packs, and Shaders segmented control uses rounded-rectangle corners matching the adjacent Settings button: 13px on the outer control and 9px on the inset selection. It is never pill-shaped.
 - The lifted instance header platform uses one uniform 12px radius on all four corners. Its top and bottom curves must match exactly while the shadow supplies the visual depth.
 - Uploaded instance artwork in the lifted header occupies a full 112px square flush with the header's top, bottom, and left edges. It uses the same panel surface around it—never a contrasting two-tone media platform—and casts a restrained shadow only toward the text side; the identity copy is explicitly layered above that shadow.
-- Instance artwork has no permanently overlapping edit badge and does not use the shared lift/pop motion. Hovering or keyboard-focusing the artwork dims it substantially and reveals one centered horizontal-switch icon; leaving restores the artwork cleanly. The overlay animation respects reduced motion, disabled animations, and Ultra Performance Mode.
+- Instance artwork has no permanently overlapping edit badge and does not use positional hover or press-pop motion. Hovering or keyboard-focusing the artwork dims it substantially and reveals one centered horizontal-switch icon; leaving restores the artwork cleanly. The overlay animation respects reduced motion, disabled animations, and Ultra Performance Mode.
 - Sidebar instance names use the profile account selector's visual weight at 13px and 800 weight, with the Minecraft version directly underneath. Long names truncate safely. Selection uses only a slightly stronger neutral border—never an accent fill, position shift, or glow.
 - Primary sidebar navigation labels use the same bold 800-weight typography as sidebar instance names and account selectors. Active navigation changes color and surface only; it does not change the label's weight or cause a text reflow.
 - The signed-in sidebar footer is a compact account dock: full-bleed avatar at left, vertically centered bold account name, and one disclosure chevron. It has no presence decoration, provider subtitle, or redundant Settings gear.
@@ -130,16 +137,21 @@ Before revising an existing interface, also review `GOOD_DESIGNS.md` for explici
 - The recessed account drawer extends upward behind the raised dock by at least the dock's lower-corner radius. Its surface must remain visible beneath both rounded corners with no black triangular cutouts; action positions remain below the overlap rather than shifting upward.
 - Active downloads use one compact accent-filled circular sidebar badge containing the real integer progress without a percent symbol. Completion replaces the number with a universally green check, holds briefly, then fades away after three seconds.
 - The Downloads link eases upward as its progress badge scales in and eases back down as completion disappears. A separate green completion ghost expands beyond the badge and fades fully without changing layout.
-- Avoid decorative accent streaks on repeated cards; depth comes from restrained borders, surface contrast, and hover lift rather than AI-like glowing lines.
+- Avoid decorative accent streaks on repeated cards; depth comes from restrained borders and surface contrast rather than AI-like glowing lines or hover movement.
 - Each instance content collection (Mods, Resource Packs, and Shaders) uses the same raised top platform. Keep only the category name, item count, compact sort control, and primary Add action; omit decorative title icons and explanatory file-location subtext.
+- Instance content lists use one edge-to-edge curved fade into the darker pagination well beneath the floating search surface. The fade rises along both panel walls like a shallow meniscus and dips through the center; never use an inset rectangular footer slab or expose a hard clipped list edge. Search, filters, and page controls remain crisp above the non-interactive fade.
 - A content browser is a state of that same shared platform, not a separately styled screen. Preserve the platform silhouette while changing the title and replacing sort/add with the Back action.
 - Sort dropdowns use one familiar chevron. Do not pair that chevron with a second decorative sort/arrows icon; competing indicators make the control harder to scan.
 - External file dragging uses one shared content drop state for Mods, Resource Packs, and Shaders. Dim the content workspace and scale one white drop-box icon into its center, mirroring the instance/profile artwork hover language; do not add a card, border, instructions, or file-type badge. Derive the real destination from the active tab.
 
-## Dormant Shop and secure cosmetics
+## Free Locker and secure cosmetics
 
-- Shop and Locker are currently removed from the shipped client. Do not restore navigation, launcher services, native commands, renderer bundling, or per-instance renderer injection independently; follow `SHOP_LOCKER_RESTORATION.md` and restore the complete tested pipeline.
-- The source in `bloom-cosmetics-mod/` and the cosmetics authoring guides are dormant restoration material, not an active client feature.
+- Shop stays removed. Locker, native commands, managed renderer installation, and the VPS cape service operate as one system; do not separate or replace one layer with cosmetic-only state.
+- Cosmetics integration and nametag-badge visibility belong in a dedicated Settings section using the shared `SettingRow` and `Toggle` controls. Never place improvised checkboxes or preferences above the Locker catalog.
+- Locker uses the same raised-header and recessed-workspace hierarchy as Settings and instance pages. Its loading, empty catalog, offline, and failed-account states remain visibly distinct.
+- Locker catalog cards use lightweight texture previews. Hovering or keyboard-focusing a card crossfades its identity base into the real Equip/Unequip action; the action keeps the global button press motion and may use only a restrained accent bloom on direct hover.
+- Reserve the focused Locker renderer for one account-aware player preview. It loads the active account's official Minecraft skin by UUID, displays the selected cape on that player, and uses drag rotation with brief inertial damping. Do not create a WebGL player for every catalog card.
+- The renderer in `bloom-cosmetics-mod/` is an active managed component for supported Fabric 1.21.11 instances. Its ownership manifest, checksum verification, explicit disable state, and conflict handling must remain intact.
 
 - Bloom capes are free collection items. Never add coins, prices, premium rarity, payment language, or purchase flows to this screen.
 - The default cape catalog uses a three-by-three desktop grid with nine items per page, then reflows to two or one column before cards become cramped.
@@ -147,6 +159,10 @@ Before revising an existing interface, also review `GOOD_DESIGNS.md` for explici
 - The client stores opaque cape IDs and per-account cart, collection, and equipped state. Private storage paths, permanent bucket URLs, and privileged Supabase keys must never be embedded or persisted in the desktop client.
 - Cape textures must be requested through the restored VPS provider as short-lived leases. Private object URLs and privileged storage/database credentials never belong in the launcher or Fabric mod.
 - Repeated cape cards use cached texture previews and must not create one continuous WebGL renderer per card. Reserve live 3D rendering for a focused preview when it materially improves the experience.
+- Transient client-wide outcomes use the single full-width bar attached to the bottom edge. Success/normal outcomes use the approved green surface, failures use the error surface, copy stays centered, and entrance motion rises from below; do not add detached top toasts for these outcomes.
+- Available client updates use the same bottom-edge model but retain the Bloom blue action color. Activating the bar expands that exact surface to cover the client while the signed update downloads and installs; never open a detached update modal. Mock update triggers must be development-only and absent from production builds.
+- Cape Studio separates broad artwork placement from exact pixel editing. Imported artwork uses one fixed cape-ratio crop with direct drag/zoom feedback, explicit output detail, automatic nearest-edge wrapping, and one switchable cape/elytra preview. Do not expose raw UV coordinates as the primary import experience.
+- Studio credentials never belong in the executable or project file. The private password is exchanged for a revocable session and the session is stored through the operating-system credential vault.
 
 ## Scrollbars
 

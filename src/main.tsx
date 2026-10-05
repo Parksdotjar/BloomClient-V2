@@ -21,7 +21,6 @@ import { animate } from "animejs";
 import { waapi, type WAAPIAnimation } from "animejs/waapi";
 import {
   Check,
-  Bell,
   Activity,
   ArrowRightLeft,
   BarChart3,
@@ -42,7 +41,6 @@ import {
   Layers3,
   ImagePlus,
   MoreHorizontal,
-  Minus,
   Monitor,
   MemoryStick,
   PackageOpen,
@@ -66,16 +64,39 @@ import {
   LockKeyhole,
   LogOut,
   ArrowLeft as X,
-  Square,
   X as CloseIcon,
 } from "lucide-react";
 import "./styles.css";
 import { monitorBackend } from "./services/backend";
+import { Locker } from "./components/Locker";
 
-type Theme = "dark" | "oled" | "dusk";
+type Theme = "oled";
 type HomeLayout = "Dashboard" | "Spotlight";
-type AppPage = "home" | "settings" | "autotune" | "new-instance" | "downloads" | "logs" | "instance" | "instances";
+type AppPage = "home" | "settings" | "autotune" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker";
+type WindowMenuName = "file" | "edit" | "view" | "help";
 const PROFILE_ICON_STORAGE_KEY = "bloom-profile-icon";
+
+function HangerIcon({ size = 17 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 9V7.5A2.5 2.5 0 1 0 9.5 5" />
+    <path d="m12 9-8.4 5.4A1 1 0 0 0 4.1 16h15.8a1 1 0 0 0 .5-1.6L12 9Z" />
+  </svg>;
+}
+
+function WindowMinimizeIcon() {
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="M6 13h12" /></svg>;
+}
+
+function WindowExpandIcon() {
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M9 5H6a1 1 0 0 0-1 1v3M15 5h3a1 1 0 0 1 1 1v3M9 19H6a1 1 0 0 1-1-1v-3M15 19h3a1 1 0 0 0 1-1v-3" />
+  </svg>;
+}
+
+function WindowCloseIcon() {
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>;
+}
+
 type SettingsState = {
   theme: Theme;
   accent: string;
@@ -140,6 +161,7 @@ const nav = [
   [House, "Home"],
   [Layers3, "Instances"],
   [WandSparkles, "AutoTune"],
+  [HangerIcon, "Locker"],
   [SettingsIcon, "Settings"],
 ] as const;
 const settingTabs = [
@@ -148,6 +170,7 @@ const settingTabs = [
   [ImagePlus, "Background"],
   [SlidersHorizontal, "Performance"],
   [Cuboid, "Minecraft"],
+  [Feather, "Cosmetics"],
   [Rocket, "Launcher"],
   [Shield, "Privacy"],
   [Download, "Updates"],
@@ -177,15 +200,18 @@ function EmptySlot({
 function Toggle({
   value,
   onChange,
+  disabled = false,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       className={"toggle " + (value ? "on" : "off")}
       onClick={() => onChange(!value)}
       aria-pressed={value}
+      disabled={disabled}
     >
       <span />
     </button>
@@ -296,16 +322,46 @@ function revealDropdown(menu: HTMLDivElement) {
   });
 }
 
+function revealWindowMenu(menu: HTMLDivElement) {
+  const items = Array.from(menu.querySelectorAll<HTMLButtonElement>(":scope > button"));
+  const motionEnabled = document.documentElement.dataset.animations === "on"
+    && document.documentElement.dataset.performance !== "ultra";
+  if (!motionEnabled) {
+    menu.style.opacity = "1";
+    menu.style.clipPath = "none";
+    items.forEach(item => { item.style.opacity = "1"; });
+    return;
+  }
+  waapi.animate(menu, {
+    opacity: [0, 1],
+    clipPath: ["inset(0 0 100% 0)", "inset(0 0 0% 0)"],
+    duration: 260,
+    ease: "cubic-bezier(.65,0,.35,1)",
+    persist: true,
+  });
+  items.forEach((item, index) => {
+    waapi.animate(item, {
+      opacity: [0, 1],
+      delay: 45 + index * 22,
+      duration: 145,
+      ease: "linear",
+      persist: true,
+    });
+  });
+}
+
 function Select({
   value,
   options,
   onChange,
   variant = "default",
+  disabledOptions = [],
 }: {
   value: string;
   options: string[];
   onChange: (v: string) => void;
   variant?: "default" | "filter";
+  disabledOptions?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 184, maxHeight: 330 });
@@ -350,6 +406,7 @@ function Select({
               style={{ opacity: 0 }}
               className={option === value ? "chosen" : ""}
               key={option}
+              disabled={disabledOptions.includes(option)}
               onClick={() => {
                 onChange(option);
                 setOpen(false);
@@ -464,6 +521,75 @@ const MICROSOFT_CLIENT_ID =
   "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
 
 type MinecraftProfile = { id: string; name: string };
+
+type CosmeticsPreferences = { enabled: boolean; available: boolean };
+type CosmeticsAccountState = { capeId: string | null; badgeVisible: boolean };
+
+function CosmeticsSettings({ profile }: { profile: MinecraftProfile | null }) {
+  const [preferences, setPreferences] = useState<CosmeticsPreferences | null>(null);
+  const [accountState, setAccountState] = useState<CosmeticsAccountState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setMessage("");
+    void (async () => {
+      const local = await invoke<CosmeticsPreferences>("get_cosmetics_preferences");
+      if (cancelled) return;
+      setPreferences(local);
+      if (!profile) { setAccountState(null); return; }
+      const remote = await invoke<CosmeticsAccountState>("cosmetics_request", {
+        method: "GET",
+        path: "/v1/cosmetics/me",
+        body: null,
+        accountId: profile.id,
+      });
+      if (!cancelled) setAccountState(remote);
+    })().catch(error => { if (!cancelled) setMessage(String(error)); });
+    return () => { cancelled = true; };
+  }, [profile?.id]);
+
+  const setIntegration = async (enabled: boolean) => {
+    if (!preferences || busy) return;
+    setBusy(true); setMessage("");
+    try {
+      await invoke("set_cosmetics_preferences", { enabled });
+      const problems = await invoke<string[]>("reconcile_cosmetics");
+      setPreferences(current => current && ({ ...current, enabled }));
+      if (problems.length) setMessage(problems.join("\n"));
+    } catch (error) {
+      setMessage(String(error));
+      const current = await invoke<CosmeticsPreferences>("get_cosmetics_preferences").catch(() => null);
+      if (current) setPreferences(current);
+    } finally { setBusy(false); }
+  };
+
+  const setBadge = async (badgeVisible: boolean) => {
+    if (!profile || !accountState || busy) return;
+    setBusy(true); setMessage("");
+    try {
+      await invoke("cosmetics_request", {
+        method: "PUT",
+        path: "/v1/cosmetics/badge",
+        body: { visible: badgeVisible },
+        accountId: profile.id,
+      });
+      setAccountState(current => current && ({ ...current, badgeVisible }));
+    } catch (error) { setMessage(String(error)); }
+    finally { setBusy(false); }
+  };
+
+  return <div className="settings-card cosmetics-settings-card">
+    <SettingRow title="Bloom Cosmetics" description="Install and maintain Bloom capes for supported Fabric 1.21.11 instances.">
+      <Toggle value={preferences?.enabled ?? false} disabled={!preferences?.available || busy || !preferences} onChange={value => void setIntegration(value)} />
+    </SettingRow>
+    <SettingRow title="Nametag Badge" description={profile ? "Show the Bloom flower beside your name while playing through Bloom." : "Sign in to choose whether your Bloom badge is visible."}>
+      <Toggle value={accountState?.badgeVisible ?? false} disabled={!profile || !accountState || busy || !preferences?.enabled} onChange={value => void setBadge(value)} />
+    </SettingRow>
+    {message && <div className="cosmetics-settings-message" role="status">{message}</div>}
+  </div>;
+}
 type MinecraftAccountList = { activeId: string | null; accounts: MinecraftProfile[] };
 
 function SignInPanel({
@@ -733,24 +859,10 @@ function SettingsPage({
                 description="Choose your preferred theme."
               >
                 <Select
-                  value={
-                    settings.theme === "dark"
-                      ? "Dark"
-                      : settings.theme === "oled"
-                        ? "OLED Dark"
-                        : "Dusk"
-                  }
-                  options={["Dark", "OLED Dark", "Dusk"]}
-                  onChange={(v) =>
-                    update(
-                      "theme",
-                      v === "OLED Dark"
-                        ? "oled"
-                        : v === "Dusk"
-                          ? "dusk"
-                          : "dark",
-                    )
-                  }
+                  value="OLED Black"
+                  options={["OLED Black", "Coming soon"]}
+                  disabledOptions={["Coming soon"]}
+                  onChange={() => update("theme", "oled")}
                 />
               </SettingRow>
               <SettingRow
@@ -906,6 +1018,11 @@ function SettingsPage({
                 />
               </SettingRow>
             </div>
+          </div>
+          <div className="settings-section" {...section("Cosmetics")}>
+            <h2>Cosmetics</h2>
+            <p className="section-subtitle">Control capes and your in-game Bloom identity.</p>
+            <CosmeticsSettings profile={profile} />
           </div>
           <div className="settings-section" {...section("Launcher")}>
             <h2>Launcher</h2>
@@ -1792,14 +1909,16 @@ function InstancePage({ instance, busy, initialTab = "mods", initialCatalog = fa
             {browsingCatalog ? <button className="catalog-close" onClick={closeCatalog} aria-label={`Back to installed ${categoryLabel.toLowerCase()}`}><X size={17} />Back</button> : <><Select value={sort} options={["Name", "Size"]} onChange={setSort} /><button className="add-content" onClick={openCatalog} title={`Browse compatible Modrinth ${categoryLabel.toLowerCase()}`}><CirclePlus size={17} />Add {categoryLabel}</button></>}
           </div>
         </div>
-        <div className="content-list">
-          {browsingCatalog ? (
-            catalogLoading ? <div className="catalog-loading"><i className="loading-dots" /><span>{search ? "Searching Modrinth" : `Loading featured ${categoryLabel.toLowerCase()}`}</span></div> : catalog.items.length ? catalog.items.map(item => {
-              const installed = catalogItemInstalled(item);
-              const pending = pendingCatalogItems.has(catalogKey(item));
-              return <div className={`content-item catalog-item ${installed ? "is-installed" : ""} ${pending ? "is-pending" : ""}`} key={item.projectId}><span className="content-icon">{item.iconUrl ? <img src={item.iconUrl} alt="" loading="lazy" /> : tab === "mods" ? <Puzzle size={22} /> : tab === "resourcepacks" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="content-name"><b>{item.title}</b><small>{item.versionNumber} • by {item.author}</small></div><span className="content-loader">{item.loader}</span><span className="content-size">{formatBytes(item.fileSize)}</span><div className="catalog-item-actions"><button className="catalog-view-project" onClick={() => openCatalogProject(item)} aria-label={`View ${item.title} on Modrinth`} title="View on Modrinth"><ExternalLink size={16} /></button><button className="catalog-install" disabled={installed || pending} onClick={() => void queueCatalogInstall(item)} aria-label={installed ? `${item.title} is installed` : pending ? `${item.title} is queued for installation` : `Install ${item.title}`}>{pending ? <Timer size={16} /> : <Plus size={18} />}</button></div>{installed && <span className="catalog-installed-state">Installed</span>}</div>;
-            }) : <div className="content-empty"><Search size={24} /><b>No compatible {categoryLabel.toLowerCase()} found</b><span>Try a different search for Minecraft {instance.version}.</span></div>
-          ) : visibleItems.length ? pagedItems.map(item => <div className="content-item" key={item.id}><span className="content-icon">{item.icon ? <img src={item.icon} alt="" loading="lazy" /> : tab === "shaderpacks" ? <Cuboid size={22} /> : <PackageOpen size={22} />}</span><div className="content-name"><b>{item.name}</b><small>{item.version || item.fileName}</small></div><span className="content-loader">{tab === "mods" ? instance.loader : tab === "resourcepacks" ? "Minecraft" : "Shader"}</span><span className="content-size">{formatBytes(item.size)}</span><Toggle value={item.enabled} onChange={value => void toggleItem(item, value)} /><InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} /></div>) : <div className="content-empty"><PackageOpen size={24} /><b>No {categoryLabel.toLowerCase()} installed</b><span>Open the folder and add files manually, or browse Modrinth.</span><button onClick={() => void invoke("open_instance_folder", { instanceId: instance.id, category: tab })}>Open folder</button></div>}
+        <div className="instance-content-list-shell">
+          <div className="content-list">
+            {browsingCatalog ? (
+              catalogLoading ? <div className="catalog-loading"><i className="loading-dots" /><span>{search ? "Searching Modrinth" : `Loading featured ${categoryLabel.toLowerCase()}`}</span></div> : catalog.items.length ? catalog.items.map(item => {
+                const installed = catalogItemInstalled(item);
+                const pending = pendingCatalogItems.has(catalogKey(item));
+                return <div className={`content-item catalog-item ${installed ? "is-installed" : ""} ${pending ? "is-pending" : ""}`} key={item.projectId}><span className="content-icon">{item.iconUrl ? <img src={item.iconUrl} alt="" loading="lazy" /> : tab === "mods" ? <Puzzle size={22} /> : tab === "resourcepacks" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="content-name"><b>{item.title}</b><small>{item.versionNumber} • by {item.author}</small></div><span className="content-loader">{item.loader}</span><span className="content-size">{formatBytes(item.fileSize)}</span><div className="catalog-item-actions"><button className="catalog-view-project" onClick={() => openCatalogProject(item)} aria-label={`View ${item.title} on Modrinth`} title="View on Modrinth"><ExternalLink size={16} /></button><button className="catalog-install" disabled={installed || pending} onClick={() => void queueCatalogInstall(item)} aria-label={installed ? `${item.title} is installed` : pending ? `${item.title} is queued for installation` : `Install ${item.title}`}>{pending ? <Timer size={16} /> : <Plus size={18} />}</button></div>{installed && <span className="catalog-installed-state">Installed</span>}</div>;
+              }) : <div className="content-empty"><Search size={24} /><b>No compatible {categoryLabel.toLowerCase()} found</b><span>Try a different search for Minecraft {instance.version}.</span></div>
+            ) : visibleItems.length ? pagedItems.map(item => <div className="content-item" key={item.id}><span className="content-icon">{item.icon ? <img src={item.icon} alt="" loading="lazy" /> : tab === "shaderpacks" ? <Cuboid size={22} /> : <PackageOpen size={22} />}</span><div className="content-name"><b>{item.name}</b><small>{item.version || item.fileName}</small></div><span className="content-loader">{tab === "mods" ? instance.loader : tab === "resourcepacks" ? "Minecraft" : "Shader"}</span><span className="content-size">{formatBytes(item.size)}</span><Toggle value={item.enabled} onChange={value => void toggleItem(item, value)} /><InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} /></div>) : <div className="content-empty"><PackageOpen size={24} /><b>No {categoryLabel.toLowerCase()} installed</b><span>Open the folder and add files manually, or browse Modrinth.</span><button onClick={() => void invoke("open_instance_folder", { instanceId: instance.id, category: tab })}>Open folder</button></div>}
+          </div>
         </div>
         {browsingCatalog
           ? catalog.total > 20 && <PaginationControls page={contentPage} pages={catalogPages} busy={catalogLoading} onPrevious={() => setContentPage(page => page - 1)} onNext={() => setContentPage(page => page + 1)} />
@@ -2232,7 +2351,14 @@ function SpotlightInstanceSelect({
       if (!bounds) return;
       const width = Math.max(140, bounds.width - 10);
       const contentHeight = menuRef.current?.scrollHeight || instances.length * 50 + 10;
-      setPosition(fitFloatingMenu(bounds, width, contentHeight, bounds.left + 5));
+      const top = bounds.bottom - 10;
+      const viewportPadding = 8;
+      setPosition({
+        top,
+        left: Math.max(viewportPadding, Math.min(bounds.left + 5, window.innerWidth - width - viewportPadding)),
+        width,
+        maxHeight: Math.min(330, Math.max(72, Math.min(contentHeight + 10, window.innerHeight - top - viewportPadding))),
+      });
     };
     const closeOutside = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -2302,7 +2428,7 @@ function SpotlightHome({
               </div>
               <div className="spotlight-launch-controls">
                 <button className="spotlight-play" disabled={busy} onClick={() => onPlay(selected)}>
-                  <Play size={20} fill="currentColor" />
+                  <Play size={24} fill="currentColor" />
                   <b>Play</b>
                 </button>
                 <SpotlightInstanceSelect instances={instances} selected={selected} onSelect={onSelect} />
@@ -2311,7 +2437,7 @@ function SpotlightHome({
           ) : (
             <div className="spotlight-empty-launch">
               <span className="spotlight-selected-art" aria-hidden="true"><Plus size={32} /></span>
-              <button className="spotlight-play spotlight-create" onClick={onCreate}><Plus size={19} /><b>Create instance</b></button>
+              <button className="spotlight-play spotlight-create" onClick={onCreate}><Plus size={23} /><b>Create instance</b></button>
             </div>
           )}
         </div>
@@ -2359,7 +2485,11 @@ function App() {
   const [updatePhase, setUpdatePhase] = useState<"ready" | "downloading" | "installing" | "error">("ready");
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateError, setUpdateError] = useState("");
+  const [mockUpdateActive, setMockUpdateActive] = useState(false);
   const updateCheckStarted = useRef(false);
+  const updateSurfaceRef = useRef<HTMLElement>(null);
+  const mockUpdateInterval = useRef<number | null>(null);
+  const mockInstallTimer = useRef<number | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [signInOpen, setSignInOpen] = useState(false);
   const [profile, setProfile] = useState<MinecraftProfile | null>(() => {
@@ -2372,6 +2502,8 @@ function App() {
   const [profileIcon, setProfileIcon] = useState<string | null>(() => localStorage.getItem(PROFILE_ICON_STORAGE_KEY));
   const [customBackgroundImage, setCustomBackgroundImage] = useState<string | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [windowMenuOpen, setWindowMenuOpen] = useState<WindowMenuName | null>(null);
+  const windowMenuRef = useRef<HTMLDivElement>(null);
   const [accounts, setAccounts] = useState<MinecraftProfile[]>([]);
   const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
   const [switchingAccount, setSwitchingAccount] = useState(false);
@@ -2399,6 +2531,7 @@ function App() {
         };
         localStorage.setItem(customBackgroundDefaultsMigrationKey, "complete");
       }
+      loaded = { ...loaded, theme: "oled" };
       localStorage.setItem("bloom-settings", JSON.stringify(loaded));
       return loaded;
     } catch {
@@ -2453,7 +2586,7 @@ function App() {
       if (event.button !== 0 || document.documentElement.dataset.animations !== "on" || document.documentElement.dataset.performance === "ultra") return;
       const target = event.target instanceof Element ? event.target.closest<HTMLElement>("button, .instance-library-card") : null;
       if (!target || (target instanceof HTMLButtonElement && target.disabled)) return;
-      if (target.closest(".accent-picks") || target.classList.contains("instance-icon-picker")) return;
+      if (target.closest(".accent-picks") || target.closest(".window-menu") || target.classList.contains("instance-icon-picker") || target.classList.contains("window-control")) return;
       const duration = Number(document.documentElement.dataset.buttonPressDuration || 0);
       activePresses.get(target)?.cancel();
       activePresses.delete(target);
@@ -2504,9 +2637,9 @@ function App() {
         if (previous && previous !== update) void previous.close().catch(() => {});
         return update;
       });
-      if (manual) {
+      if (manual && !update) {
         setToastKind("notification");
-        setToast(update ? `Bloom Client ${update.version} is ready to download.` : "Bloom Client is already up to date.");
+        setToast("Bloom Client is already up to date.");
         window.setTimeout(() => setToast(""), 3200);
       }
     } catch (error) {
@@ -2531,14 +2664,91 @@ function App() {
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, []);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const showMockUpdate = (event: globalThis.KeyboardEvent) => {
+      const isMockUpdateShortcut = event.ctrlKey && event.shiftKey
+        && (event.code === "KeyU" || event.code === "F10");
+      if (!isMockUpdateShortcut || event.repeat) return;
+      if (document.querySelector(".update-surface.expanded")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMockUpdateActive(true);
+      setUpdatePanelOpen(false);
+      setUpdatePhase("ready");
+      setUpdateProgress(0);
+      setUpdateError("");
+    };
+    window.addEventListener("keydown", showMockUpdate, { capture: true });
+    return () => window.removeEventListener("keydown", showMockUpdate, { capture: true });
+  }, []);
+
+  useEffect(() => () => {
+    if (mockUpdateInterval.current !== null) window.clearInterval(mockUpdateInterval.current);
+    if (mockInstallTimer.current !== null) window.clearTimeout(mockInstallTimer.current);
+  }, []);
+  useEffect(() => {
+    if (windowMenuOpen && windowMenuRef.current) revealWindowMenu(windowMenuRef.current);
+  }, [windowMenuOpen]);
+
+  useEffect(() => {
+    const surface = updateSurfaceRef.current;
+    if (!surface || (!availableUpdate && !mockUpdateActive) || updatePanelOpen) return;
+    if (document.documentElement.dataset.animations !== "on" || document.documentElement.dataset.performance === "ultra") return;
+    const entrance = surface.animate(
+      [{ transform: "translateY(100%)" }, { transform: "translateY(0)" }],
+      { duration: 480, easing: "cubic-bezier(.2,.78,.2,1)", fill: "none" },
+    );
+    return () => entrance.cancel();
+  }, [availableUpdate, mockUpdateActive]);
+
+  useEffect(() => {
+    const surface = updateSurfaceRef.current;
+    if (!surface || !updatePanelOpen) return;
+    if (document.documentElement.dataset.animations !== "on" || document.documentElement.dataset.performance === "ultra") return;
+    const reveal = surface.animate(
+      [
+        { clipPath: "inset(calc(100% - 68px) 0 0 0 round 18px 18px 0 0)" },
+        { clipPath: "inset(0 0 0 0 round 0)" },
+      ],
+      { duration: 640, easing: "cubic-bezier(.72,0,.16,1)", fill: "none" },
+    );
+    return () => reveal.cancel();
+  }, [updatePanelOpen]);
+
   const installUpdate = async () => {
-    if (!availableUpdate || updatePhase !== "ready") return;
+    if ((!availableUpdate && !mockUpdateActive) || !["ready", "error"].includes(updatePhase)) return;
+    setUpdatePanelOpen(true);
     setUpdatePhase("downloading");
+    setUpdateProgress(0);
     setUpdateError("");
+    if (mockUpdateActive) {
+      if (mockUpdateInterval.current !== null) window.clearInterval(mockUpdateInterval.current);
+      if (mockInstallTimer.current !== null) window.clearTimeout(mockInstallTimer.current);
+      let mockProgress = 0;
+      mockUpdateInterval.current = window.setInterval(() => {
+        mockProgress = Math.min(100, mockProgress + 4);
+        setUpdateProgress(mockProgress);
+        if (mockProgress < 100) return;
+        if (mockUpdateInterval.current !== null) window.clearInterval(mockUpdateInterval.current);
+        mockUpdateInterval.current = null;
+        setUpdatePhase("installing");
+        mockInstallTimer.current = window.setTimeout(() => {
+          mockInstallTimer.current = null;
+          setUpdatePanelOpen(false);
+          setUpdatePhase("ready");
+          setUpdateProgress(0);
+          setMockUpdateActive(false);
+        }, 1500);
+      }, 85);
+      return;
+    }
+    const realUpdate = availableUpdate;
+    if (!realUpdate) return;
     let downloaded = 0;
     let total = 0;
     try {
-      await availableUpdate.downloadAndInstall((event) => {
+      await realUpdate.downloadAndInstall((event) => {
         if (event.event === "Started") {
           total = event.data.contentLength || 0;
           setUpdateProgress(0);
@@ -2557,10 +2767,14 @@ function App() {
     }
   };
 
-  const closeUpdatePanel = () => {
-    if (updatePhase !== "ready") return;
+  const closeUpdateError = () => {
+    if (updatePhase !== "error") return;
     setUpdatePanelOpen(false);
+    setUpdatePhase("ready");
+    setUpdateProgress(0);
+    setUpdateError("");
   };
+  const displayedUpdateVersion = mockUpdateActive ? "9.9.9-test" : availableUpdate?.version || "";
   useEffect(() => {
     let stop: (() => void) | undefined;
     const timer = window.setTimeout(() => {
@@ -2591,6 +2805,15 @@ function App() {
   useEffect(() => {
     void invoke<InstanceDraft[]>("list_instances").then(setInstances);
   }, []);
+  useEffect(() => {
+    if (gameRunning || download.active) return;
+    const timer = window.setTimeout(() => {
+      void invoke<string[]>("reconcile_cosmetics").then(problems => {
+        if (problems.length) { setToastKind("error"); setToast(problems.join("\n")); }
+      }).catch(error => { setToastKind("error"); setToast(String(error)); });
+    }, 750);
+    return () => window.clearTimeout(timer);
+  }, [instances, gameRunning, download.active]);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen<DownloadViewState>(
@@ -2809,6 +3032,7 @@ function App() {
     setContextMenu({ x: event.clientX, y: event.clientY });
   };
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") setWindowMenuOpen(null);
     if (
       event.key === "F12" ||
       (event.ctrlKey && event.shiftKey) ||
@@ -2878,7 +3102,7 @@ function App() {
       data-blurred-sidebars={customBackgroundActive ? "on" : "off"}
       data-blurred-buttons={customBackgroundActive ? "on" : "off"}
       onContextMenu={handleContextMenu}
-      onClick={() => { setContextMenu(null); setProfileMenuOpen(false); setSignInOpen(false); }}
+      onClick={() => { setContextMenu(null); setProfileMenuOpen(false); setSignInOpen(false); setWindowMenuOpen(null); }}
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
@@ -2896,19 +3120,48 @@ function App() {
           }
         }}
       >
+        <div className="window-menu" onClick={event => event.stopPropagation()}>
+          {(["file", "edit", "view", "help"] as WindowMenuName[]).map(menu => (
+            <div className="window-menu-group" key={menu}>
+              <button
+                className="window-menu-trigger"
+                aria-expanded={windowMenuOpen === menu}
+                aria-haspopup="menu"
+                onClick={() => setWindowMenuOpen(current => current === menu ? null : menu)}
+              >
+                {menu[0].toUpperCase() + menu.slice(1)}
+              </button>
+              {windowMenuOpen === menu && <div ref={windowMenuRef} className="window-menu-dropdown" role="menu">
+                {menu === "file" && <>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); setPage("new-instance"); }}>New instance</button>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); setPage("instances"); }}>Instances</button>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); setPage("downloads"); }}>Downloads</button>
+                </>}
+                {menu === "edit" && <>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); openSettings(); }}>Client settings</button>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); openSettings("My Profile"); }}>Profile &amp; accounts</button>
+                </>}
+                {menu === "view" && <>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); setPage("home"); }}>Home</button>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); setPage("locker"); }}>Locker</button>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); setPage("autotune"); }}>AutoTune</button>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); setPage("logs"); }}>Logs</button>
+                </>}
+                {menu === "help" && <>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); void checkForUpdates(true); }}>Check for updates</button>
+                  <button style={{ opacity: 0 }} role="menuitem" onClick={() => { setWindowMenuOpen(null); void showJavaStatus(); }}>Check Java</button>
+                </>}
+              </div>}
+            </div>
+          ))}
+        </div>
         <div className="window-controls">
-          <button className="window-control" onClick={() => void getCurrentWindow().minimize()} aria-label="Minimize Bloom Client"><Minus size={15} /></button>
-          <button className="window-control" onClick={() => void getCurrentWindow().toggleMaximize()} aria-label="Maximize or restore Bloom Client"><Square size={12} /></button>
-          <button className="window-control window-close" onClick={() => void invoke("exit_application")} aria-label="Close Bloom Client"><CloseIcon size={15} /></button>
+          <button className="window-control window-minimize" onClick={() => void getCurrentWindow().minimize()} aria-label="Minimize Bloom Client"><WindowMinimizeIcon /></button>
+          <button className="window-control window-expand" onClick={() => void getCurrentWindow().toggleMaximize()} aria-label="Maximize or restore Bloom Client"><WindowExpandIcon /></button>
+          <button className="window-control window-close" onClick={() => void invoke("exit_application")} aria-label="Close Bloom Client"><WindowCloseIcon /></button>
         </div>
       </div>
       <aside className="sidebar">
-        <div className="brand">
-          <img src="/bloom-logo.png" alt="Bloom logo" />
-          <div>
-            <b>Bloom Client</b>
-          </div>
-        </div>
         <nav>
           {nav.map(([Icon, label], index) => (
             <button
@@ -2916,13 +3169,14 @@ function App() {
                 (page === "home" && index === 0) ||
                 (page === "instances" && label === "Instances") ||
                 (page === "autotune" && label === "AutoTune") ||
-                (page === "settings" && label === "Settings")
+                (page === "settings" && label === "Settings") ||
+                (page === "locker" && label === "Locker")
                   ? "active"
                   : ""
               }
               key={label}
               onClick={() =>
-                label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "AutoTune" ? setPage("autotune") : setPage("home")
+                label === "Locker" ? setPage("locker") : label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "AutoTune" ? setPage("autotune") : setPage("home")
               }
             >
               <Icon size={17} />
@@ -2940,20 +3194,18 @@ function App() {
         <div className="instance-list">
           {instances.length ? (
             instances.slice(0, 3).map((instance) => (
-              <button
+              <div
                 className={`sidebar-instance ${page === "instance" && selectedInstanceId === instance.id ? "active" : ""}`}
                 key={instance.id}
-                onClick={(event) => handleInstanceClick(event, instance)}
-                onDoubleClick={(event) => handleInstanceDoubleClick(event, instance)}
               >
-                <span className="sidebar-instance-media" aria-hidden="true">
-                  {instance.icon ? <img className="sidebar-instance-icon" src={instance.icon} alt="" /> : <span className="sidebar-instance-fallback">?</span>}
-                </span>
-                <span className="sidebar-instance-copy">
-                  <b>{instance.name}</b>
-                  <small>{instance.version}</small>
-                </span>
-              </button>
+                <button className="sidebar-instance-open" onClick={(event) => handleInstanceClick(event, instance)} onDoubleClick={(event) => handleInstanceDoubleClick(event, instance)} aria-label={`Open ${instance.name}`}>
+                  <span className="sidebar-instance-media" aria-hidden="true">{instance.icon ? <img className="sidebar-instance-icon" src={instance.icon} alt="" /> : <span className="sidebar-instance-fallback">?</span>}</span>
+                  <span className="sidebar-instance-copy"><b>{instance.name}</b><small>{instance.version}</small></span>
+                </button>
+                <button className="sidebar-instance-play" aria-label={`Play ${instance.name}`} title={`Play ${instance.name}`} disabled={download.active || gameRunning} onClick={() => void launch(instance)}>
+                  <span aria-hidden="true"><Play size={26} strokeWidth={2.4} fill="currentColor" /></span>
+                </button>
+              </div>
             ))
           ) : (
             <button className="sidebar-empty-instance" onClick={() => setPage("new-instance")}>
@@ -2984,7 +3236,7 @@ function App() {
                   <div className="signed-in-name"><b>{profile.name}</b></div>
                   <ChevronDown className={profileMenuOpen ? "rotated" : ""} size={16} aria-hidden="true" />
                 </button>
-                {availableUpdate && <button className="sidebar-update-button" onClick={() => setUpdatePanelOpen(true)} aria-label={`Update to Bloom Client ${availableUpdate.version}`} title={`Update available: ${availableUpdate.version}`}>
+                {availableUpdate && <button className="sidebar-update-button" onClick={() => void installUpdate()} aria-label={`Update to Bloom Client ${availableUpdate.version}`} title={`Update available: ${availableUpdate.version}`}>
                   <Download size={16} />
                   <i />
                 </button>}
@@ -3041,8 +3293,10 @@ function App() {
           <InstancesPage instances={instances} busy={download.active || gameRunning} doubleClickToPlay={settings.doubleClickToPlay} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onOpen={(instance, destination) => { setSelectedInstanceId(instance.id); setInstanceDestination(destination); setPage("instance"); }} onDelete={async (instance) => { try { await invoke("delete_instance", { instanceId: instance.id }); setInstances(current => current.filter(item => item.id !== instance.id)); if (selectedInstanceId === instance.id) setSelectedInstanceId(null); if (spotlightInstanceId === instance.id) { setSpotlightInstanceId(null); localStorage.removeItem("bloom-spotlight-instance"); } setToastKind("notification"); setToast(`${instance.name} and all of its files were deleted.`); window.setTimeout(() => setToast(""), 3500); } catch (error) { setToastKind("error"); setToast(String(error)); window.setTimeout(() => setToast(""), 5000); throw error; } }} />
         ) : page === "downloads" ? (
           <DownloadsPage download={download} instances={instances} completed={completedDownloads} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} />
+        ) : page === "locker" ? (
+          <Locker profile={profile} motion={settings.animations && !settings.ultraPerformance} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />
         ) : page === "settings" ? (
-          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} backgroundImage={customBackgroundImage} onBackgroundImageChange={setCustomBackgroundImage} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => setUpdatePanelOpen(true)} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} />
+          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} backgroundImage={customBackgroundImage} onBackgroundImageChange={setCustomBackgroundImage} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => void installUpdate()} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} />
         ) : page === "new-instance" ? (
           <NewInstancePage
             defaults={settings}
@@ -3154,7 +3408,7 @@ function App() {
       </main>
       {settings.recommendations && <aside className="ad-rail">
         <div className="ad-rail-heading">Sponsored</div>
-        {[1, 2, 3].map((ad) => (
+        {[1, 2, 3, 4].map((ad) => (
           <div className="ad-placeholder" key={ad}>
             <span>Ads</span>
           </div>
@@ -3172,31 +3426,30 @@ function App() {
           <button>Coming soon</button>
         </div>
       )}
-      {availableUpdate && updatePanelOpen && <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="update-title">
-        <section className="update-dialog">
-          <div className="update-mark"><Download size={24} /></div>
-          <div className="update-copy">
-            <span className="update-eyebrow">Bloom Client update</span>
-            <h2 id="update-title">Version {availableUpdate.version} is ready</h2>
-            {updatePhase === "ready" && <p>You’ll be moving from version {currentVersion} to {availableUpdate.version}. Bloom will install the update securely, close the launcher briefly, and reopen it automatically.</p>}
-            {updatePhase === "downloading" && <p>Downloading the signed update package…</p>}
-            {updatePhase === "installing" && <p>Installing the update now. Bloom will restart in a moment.</p>}
-            {updatePhase === "error" && <p className="update-error">The update could not be installed: {updateError}</p>}
-          </div>
-          {updatePhase !== "ready" && updatePhase !== "error" && <div className="update-progress"><i style={{ width: `${updateProgress}%` }} /><span>{updatePhase === "installing" ? "Installing" : `${Math.round(updateProgress)}%`}</span></div>}
-          {updatePhase === "ready" && availableUpdate.body && <div className="update-notes"><b>What’s new</b><p>{availableUpdate.body}</p></div>}
-          <div className="update-actions">
-            {updatePhase === "ready" && <button className="update-later" onClick={closeUpdatePanel}>Not now</button>}
-            {updatePhase === "ready" && <button className="update-install" onClick={() => void installUpdate()}><Download size={15} />Confirm update</button>}
-            {updatePhase === "error" && <button className="update-later" onClick={() => { setUpdatePanelOpen(false); setUpdatePhase("ready"); }}>Close</button>}
-            {updatePhase === "error" && <button className="update-install" onClick={() => { setUpdatePhase("ready"); setUpdateError(""); }}><RotateCw size={15} />Try again</button>}
-          </div>
-        </section>
-      </div>}
-      {toast && <div className={`launch-toast ${toastKind}`} role="status">
-        <div className="launch-toast-title">{toastKind === "error" ? <TriangleAlert size={17} /> : <Bell size={17} />}<b>{toastKind === "error" ? "Launch issue" : "Notification"}</b></div>
-        <span>{toast}</span>
-      </div>}
+      {(availableUpdate || mockUpdateActive) && <section
+        ref={updateSurfaceRef}
+        className={`update-surface ${updatePanelOpen ? "expanded" : "compact"} ${updatePhase}`}
+        role={updatePanelOpen ? "dialog" : "status"}
+        aria-modal={updatePanelOpen ? "true" : undefined}
+        aria-labelledby="update-title"
+      >
+        <div className="update-bottom-bar">
+          <span className="update-bar-mark"><Download size={20} strokeWidth={2.4} /></span>
+          <b id="update-title">Bloom Client {displayedUpdateVersion} is ready</b>
+          <button onClick={() => void installUpdate()} disabled={updatePhase !== "ready"}>Update now</button>
+        </div>
+        {updatePanelOpen && <div className="update-fullscreen-copy">
+          <span className="update-fullscreen-mark">{updatePhase === "error" ? <TriangleAlert size={31} /> : <Download size={31} strokeWidth={2.4} />}</span>
+          <h2>{updatePhase === "error" ? "Update stopped" : updatePhase === "installing" ? "Installing Bloom" : "Updating Bloom"}</h2>
+          <p>{updatePhase === "error" ? updateError : updatePhase === "installing" ? "The launcher will restart when it’s ready." : `Downloading version ${displayedUpdateVersion}`}</p>
+          {updatePhase !== "error" && <div className="update-fullscreen-progress" aria-label={updatePhase === "installing" ? "Installing update" : `${Math.round(updateProgress)} percent downloaded`}>
+            <i style={{ width: `${updatePhase === "installing" ? 100 : updateProgress}%` }} />
+            <span>{updatePhase === "installing" ? "Installing" : `${Math.round(updateProgress)}%`}</span>
+          </div>}
+          {updatePhase === "error" && <div className="update-fullscreen-actions"><button onClick={closeUpdateError}>Close</button><button onClick={() => void installUpdate()}><RotateCw size={16} />Try again</button></div>}
+        </div>}
+      </section>}
+      {toast && <div className={`launch-toast ${toastKind}`} role={toastKind === "error" ? "alert" : "status"} aria-live={toastKind === "error" ? "assertive" : "polite"}><span>{toast}</span></div>}
     </div>
   );
 }

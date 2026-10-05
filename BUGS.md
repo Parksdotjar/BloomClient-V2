@@ -44,6 +44,17 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 | BLOOM-030 | Fixed | Modrinth import | Import button label had insufficient contrast and visual weight |
 | BLOOM-031 | Fixed | Modrinth browser | Header X sometimes teleported downward and corrupted its next state |
 | BLOOM-032 | Fixed | Instance creation | Game Directory folder button was a mock control and did not change the real destination |
+| BLOOM-033 | Fixed | Instance content | External drag-and-drop worked only in the Fabric Modrinth browser |
+| BLOOM-034 | Fixed | Accounts | Signed-out account flow did not share the account dock |
+| BLOOM-035 | Fixed | Accounts | Microsoft mark aligned to the top of its identity tile |
+| BLOOM-036 | Fixed | Appearance | Custom-background surfaces used unrelated opacity and blur rules |
+| BLOOM-037 | Fixed | Sidebar | Instance creation plus shifted after revealing |
+| BLOOM-038 | Fixed | AutoTune | Progress dots did not advance after benchmark installation |
+| BLOOM-039 | Fixed | Menus | Compact action menus overlapped their owning cards |
+| BLOOM-040 | Fixed | Packaging | Windows taskbar icon appeared tiny and blurry |
+| BLOOM-041 | Fixed | Bloom Cosmetics | Enabled renderer was not repaired when its managed JAR was missing |
+| BLOOM-042 | Fixed | Locker | Official UUID skin was rejected and replaced by a gray mannequin |
+| BLOOM-043 | Fixed | Instance content | Footer fade exposed a hard seam and inset rectangular edge |
 
 ---
 
@@ -159,6 +170,22 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 - **Root cause:** The mod's first scheduled catalog refresh ran before any player skin had rendered. The empty-player fast path returned without releasing its refresh guard, permanently blocking every later cape lookup.
 - **Fix:** Empty startup refreshes now release the guard so the next two-second refresh fetches the observed player's assignment. Bloom Cosmetics was rebuilt as 1.0.1 and the corrected JAR was bundled for automatic instance synchronization.
 - **Verification:** ParksAE's `Bloom Beta` assignment is present in the live cape API; the rebuilt bundled and installed JARs have matching SHA-256 hashes. Relaunch Minecraft and verify Bloom Beta replaces the official cape.
+
+## BLOOM-041 — Enabled cape renderer was not repaired when its JAR was missing
+
+- **Area:** Bloom Cosmetics managed installation
+- **Symptom:** Locker reported a cape as equipped, but a supported Fabric 1.21.11 instance loaded without Bloom Cosmetics and showed no Bloom cape.
+- **Root cause:** An enabled ownership manifest with neither the active nor `.disabled` JAR present was incorrectly treated as a user opt-out, so reconciliation returned without restoring the managed component.
+- **Fix:** Reconciliation now respects only the explicit disabled state (or its owned `.disabled` file) as an opt-out. If an enabled managed JAR is missing, Bloom restores the checksummed bundled renderer before launch.
+- **Do not repeat:** Missing managed files and explicitly disabled managed files are different states; never infer an opt-out from absence alone.
+
+## BLOOM-042 — Locker replaced the account skin with a gray mannequin
+
+- **Area:** Locker account preview
+- **Symptom:** The selected cape rendered on a gray fallback player instead of the active Minecraft account's UUID skin.
+- **Root cause:** Mojang's signed UUID profile payload returned its trusted `textures.minecraft.net` skin address with an `http` scheme. Bloom required the payload URL itself to already say `https`, rejected it, and silently used the fallback mannequin.
+- **Fix:** Bloom still pins the exact Minecraft texture host and rejects credentials, custom ports, and foreign schemes, but now upgrades Mojang's legacy HTTP address to HTTPS before downloading the official UUID skin.
+- **Do not repeat:** Treat Mojang's profile URL as a trusted-host identifier, not permission to make a plaintext request; normalize the exact allowed host to HTTPS.
 
 ## BLOOM-015 — Minecraft JSON hat textures sampled the wrong pixels
 
@@ -430,3 +457,13 @@ Use the next ID and record the same fields every time:
 - **Fix:** Regenerated the complete Tauri icon family from `bloom-square-source.png`. The Windows ICO now includes clean transparent 16, 24, 32, 48, 64, and 256px layers, allowing Windows to choose a native-size taskbar image instead of rescaling one bitmap.
 - **Verification:** Inspect the ICO directory and render its 16, 24, 32, and 48px frames. Each frame must be transparent outside the flower, fill the available canvas, and contain no dark rounded plate. Confirm the next native Tauri launch at standard and high-DPI Windows scaling.
 - **Do not repeat:** Rebuild every platform icon from the canonical transparent source when branding changes; replacing only a PNG does not update the icon embedded in the Windows executable.
+
+## BLOOM-043 — Instance content footer fade exposed a hard seam and inset rectangular edge
+
+- **Status:** Fixed
+- **Area:** Instance content / Mods, Resource Packs, and Shaders
+- **Symptom:** The scrollable list ended at a visible horizontal line behind the floating search surface. The first attempted fade looked like an inset solid block, left the lighter panel visible at both sides, and still stepped from slight opacity to full opacity.
+- **Root cause:** The fade was attached to the padded list shell instead of the complete content panel. Its curved mask was already partially opaque at the overlay's top boundary, so the overlay itself remained visible even though the rest interpolated.
+- **Fix:** The fade now belongs to the full-width instance manager, reaches both panel walls, rises sooner along the sides, dips through the center, and begins at true zero opacity across its entire top edge before continuously reaching the darker pagination floor. Search, filter, pagination, messages, and scrolling remain above or unaffected by the pointer-free overlay.
+- **Verification:** Check installed and catalog states for Mods, Resource Packs, and Shaders with long and short lists. No horizontal overlay boundary, inset side strip, or stepped opacity band may be visible; all lower controls must remain crisp and interactive.
+- **Do not repeat:** A visually curved fade still needs a mathematically transparent top boundary. Never use an inset rectangular overlay for an edge-to-edge panel transition.

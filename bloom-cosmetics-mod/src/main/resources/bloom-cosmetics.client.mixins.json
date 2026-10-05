@@ -4,8 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "AbstractClientPlayerEntityMixin",
-    "LivingEntityRendererAccessor",
-    "PlayerEntityRendererMixin"
+    "BloomNametagMixin"
   ],
   "injectors": {
     "defaultRequire": 1

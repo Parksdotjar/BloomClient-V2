@@ -1,4 +1,5 @@
-import { copyFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -33,4 +34,5 @@ const source = resolve(libraries, builtJar);
 const destination = resolve(root, "src-tauri", "resources", "bloom-cosmetics-1.21.11.jar");
 mkdirSync(dirname(destination), { recursive: true });
 copyFileSync(source, destination);
+writeFileSync(destination.replace(/\.jar$/, ".sha256"), createHash("sha256").update(readFileSync(source)).digest("hex"));
 console.log(`Bloom Cosmetics bundled at ${destination}`);

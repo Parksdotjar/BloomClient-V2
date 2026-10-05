@@ -3,6 +3,8 @@ use std::sync::{
     Arc, Mutex, OnceLock,
 };
 use tauri::{Emitter, Manager};
+mod cosmetics;
+mod wardrobe;
 
 const BACKEND_URL: &str = match option_env!("BLOOM_BACKEND_URL") {
     Some(value) => value,
@@ -61,6 +63,8 @@ struct BackendCapabilities {
     modrinth: bool,
     curseforge: bool,
     modpacks: bool,
+    #[serde(default)]
+    cosmetics: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -1117,6 +1121,88 @@ async fn get_saved_minecraft_profile(
     Ok(profile)
 }
 
+#[tauri::command]
+async fn get_minecraft_skin(account_id: String) -> Result<String, String> {
+    use base64::Engine;
+
+    let uuid: String = account_id.chars().filter(|character| *character != '-').collect();
+    if uuid.len() != 32 || !uuid.chars().all(|character| character.is_ascii_hexdigit()) {
+        return Err("The selected Minecraft account has an invalid UUID.".to_string());
+    }
+
+    let profile = bloom_http_client()?
+        .get(format!(
+            "https://sessionserver.mojang.com/session/minecraft/profile/{uuid}"
+        ))
+        .timeout(std::time::Duration::from_secs(8))
+        .send()
+        .await
+        .map_err(|error| format!("Minecraft did not return this account's skin: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Minecraft did not return this account's skin: {error}"))?
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|error| format!("Minecraft returned an unreadable skin profile: {error}"))?;
+
+    let encoded_textures = profile["properties"]
+        .as_array()
+        .and_then(|properties| {
+            properties.iter().find_map(|property| {
+                (property["name"].as_str() == Some("textures"))
+                    .then(|| property["value"].as_str())
+                    .flatten()
+            })
+        })
+        .ok_or("Minecraft did not provide a skin for this account.")?;
+    let decoded_textures = base64::engine::general_purpose::STANDARD
+        .decode(encoded_textures)
+        .map_err(|_| "Minecraft returned invalid skin metadata.".to_string())?;
+    let textures: serde_json::Value = serde_json::from_slice(&decoded_textures)
+        .map_err(|_| "Minecraft returned invalid skin metadata.".to_string())?;
+    let skin_url = textures["textures"]["SKIN"]["url"]
+        .as_str()
+        .ok_or("Minecraft did not provide a skin for this account.")?;
+    let mut parsed_url = reqwest::Url::parse(skin_url)
+        .map_err(|_| "Minecraft returned an invalid skin address.".to_string())?;
+    if parsed_url.host_str() != Some("textures.minecraft.net")
+        || parsed_url.username() != ""
+        || parsed_url.password().is_some()
+        || parsed_url.port().is_some()
+        || !matches!(parsed_url.scheme(), "http" | "https")
+    {
+        return Err("Minecraft returned an untrusted skin address.".to_string());
+    }
+    // Mojang's signed UUID profile payload still commonly returns an `http://`
+    // texture address. Never send that plaintext request: pin the exact trusted
+    // texture host above, then upgrade it to HTTPS before downloading the skin.
+    parsed_url
+        .set_scheme("https")
+        .map_err(|_| "Minecraft returned an invalid skin address.".to_string())?;
+
+    let response = bloom_http_client()?
+        .get(parsed_url)
+        .timeout(std::time::Duration::from_secs(8))
+        .send()
+        .await
+        .map_err(|error| format!("Minecraft's skin texture could not be downloaded: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Minecraft's skin texture could not be downloaded: {error}"))?;
+    if response.content_length().unwrap_or(0) > 1_048_576 {
+        return Err("Minecraft returned a skin texture that is too large.".to_string());
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Minecraft's skin texture could not be read: {error}"))?;
+    if bytes.is_empty() || bytes.len() > 1_048_576 {
+        return Err("Minecraft returned an invalid skin texture.".to_string());
+    }
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
 #[derive(serde::Serialize, Clone)]
 struct JavaInstallation {
     path: String,
@@ -1972,7 +2058,7 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
         }
     }
     config.directory = target.to_string_lossy().to_string();
-    remove_bloom_cosmetics_mod(&config)?;
+    // Reconciled explicitly after creation and before launch, never during reads.
     if config.visible {
         if let Some(profile) = saved_autotune_profile() {
             apply_autotune_to_config(&mut config, &profile)?;
@@ -2021,7 +2107,6 @@ fn list_instances_blocking() -> Result<Vec<InstanceConfig>, String> {
             if let Ok(bytes) = std::fs::read(entry.path()) {
                 if let Ok(instance) = serde_json::from_slice::<InstanceConfig>(&bytes) {
                     if instance.visible {
-                        let _ = remove_bloom_cosmetics_mod(&instance);
                         instances.push(instance);
                     }
                 }
@@ -2231,7 +2316,12 @@ fn toggle_instance_content(
     category: String,
     file_name: String,
     enabled: bool,
+    state: tauri::State<'_, LauncherState>,
 ) -> Result<(), String> {
+    if category == "mods" && cosmetics::is_managed_file(&file_name) {
+        if *state.launch_active.lock().map_err(|_| "Launcher busy")? { return Err("Close Minecraft before changing its cape renderer.".into()); }
+        if cosmetics::set_file_enabled(&load_instance(&instance_id)?, &file_name, enabled)? { return Ok(()); }
+    }
     if std::path::Path::new(&file_name)
         .file_name()
         .and_then(|name| name.to_str())
@@ -3783,27 +3873,8 @@ fn install_instance_files(
         )
         .map_err(|error| error.to_string())?;
     }
-    remove_bloom_cosmetics_mod(config)?;
+    cosmetics::reconcile(config)?;
     Ok(version_id)
-}
-
-fn remove_bloom_cosmetics_mod(config: &InstanceConfig) -> Result<(), String> {
-    let mods = std::path::PathBuf::from(&config.directory).join("mods");
-    if !mods.is_dir() {
-        return Ok(());
-    }
-    for entry in std::fs::read_dir(&mods)
-        .map_err(|error| error.to_string())?
-        .flatten()
-    {
-        let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        if name.starts_with("bloom-cosmetics-") && name.contains(".jar") {
-            std::fs::remove_file(entry.path()).map_err(|error| {
-                format!("Bloom could not remove the retired cosmetics bridge: {error}")
-            })?;
-        }
-    }
-    Ok(())
 }
 
 fn selected_java(
@@ -4034,6 +4105,7 @@ async fn launch_minecraft(
                 args.insert(main_index, argument.to_string());
             }
             let mut process = command_without_console(command.executable);
+            cosmetics::attach_session(&mut process, &config, &session);
             process
                 .args(args)
                 .current_dir(command.working_dir)
@@ -4252,6 +4324,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_backend_status,
+            cosmetics::cosmetics_request,
+            cosmetics::get_cosmetics_preferences,
+            cosmetics::set_cosmetics_preferences,
+            cosmetics::reconcile_cosmetics,
             save_custom_background,
             load_custom_background,
             search_modrinth_content,
@@ -4290,6 +4366,11 @@ pub fn run() {
             repair_minecraft_installation,
             sign_out_minecraft,
             get_saved_minecraft_profile,
+            get_minecraft_skin,
+            wardrobe::get_minecraft_wardrobe,
+            wardrobe::set_official_cape,
+            wardrobe::import_locker_skin,
+            wardrobe::apply_locker_skin,
             list_minecraft_accounts,
             switch_minecraft_account
         ])

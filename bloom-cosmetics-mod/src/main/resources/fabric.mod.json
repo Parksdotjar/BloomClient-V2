@@ -3,7 +3,7 @@
   "id": "bloom_cosmetics",
   "version": "${version}",
   "name": "Bloom Cosmetics",
-  "description": "Displays live Bloom Client capes, 3D hats, and torso-anchored wings for players who use the Bloom cosmetics bridge.",
+  "description": "Displays free Bloom capes and a single integrated Bloom nametag badge. Client-side, for Fabric Minecraft 1.21.11.",
   "authors": ["Bloom Client"],
   "contact": {
     "homepage": "https://bloomclient.org",

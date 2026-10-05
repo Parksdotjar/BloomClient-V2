@@ -1,5 +1,7 @@
 # Bloom cosmetics rendering architecture
 
+> Current integration branch: only capes and the single-label nametag badge initialize. Hat/wing/bracelet sources remain dormant. Vanilla elytra is preserved. Renderer downloads are bounded and textures have memory accounting/disposal. Game-session credentials arrive through the child environment, not command arguments. See `CAPES_IMPLEMENTATION_STATUS.md`; runtime multiplayer acceptance is outstanding.
+
 ## System flow
 
 Bloom cosmetics were split across four responsibilities:
@@ -17,7 +19,7 @@ Shop and Locker are currently removed from the active client. `bloom-cosmetics-m
 
 For the local player it uses the stable UUID from the Minecraft account session, not a world-scoped entity UUID. That distinction prevents cosmetics from disappearing or crossing identities after proxy/server transfers. Other players use their entity UUIDs.
 
-Model downloads are limited to 2 MB. Texture downloads are limited to 8 MB and 4096 by 4096 pixels. Network work happens asynchronously; texture registration is handed back to Minecraft's render thread. Model/texture/atlas data is cached by cosmetic ID and immutable revision. Animation frames are selected locally—there is no request per rendered frame.
+Model downloads are limited to 2 MB. Static cape and elytra downloads are limited to 40 MB and 4096 by 2048 pixels; animation atlases retain their separate 32 MB and 4096 by 4096 limits. Network work happens asynchronously; texture registration is handed back to Minecraft's render thread. Model/texture/atlas data is cached by cosmetic ID and immutable revision. Animation frames are selected locally—there is no request per rendered frame.
 
 ## Player renderer integration
 

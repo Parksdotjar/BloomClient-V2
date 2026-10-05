@@ -1,5 +1,7 @@
 # Shop and Locker restoration blueprint
 
+> Integration update: free Locker, backend endpoints, Cape Studio and renderer restoration now exist locally on `codex/free-capes`. Production remains disabled. Read `CAPES_IMPLEMENTATION_STATUS.md` for verified checks and remaining work. Historical Shop/cart/ownership designs below are superseded by free direct equip; no purchase or claim step will return.
+
 ## Current status
 
 Shop and Locker are intentionally removed from the shipped Bloom Client for the VPS migration. The navigation entries, pages, frontend services, native commands, automatic cosmetics-mod build, automatic JAR bundling, and automatic JAR injection are not part of the active client.
