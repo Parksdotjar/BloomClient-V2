@@ -229,6 +229,14 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 - **Verification:** The Fabric build succeeds and the bundled JAR declares `fabricloader >=0.19.2`, Minecraft `1.21.11`, and Java 21.
 - **Do not repeat:** Do not automatically turn the development loader version into a stricter runtime minimum unless the mod actually depends on APIs introduced by that loader release.
 
+## BLOOM-042 — Release version sync left Cargo.lock stale
+
+- **Status:** Fixed
+- **Symptom:** The private Release Manager advanced `Cargo.toml` to the next patch, then `cargo check --locked` stopped with exit code 101 before committing or publishing.
+- **Root cause:** `scripts/sync-version.mjs` updated the manifest and JSON metadata but not Bloom's own package entry in `src-tauri/Cargo.lock`. It also left the root package entry nested inside `package-lock.json` on the old version.
+- **Fix:** Version synchronization now updates both lockfiles explicitly, verifies their expected root entries exist, and remains idempotent when an interrupted release retries the same version.
+- **Verification:** Simulating `v1.1.6` now passes two consecutive version-sync runs, `npm ci`, TypeScript, Social-state tests, all backend tests, `cargo check --locked`, the managed Cosmetics build, and the production frontend build. Generated metadata is restored to `v1.1.5` afterward so the Manager can create `v1.1.6` itself.
+
 ## How to add a bug
 
 Use the next ID and record the same fields every time:
@@ -467,3 +475,33 @@ Use the next ID and record the same fields every time:
 - **Fix:** The fade now belongs to the full-width instance manager, reaches both panel walls, rises sooner along the sides, dips through the center, and begins at true zero opacity across its entire top edge before continuously reaching the darker pagination floor. Search, filter, pagination, messages, and scrolling remain above or unaffected by the pointer-free overlay.
 - **Verification:** Check installed and catalog states for Mods, Resource Packs, and Shaders with long and short lists. No horizontal overlay boundary, inset side strip, or stepped opacity band may be visible; all lower controls must remain crisp and interactive.
 - **Do not repeat:** A visually curved fade still needs a mathematically transparent top boundary. Never use an inset rectangular overlay for an edge-to-edge panel transition.
+
+## BLOOM-044 — Reconnected Social account could not decrypt group messages
+
+- **Status:** Fixed
+- **Area:** Social / end-to-end encryption
+- **Symptom:** One Bloom account could send group messages that every other member decrypted, but messages sent back to that account disappeared or failed decryption while the same group remained healthy for the other members.
+- **Root cause:** A local encryption identity could rotate while retaining the same server device ID. Other clients cached outbound Olm sessions only by user and device ID, so they kept encrypting to the previous Curve25519 identity. Unclaimed one-time keys from that previous identity also remained under the reused device ID. The recipient retained only one inbound session per sending device, allowing a stale session or damaged legacy envelope to block newer traffic.
+- **Fix:** The authenticated backend now exposes active device IDs and Curve25519 identities only to accepted friends or shared-group members. Senders validate cached session identities before every fan-out and force a fresh prekey handshake when a key changes or a device disappears. Identity rotation deletes the previous identity's unused one-time keys in the same transaction, before the client uploads replacements. Recipients replace stale inbound sessions when a valid fresh prekey arrives and advance past irrecoverable legacy envelopes so later valid messages can decrypt.
+- **Verification:** Rotate a recipient identity without changing its device ID, then send direct and group messages to it from two other accounts. Confirm each sender renegotiates, the recipient decrypts all new traffic, removed devices receive no envelopes, and an old damaged envelope cannot stall the cursor.
+- **Do not repeat:** Never treat a device ID as proof that its encryption identity is unchanged. Session reuse must bind to the current authenticated public identity and recover through a fresh prekey handshake.
+
+## BLOOM-045 — Instance pagination rendered beneath the footer gradient
+
+- **Status:** Fixed
+- **Area:** Instance workspace / pagination
+- **Symptom:** The previous/page/next control beneath the instance content list disappeared beneath the decorative footer gradient.
+- **Root cause:** A content-panel restyle removed the pagination control's positioned stacking layer while the footer fade remained a positioned pseudo-element with a positive z-index.
+- **Fix:** Pagination once again owns an explicit stacking layer above the decorative footer fade. The instance tab bar also stays isolated from decorative content layers.
+- **Verification:** Open Mods, Resource Packs, and Shaders with enough results for multiple pages. Confirm the previous/page/next control stays crisp, visible, and interactive over the fade at multiple window heights.
+- **Do not repeat:** Decorative gradients and masks must remain below pagination and navigation controls, even when the decoration belongs to a later DOM sibling.
+
+## BLOOM-046 — Social controls had partial hitboxes and polling reverted current state
+
+- **Status:** Fixed
+- **Area:** Frameless window / Social state synchronization
+- **Symptom:** The Social pin and drawer-close buttons responded only on their lower halves. Pin state could undo itself, a drawer could appear to close, and selecting another direct message could jump back to the previous conversation.
+- **Root cause:** A full-width 42px drag layer physically covered the top half of right-side controls. Separately, the polling closure retained an old selected-DM value, accepted out-of-order snapshots, and allowed snapshot and pin operations to load and save the encrypted vault concurrently.
+- **Fix:** The frameless window now uses a bounded empty-space drag handle that does not cover right-side page actions. Social rejects stale loads across mutations, uses a functional selection fallback, updates pins optimistically, and serializes native vault snapshot, send, and pin writes.
+- **Verification:** Click every edge of the header pin, pinned-drawer X, and members-drawer X. Rapidly switch among several DMs while multiple four-second refreshes finish, then pin and unpin messages in direct and group conversations. Selection, drawer visibility, and final pin state must remain exactly where the user left them.
+- **Do not repeat:** Never use a full-width transparent drag overlay above page content, capture current selection in a long-lived polling closure, apply an older async result over a newer mutation, or permit concurrent load-modify-save cycles against the encrypted vault.

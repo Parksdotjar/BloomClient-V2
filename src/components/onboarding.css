@@ -1,0 +1,77 @@
+.onboarding-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  grid-template-rows: 34px minmax(0, 1fr);
+  overflow: hidden;
+  color: #fff;
+  background: #000;
+}
+
+.onboarding-titlebar { position: relative; z-index: 4; min-width: 0; -webkit-app-region: drag; }
+.onboarding-window-controls { position: absolute; top: 0; right: 0; height: 34px; display: flex; -webkit-app-region: no-drag; }
+.onboarding-window-controls button { width: 46px; height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 0; color: #aeb6c0; background: transparent; }
+.onboarding-window-controls button:hover { color: #fff; background: #15171a; }
+.onboarding-window-controls .close:hover { background: #b32632; }
+
+.onboarding-main { min-height: 0; display: grid; place-items: center; padding: 28px 32px 66px; }
+.onboarding-flow { width: min(510px, calc(100vw - 64px)); display: grid; justify-items: center; text-align: center; }
+.onboarding-brand { width: 86px; height: 86px; display: grid; place-items: center; margin-bottom: 8px; }
+.onboarding-brand img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 16px 28px #000); }
+.onboarding-splash .onboarding-brand { margin: 0; animation: onboarding-breathe 1.4s ease-in-out infinite; }
+.onboarding-step { width: 100%; display: grid; place-items: center; justify-content: stretch; }
+.onboarding-step-logo { width: 86px; height: 86px; display: block; object-fit: contain; }
+.onboarding-step h1 { margin: 0; font-size: clamp(30px, 4.2vw, 43px); line-height: 1.05; letter-spacing: -.035em; }
+.onboarding-welcome { gap: 20px; }
+.onboarding-welcome .onboarding-primary { margin-top: 5px; }
+
+.onboarding-primary { min-width: 245px; min-height: 50px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 28px; padding: 0 19px; border: 0; border-radius: 12px; color: #fff; background: var(--accent); font: 800 13px/1 "Segoe UI", sans-serif; box-shadow: 0 14px 34px color-mix(in srgb, var(--accent) 18%, transparent); }
+.onboarding-primary.microsoft { width: 286px; min-height: 58px; display: flex; justify-content: center; gap: 14px; padding: 0 22px; color: #050505; background: #fff; font-size: 15px; box-shadow: 0 14px 34px #000a; }
+.onboarding-primary.microsoft > span { width: 30px; height: 30px; display: grid; flex: 0 0 30px; place-items: center; border-radius: 0; background: transparent; }
+.onboarding-primary.microsoft img { width: 30px; height: 30px; }
+.onboarding-primary:hover { filter: brightness(1.09); }
+
+.onboarding-requesting { gap: 17px; color: #c9cfd7; }
+.onboarding-requesting svg,
+.onboarding-waiting svg { animation: onboarding-spin 1s linear infinite; }
+.onboarding-requesting h1 { font-size: 24px; }
+
+.onboarding-authorize { gap: 22px; }
+.onboarding-authorize > h1 { font-size: 31px; }
+.onboarding-code-stack { width: min(440px, 100%); display: grid; grid-template-rows: 148px 0fr; overflow: hidden; border-radius: 18px; background: #08090a; box-shadow: 0 18px 34px #000c; transition: grid-template-rows 420ms cubic-bezier(.2,.8,.2,1); }
+.onboarding-code-stack.copied { grid-template-rows: 92px 1fr; }
+.onboarding-code-card { position: relative; z-index: 2; width: 100%; min-height: 0; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 16px 22px; overflow: hidden; border: 2px solid #39424c; border-radius: 18px; color: #fff; background: #0d0f11; box-shadow: 0 18px 34px #000c; transition: border-radius 420ms cubic-bezier(.2,.8,.2,1), border-color 260ms ease, background-color 260ms ease; }
+.onboarding-code-card:hover { background: #111418; }
+.onboarding-code-card:disabled { opacity: 1; cursor: default; }
+.onboarding-code-card small { color: #8d97a3; font: 700 10px/1 "Segoe UI", sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.onboarding-code-card strong { font: 850 38px/1.1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .12em; }
+.onboarding-code-card span { display: flex; align-items: center; gap: 7px; color: #f5f7f9; font: 750 11px/1 "Segoe UI", sans-serif; }
+.onboarding-code-stack.copied .onboarding-code-card { border-color: #30d978; border-radius: 18px 18px 0 0; background: #0d4a28; }
+.onboarding-code-stack.copied .onboarding-code-card strong { font-size: 24px; }
+
+.onboarding-browser-reveal { min-height: 0; overflow: hidden; opacity: 0; border: 0 solid #39424c; border-radius: 0 0 18px 18px; background: #08090a; transition: opacity 180ms ease; }
+.onboarding-code-stack.copied .onboarding-browser-reveal { opacity: 1; border-width: 0 2px 2px; }
+.onboarding-browser-reveal button { width: 100%; height: 100%; min-height: 72px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 12px 19px; border: 0; border-radius: 0; color: #fff; text-align: left; background: #08090a; }
+.onboarding-browser-reveal button:hover { background: #0d0f11; }
+.onboarding-browser-reveal span { display: grid; gap: 5px; }
+.onboarding-browser-reveal b { font-size: 12px; }
+.onboarding-browser-reveal small { color: #7f8995; font: 600 10px/1 "Segoe UI", sans-serif; }
+
+.onboarding-waiting { display: flex; align-items: center; gap: 7px; margin-top: -4px; color: #7e8792; font: 650 10px/1 "Segoe UI", sans-serif; }
+.onboarding-error { max-width: 410px; margin: 14px 0 -3px; color: #f28f98; font: 600 11px/1.45 "Segoe UI", sans-serif; }
+
+.onboarding-success { gap: 12px; }
+.onboarding-success p { margin: 0; color: #a4adb7; font: 750 13px/1 "Segoe UI", sans-serif; }
+.onboarding-success .onboarding-primary { margin-top: 13px; }
+.onboarding-failed p { max-width: 420px; margin: 16px 0 0; color: #a3acb6; font: 550 12px/1.55 "Segoe UI", sans-serif; }
+
+@keyframes onboarding-spin { to { transform: rotate(360deg); } }
+@keyframes onboarding-breathe { 50% { opacity: .62; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-shell *, .onboarding-shell *::before, .onboarding-shell *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+
+html[data-animations="off"] .onboarding-shell *,
+html[data-performance="ultra"] .onboarding-shell * { animation: none !important; transition: none !important; }

@@ -3,8 +3,13 @@ use std::sync::{
     Arc, Mutex, OnceLock,
 };
 use tauri::{Emitter, Manager};
+mod cache;
 mod cosmetics;
+mod modpack_sharing;
+mod social;
 mod wardrobe;
+
+mod utilities;
 
 const BACKEND_URL: &str = match option_env!("BLOOM_BACKEND_URL") {
     Some(value) => value,
@@ -65,6 +70,8 @@ struct BackendCapabilities {
     modpacks: bool,
     #[serde(default)]
     cosmetics: bool,
+    #[serde(default)]
+    pack_sharing: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -86,6 +93,8 @@ struct CatalogMod {
     title: String,
     summary: String,
     icon_url: Option<String>,
+    #[serde(default)]
+    icon_source_url: Option<String>,
     author: String,
     downloads: u64,
     loader: String,
@@ -96,7 +105,7 @@ struct CatalogMod {
     file_size: u64,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CatalogSearchResult {
     items: Vec<CatalogMod>,
@@ -108,9 +117,19 @@ struct CatalogSearchResult {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CatalogInstallFile {
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default)]
+    version_id: Option<String>,
+    #[serde(default = "dependency_version_pinned_by_default")]
+    dependency_version_pinned: bool,
     file_name: String,
     download_url: String,
     sha1: Option<String>,
+}
+
+fn dependency_version_pinned_by_default() -> bool {
+    true
 }
 
 #[derive(serde::Deserialize)]
@@ -142,6 +161,8 @@ struct ModrinthSearchHit {
 #[derive(serde::Deserialize)]
 struct ModrinthVersion {
     id: String,
+    #[serde(default)]
+    project_id: Option<String>,
     version_number: String,
     version_type: String,
     #[serde(default)]
@@ -150,7 +171,15 @@ struct ModrinthVersion {
     loaders: Vec<String>,
     #[serde(default)]
     date_published: String,
+    #[serde(default)]
+    dependencies: Vec<ModrinthDependency>,
     files: Vec<ModrinthFile>,
+}
+
+#[derive(Clone, serde::Deserialize)]
+struct ModrinthDependency {
+    project_id: Option<String>,
+    dependency_type: String,
 }
 
 #[derive(serde::Serialize)]
@@ -176,7 +205,46 @@ struct ModrinthFile {
 
 #[derive(serde::Deserialize)]
 struct ModrinthProject {
+    #[serde(default)]
+    id: String,
     title: String,
+    #[serde(default)]
+    description: String,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogProjectDependency {
+    project_id: String,
+    title: String,
+    dependency_type: String,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogProjectVersion {
+    id: String,
+    version_number: String,
+    version_type: String,
+    date_published: String,
+    game_versions: Vec<String>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogProjectFile {
+    file_name: String,
+    file_size: u64,
+    primary: bool,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogProjectDetails {
+    description: String,
+    dependencies: Vec<CatalogProjectDependency>,
+    versions: Vec<CatalogProjectVersion>,
+    files: Vec<CatalogProjectFile>,
 }
 
 fn catalog_category(category: &str) -> Result<(&'static str, &'static str, &'static str), String> {
@@ -247,7 +315,7 @@ async fn direct_modrinth_search(
                     "relevance"
                 },
             ),
-            ("limit", "20"),
+            ("limit", "50"),
             ("offset", offset.to_string().as_str()),
         ])
         .send()
@@ -293,6 +361,7 @@ async fn direct_modrinth_search(
                 .find(|version| version.version_type == "release")
                 .or_else(|| versions.first())?;
             let file = primary_modrinth_file(version)?;
+            let icon_source_url = hit.icon_url.clone();
             Some(CatalogMod {
                 provider: "modrinth".into(),
                 project_id: hit.project_id,
@@ -300,6 +369,7 @@ async fn direct_modrinth_search(
                 title: hit.title,
                 summary: hit.description,
                 icon_url: hit.icon_url,
+                icon_source_url,
                 author: hit.author,
                 downloads: hit.downloads,
                 loader: loader_label.into(),
@@ -341,10 +411,27 @@ async fn search_modrinth_content(
     category: String,
 ) -> Result<CatalogSearchResult, String> {
     catalog_category(&category)?;
-    if category != "mods" {
-        return direct_modrinth_search(query, game_version, offset, &category).await;
+    let cache_key = format!(
+        "v2-50\n{category}\n{game_version}\n{offset}\n{}",
+        query.trim().to_ascii_lowercase()
+    );
+    if let Some(mut cached) = cache::read_json::<CatalogSearchResult>(
+        "catalog",
+        &cache_key,
+        Some(std::time::Duration::from_secs(15 * 60)),
+    ) {
+        cache::apply_cached_catalog_artwork(&mut cached.items);
+        return Ok(cached);
     }
-    reqwest::Client::builder()
+    if category != "mods" {
+        let mut result = direct_modrinth_search(query, game_version, offset, &category).await?;
+        let _ = cache::write_json("catalog", &cache_key, &result);
+        let artwork = result.items.iter().filter_map(|item| item.icon_url.clone()).collect();
+        tauri::async_runtime::spawn(cache::warm_catalog_artwork(artwork));
+        cache::apply_cached_catalog_artwork(&mut result.items);
+        return Ok(result);
+    }
+    let mut result = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
         .build()
@@ -366,7 +453,152 @@ async fn search_modrinth_content(
         .map_err(|error| format!("The Bloom mod catalog rejected the search: {error}"))?
         .json::<CatalogSearchResult>()
         .await
-        .map_err(|error| format!("The Bloom mod catalog returned invalid data: {error}"))
+        .map_err(|error| format!("The Bloom mod catalog returned invalid data: {error}"))?;
+    let _ = cache::write_json("catalog", &cache_key, &result);
+    let artwork = result.items.iter().filter_map(|item| item.icon_url.clone()).collect();
+    tauri::async_runtime::spawn(cache::warm_catalog_artwork(artwork));
+    cache::apply_cached_catalog_artwork(&mut result.items);
+    Ok(result)
+}
+
+#[tauri::command]
+async fn get_modrinth_project_details(
+    project_id: String,
+    game_version: String,
+    category: String,
+) -> Result<CatalogProjectDetails, String> {
+    catalog_category(&category)?;
+    if !valid_modrinth_project_id(project_id.trim()) {
+        return Err("That Modrinth project selection is invalid.".into());
+    }
+    let cache_key = format!("v1\n{category}\n{game_version}\n{}", project_id.trim());
+    if let Some(cached) = cache::read_json::<CatalogProjectDetails>(
+        "catalog-details",
+        &cache_key,
+        Some(std::time::Duration::from_secs(30 * 60)),
+    ) {
+        return Ok(cached);
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .user_agent(concat!(
+            "BloomClient/",
+            env!("CARGO_PKG_VERSION"),
+            " (support@bloomclient.org)"
+        ))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let project = client
+        .get(format!("https://api.modrinth.com/v2/project/{}", project_id.trim()))
+        .send()
+        .await
+        .map_err(|error| format!("Bloom could not load that project's details: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Modrinth rejected that project request: {error}"))?
+        .json::<ModrinthProject>()
+        .await
+        .map_err(|error| format!("Modrinth returned invalid project details: {error}"))?;
+
+    let game_versions = serde_json::to_string(&[game_version.as_str()])
+        .map_err(|error| error.to_string())?;
+    let mut request = client
+        .get(format!(
+            "https://api.modrinth.com/v2/project/{}/version",
+            project_id.trim()
+        ))
+        .query(&[
+            ("game_versions", game_versions.as_str()),
+            ("include_changelog", "false"),
+        ]);
+    let loaders;
+    if category == "mods" {
+        loaders = serde_json::to_string(&["fabric"]).map_err(|error| error.to_string())?;
+        request = request.query(&[("loaders", loaders.as_str())]);
+    }
+    let versions = request
+        .send()
+        .await
+        .map_err(|error| format!("Bloom could not load compatible versions: {error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Modrinth rejected that version request: {error}"))?
+        .json::<Vec<ModrinthVersion>>()
+        .await
+        .map_err(|error| format!("Modrinth returned invalid version data: {error}"))?;
+
+    let latest = versions
+        .iter()
+        .find(|version| version.version_type == "release")
+        .or_else(|| versions.first());
+    let dependency_ids: Vec<String> = latest
+        .into_iter()
+        .flat_map(|version| version.dependencies.iter())
+        .filter_map(|dependency| dependency.project_id.clone())
+        .take(20)
+        .collect();
+    let dependency_titles: std::collections::HashMap<String, String> = if dependency_ids.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        let ids = serde_json::to_string(&dependency_ids).map_err(|error| error.to_string())?;
+        let projects = match client
+            .get("https://api.modrinth.com/v2/projects")
+            .query(&[("ids", ids.as_str())])
+            .send()
+            .await
+        {
+            Ok(response) => match response.error_for_status() {
+                Ok(response) => response.json::<Vec<ModrinthProject>>().await.unwrap_or_default(),
+                Err(_) => Vec::new(),
+            },
+            Err(_) => Vec::new(),
+        };
+        projects
+            .into_iter()
+            .map(|project| (project.id, project.title))
+            .collect()
+    };
+    let dependencies = latest
+        .into_iter()
+        .flat_map(|version| version.dependencies.iter())
+        .filter_map(|dependency| {
+            let project_id = dependency.project_id.clone()?;
+            Some(CatalogProjectDependency {
+                title: dependency_titles
+                    .get(&project_id)
+                    .cloned()
+                    .unwrap_or_else(|| project_id.clone()),
+                project_id,
+                dependency_type: dependency.dependency_type.clone(),
+            })
+        })
+        .collect();
+    let files = latest
+        .into_iter()
+        .flat_map(|version| version.files.iter())
+        .map(|file| CatalogProjectFile {
+            file_name: file.filename.clone(),
+            file_size: file.size,
+            primary: file.primary,
+        })
+        .collect();
+    let details = CatalogProjectDetails {
+        description: project.description,
+        dependencies,
+        versions: versions
+            .iter()
+            .take(12)
+            .map(|version| CatalogProjectVersion {
+                id: version.id.clone(),
+                version_number: version.version_number.clone(),
+                version_type: version.version_type.clone(),
+                date_published: version.date_published.clone(),
+                game_versions: version.game_versions.clone(),
+            })
+            .collect(),
+        files,
+    };
+    let _ = cache::write_json("catalog-details", &cache_key, &details);
+    Ok(details)
 }
 
 #[tauri::command]
@@ -481,6 +713,7 @@ struct QueuedContentInstall {
     category: String,
     title: String,
     version: String,
+    icon_url: Option<String>,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -493,6 +726,7 @@ struct ContentInstallFinished {
     message: String,
     title: String,
     version: String,
+    icon_url: Option<String>,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -887,6 +1121,35 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
+fn copy_text_to_clipboard(text: String) -> Result<(), String> {
+    if text.is_empty() || text.len() > 128 || text.chars().any(char::is_control) {
+        return Err("That text cannot be copied.".into());
+    }
+    let mut last_error = None;
+    for _ in 0..6 {
+        match arboard::Clipboard::new() {
+            Ok(mut clipboard) => match clipboard.set_text(text.clone()) {
+                Ok(()) => {
+                    std::thread::sleep(std::time::Duration::from_millis(15));
+                    match clipboard.get_text() {
+                        Ok(copied) if copied == text => return Ok(()),
+                        Ok(_) => last_error = Some("Windows replaced the clipboard contents".into()),
+                        Err(error) => last_error = Some(format!("clipboard verification failed: {error}")),
+                    }
+                }
+                Err(error) => last_error = Some(error.to_string()),
+            },
+            Err(error) => last_error = Some(error.to_string()),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+    Err(format!(
+        "Windows could not copy the code: {}",
+        last_error.unwrap_or_else(|| "the clipboard is unavailable".into())
+    ))
+}
+
+#[tauri::command]
 async fn request_microsoft_device_code(client_id: String) -> Result<serde_json::Value, String> {
     let response = reqwest::Client::new()
         .post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode")
@@ -1125,7 +1388,10 @@ async fn get_saved_minecraft_profile(
 async fn get_minecraft_skin(account_id: String) -> Result<String, String> {
     use base64::Engine;
 
-    let uuid: String = account_id.chars().filter(|character| *character != '-').collect();
+    let uuid: String = account_id
+        .chars()
+        .filter(|character| *character != '-')
+        .collect();
     if uuid.len() != 32 || !uuid.chars().all(|character| character.is_ascii_hexdigit()) {
         return Err("The selected Minecraft account has an invalid UUID.".to_string());
     }
@@ -1179,6 +1445,12 @@ async fn get_minecraft_skin(account_id: String) -> Result<String, String> {
         .set_scheme("https")
         .map_err(|_| "Minecraft returned an invalid skin address.".to_string())?;
 
+    let texture_cache_key = parsed_url.as_str().to_owned();
+    if let Some(cached) = cache::read_json::<String>("minecraft-textures", &texture_cache_key, None)
+    {
+        return Ok(cached);
+    }
+
     let response = bloom_http_client()?
         .get(parsed_url)
         .timeout(std::time::Duration::from_secs(8))
@@ -1197,10 +1469,12 @@ async fn get_minecraft_skin(account_id: String) -> Result<String, String> {
     if bytes.is_empty() || bytes.len() > 1_048_576 {
         return Err("Minecraft returned an invalid skin texture.".to_string());
     }
-    Ok(format!(
+    let data_url = format!(
         "data:image/png;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(bytes)
-    ))
+    );
+    let _ = cache::write_json("minecraft-textures", &texture_cache_key, &data_url);
+    Ok(data_url)
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -1627,7 +1901,7 @@ fn default_loader() -> String {
     "Vanilla".to_string()
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InstanceContentItem {
     id: String,
@@ -1640,6 +1914,17 @@ struct InstanceContentItem {
 }
 
 fn bloom_data_dir() -> Result<std::path::PathBuf, String> {
+    #[cfg(debug_assertions)]
+    if let Some(override_path) = std::env::var_os("BLOOM_DEV_DATA_DIR") {
+        let path = std::path::PathBuf::from(override_path);
+        if !path.is_absolute() {
+            return Err("BLOOM_DEV_DATA_DIR must be an absolute development-only path.".into());
+        }
+        std::fs::create_dir_all(path.join("instances")).map_err(|error| {
+            format!("Could not create the isolated Bloom development profile: {error}")
+        })?;
+        return Ok(path);
+    }
     let appdata = std::env::var("APPDATA")
         .map_err(|_| "APPDATA is unavailable on this computer.".to_string())?;
     let path = std::path::PathBuf::from(appdata).join("BloomClient");
@@ -2064,6 +2349,7 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
             apply_autotune_to_config(&mut config, &profile)?;
         }
     }
+    utilities::apply_active_setup_to_instance(&config)?;
     let path = bloom_data_dir()?
         .join("instances")
         .join(format!("{}.json", config.id));
@@ -2121,6 +2407,72 @@ async fn list_instances() -> Result<Vec<InstanceConfig>, String> {
     tauri::async_runtime::spawn_blocking(list_instances_blocking)
         .await
         .map_err(|error| format!("The instance library reader stopped unexpectedly: {error}"))?
+}
+
+fn copy_instance_directory(source: &std::path::Path, target: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(target).map_err(|error| error.to_string())?;
+    for entry in std::fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let file_type = entry.file_type().map_err(|error| error.to_string())?;
+        if file_type.is_symlink() {
+            return Err("Bloom refused to duplicate an instance containing a symbolic link.".into());
+        }
+        let destination = target.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_instance_directory(&entry.path(), &destination)?;
+        } else if file_type.is_file() {
+            std::fs::copy(entry.path(), destination).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn duplicate_instance_blocking(instance_id: String) -> Result<InstanceConfig, String> {
+    if instance_id.is_empty()
+        || !instance_id.chars().all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        return Err("Bloom refused to duplicate an invalid instance identifier.".into());
+    }
+    let source_config = load_instance(&instance_id)?;
+    let source = std::path::PathBuf::from(&source_config.directory);
+    let source_name = source.file_name().and_then(|name| name.to_str()).ok_or("Bloom could not verify this instance folder.")?;
+    if !source_name.eq_ignore_ascii_case(&instance_id) || !source.is_dir() {
+        return Err("Bloom refused to duplicate an unsafe or missing instance folder.".into());
+    }
+    let parent = source.parent().ok_or("Bloom could not find the instance parent folder.")?;
+    let records = bloom_data_dir()?.join("instances");
+    let mut suffix = 1u32;
+    let (name, id, target) = loop {
+        let name = if suffix == 1 { format!("{} Copy", source_config.name) } else { format!("{} Copy {suffix}", source_config.name) };
+        let id = name.to_lowercase().chars().map(|character| if character.is_ascii_alphanumeric() { character } else { '-' }).collect::<String>().trim_matches('-').to_string();
+        let target = parent.join(&id);
+        if !target.exists() && !records.join(format!("{id}.json")).exists() { break (name, id, target); }
+        suffix = suffix.checked_add(1).ok_or("Bloom could not choose a unique duplicate name.")?;
+    };
+    if let Err(error) = copy_instance_directory(&source, &target) {
+        let _ = std::fs::remove_dir_all(&target);
+        return Err(format!("Bloom could not duplicate the instance files: {error}"));
+    }
+    let mut duplicate = source_config;
+    duplicate.id = id.clone();
+    duplicate.name = name;
+    duplicate.directory = target.to_string_lossy().to_string();
+    let record = records.join(format!("{id}.json"));
+    if let Err(error) = serde_json::to_vec_pretty(&duplicate)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| std::fs::write(&record, bytes).map_err(|error| error.to_string()))
+    {
+        let _ = std::fs::remove_dir_all(&target);
+        return Err(format!("The files were copied, but Bloom could not save the duplicate: {error}"));
+    }
+    Ok(duplicate)
+}
+
+#[tauri::command]
+async fn duplicate_instance(instance_id: String) -> Result<InstanceConfig, String> {
+    tauri::async_runtime::spawn_blocking(move || duplicate_instance_blocking(instance_id))
+        .await
+        .map_err(|error| format!("The instance duplication task stopped unexpectedly: {error}"))?
 }
 
 fn delete_instance_blocking(instance_id: String) -> Result<(), String> {
@@ -2240,6 +2592,26 @@ fn list_instance_content_blocking(
         let file_name = entry.file_name().to_string_lossy().to_string();
         let enabled = !file_name.to_ascii_lowercase().ends_with(".disabled");
         let visible_name = file_name.strip_suffix(".disabled").unwrap_or(&file_name);
+        let entry_metadata = entry.metadata().ok();
+        let file_size = entry_metadata
+            .as_ref()
+            .map(|value| value.len())
+            .unwrap_or(0);
+        let modified = entry_metadata
+            .and_then(|value| value.modified().ok())
+            .and_then(|value| value.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+            .map(|value| value.as_millis())
+            .unwrap_or_default();
+        let cache_key = format!(
+            "{}\n{file_size}\n{modified}\n{enabled}",
+            path.to_string_lossy()
+        );
+        if let Some(cached) =
+            cache::read_json::<InstanceContentItem>("instance-content", &cache_key, None)
+        {
+            items.push(cached);
+            continue;
+        }
         let mut name = visible_name
             .rsplit_once('.')
             .map(|(stem, _)| stem)
@@ -2280,15 +2652,17 @@ fn list_instance_content_blocking(
                 }
             }
         }
-        items.push(InstanceContentItem {
+        let item = InstanceContentItem {
             id: file_name.clone(),
             name,
             version,
             file_name,
-            size: entry.metadata().map(|value| value.len()).unwrap_or(0),
+            size: file_size,
             enabled,
             icon,
-        });
+        };
+        let _ = cache::write_json("instance-content", &cache_key, &item);
+        items.push(item);
     }
     items.sort_by(|a, b| {
         a.name
@@ -2319,8 +2693,12 @@ fn toggle_instance_content(
     state: tauri::State<'_, LauncherState>,
 ) -> Result<(), String> {
     if category == "mods" && cosmetics::is_managed_file(&file_name) {
-        if *state.launch_active.lock().map_err(|_| "Launcher busy")? { return Err("Close Minecraft before changing its cape renderer.".into()); }
-        if cosmetics::set_file_enabled(&load_instance(&instance_id)?, &file_name, enabled)? { return Ok(()); }
+        if *state.launch_active.lock().map_err(|_| "Launcher busy")? {
+            return Err("Close Minecraft before changing its cape renderer.".into());
+        }
+        if cosmetics::set_file_enabled(&load_instance(&instance_id)?, &file_name, enabled)? {
+            return Ok(());
+        }
     }
     if std::path::Path::new(&file_name)
         .file_name()
@@ -3449,6 +3827,82 @@ fn execute_download_plan(
     Ok(())
 }
 
+fn installed_modrinth_projects(
+    client: &reqwest::blocking::Client,
+    mods_directory: &std::path::Path,
+    game_version: &str,
+) -> std::collections::HashMap<String, std::collections::HashSet<String>> {
+    let hashes: Vec<String> = std::fs::read_dir(mods_directory)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.flatten())
+        .filter_map(|entry| {
+            let path = entry.path();
+            let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
+            if !entry.file_type().ok()?.is_file() || !file_name.ends_with(".jar") {
+                return None;
+            }
+            mc_launcher_core::io::hash::sha1_file(&path).ok()
+        })
+        .take(1000)
+        .collect();
+    if hashes.is_empty() {
+        return std::collections::HashMap::new();
+    }
+    let mut installed = std::collections::HashMap::<
+        String,
+        std::collections::HashSet<String>,
+    >::new();
+    for chunk in hashes.chunks(100) {
+        let versions = client
+            .post("https://api.modrinth.com/v2/version_files")
+            .json(&serde_json::json!({ "hashes": chunk, "algorithm": "sha1" }))
+            .send()
+            .and_then(|response| response.error_for_status())
+            .and_then(|response| {
+                response.json::<std::collections::HashMap<String, ModrinthVersion>>()
+            })
+            .unwrap_or_default();
+        for version in versions.into_values().filter(|version| {
+            version.game_versions.iter().any(|value| value == game_version)
+                && version
+                    .loaders
+                    .iter()
+                    .any(|loader| loader.eq_ignore_ascii_case("fabric"))
+        }) {
+            if let Some(project_id) = version.project_id {
+                installed.entry(project_id).or_default().insert(version.id);
+            }
+        }
+    }
+    installed
+}
+
+fn dependency_is_already_installed(
+    root_project_id: &str,
+    file: &CatalogInstallFile,
+    installed: &std::collections::HashMap<String, std::collections::HashSet<String>>,
+) -> bool {
+    let Some(project_id) = file
+        .project_id
+        .as_deref()
+        .filter(|project_id| *project_id != root_project_id)
+    else {
+        return false;
+    };
+    let Some(installed_versions) = installed.get(project_id) else {
+        return false;
+    };
+    if file.dependency_version_pinned {
+        file.version_id
+            .as_deref()
+            .map(|required| installed_versions.contains(required))
+            .unwrap_or(false)
+    } else {
+        true
+    }
+}
+
 fn perform_modrinth_content_install(
     app: &tauri::AppHandle,
     task: &QueuedContentInstall,
@@ -3531,6 +3985,9 @@ fn perform_modrinth_content_install(
         CatalogInstallPlan {
             title: project.title,
             files: vec![CatalogInstallFile {
+                project_id: Some(task.project_id.clone()),
+                version_id: Some(version.id.clone()),
+                dependency_version_pinned: false,
                 file_name: file.filename.clone(),
                 download_url: file.url.clone(),
                 sha1: file.hashes.get("sha1").cloned(),
@@ -3544,8 +4001,28 @@ fn perform_modrinth_content_install(
     }
     let destination = std::path::PathBuf::from(&config.directory).join(destination_folder);
     std::fs::create_dir_all(&destination).map_err(|error| error.to_string())?;
+    let installed_projects = if task.category == "mods" {
+        installed_modrinth_projects(&client, &destination, &config.version)
+    } else {
+        std::collections::HashMap::new()
+    };
+    let mut planned_projects = std::collections::HashSet::new();
     let mut downloads = mc_launcher_core::net::download::DownloadPlan::default();
     for file in plan.files {
+        let plan_identity = file
+            .project_id
+            .as_deref()
+            .or(file.version_id.as_deref())
+            .unwrap_or(&file.file_name)
+            .to_string();
+        if !planned_projects.insert(plan_identity) {
+            continue;
+        }
+        let dependency_already_installed =
+            dependency_is_already_installed(&task.project_id, &file, &installed_projects);
+        if dependency_already_installed {
+            continue;
+        }
         if std::path::Path::new(&file.file_name)
             .file_name()
             .and_then(|name| name.to_str())
@@ -3591,6 +4068,7 @@ fn install_modrinth_content(
     category: String,
     title: String,
     version: String,
+    icon_url: Option<String>,
 ) -> Result<(), String> {
     let config = load_instance(&instance_id)?;
     catalog_category(&category)?;
@@ -3605,12 +4083,22 @@ fn install_modrinth_content(
         return Err("That Modrinth project ID is invalid.".into());
     }
 
+    let icon_url = icon_url.filter(|value| {
+        value.len() <= 2048
+            && url::Url::parse(value)
+                .ok()
+                .filter(|url| url.scheme() == "https")
+                .and_then(|url| url.host_str().map(str::to_owned))
+                .map(|host| host == "cdn.modrinth.com" || host.ends_with(".modrinth.com"))
+                .unwrap_or(false)
+    });
     let task = QueuedContentInstall {
         instance_id,
         project_id,
         category,
         title: title.chars().take(160).collect(),
         version: version.chars().take(100).collect(),
+        icon_url,
     };
     let mut queue = state
         .content_install_queue
@@ -3673,6 +4161,7 @@ fn install_modrinth_content(
                 message: format!("Installing {}", task.title),
                 title: task.title.clone(),
                 version: task.version.clone(),
+                icon_url: task.icon_url.clone(),
             },
         );
         let result = perform_modrinth_content_install(&app, &task, &cancel);
@@ -3702,6 +4191,7 @@ fn install_modrinth_content(
                 message,
                 title: task.title,
                 version: task.version,
+                icon_url: task.icon_url,
             },
         );
         if stop_queue {
@@ -3720,6 +4210,7 @@ fn install_modrinth_content(
                         message: "Installation queue cancelled".into(),
                         title: queued.title,
                         version: queued.version,
+                        icon_url: queued.icon_url,
                     },
                 );
             }
@@ -3984,6 +4475,19 @@ async fn launch_minecraft(
                 return;
             }
         };
+        if let Err(error) = utilities::apply_active_setup_to_instance(&config) {
+            emit_launch(
+                &app,
+                &instance_id,
+                "error",
+                0,
+                format!("Global File Sync could not prepare this instance: {error}"),
+            );
+            if let Ok(mut value) = active.lock() {
+                *value = false;
+            }
+            return;
+        }
         let options_path = std::path::PathBuf::from(&config.directory).join("options.txt");
         if let Err(error) = patch_options(
             &options_path,
@@ -4324,6 +4828,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_backend_status,
+            cache::get_client_cache_status,
+            cache::choose_client_cache_directory,
+            cache::save_client_cache_settings,
+            cache::clear_client_cache,
+            cache::get_cached_thumbnail,
+            cache::save_cached_thumbnail,
+            cache::get_cached_catalog_artwork,
             cosmetics::cosmetics_request,
             cosmetics::get_cosmetics_preferences,
             cosmetics::set_cosmetics_preferences,
@@ -4331,8 +4842,10 @@ pub fn run() {
             save_custom_background,
             load_custom_background,
             search_modrinth_content,
+            get_modrinth_project_details,
             list_modrinth_modpack_releases,
             request_microsoft_device_code,
+            copy_text_to_clipboard,
             complete_microsoft_login,
             detect_java_installations,
             list_managed_java_runtimes,
@@ -4342,6 +4855,7 @@ pub fn run() {
             get_minecraft_releases,
             save_instance,
             list_instances,
+            duplicate_instance,
             delete_instance,
             list_instance_content,
             toggle_instance_content,
@@ -4357,6 +4871,22 @@ pub fn run() {
             get_autotune_benchmark_status,
             import_fabric_modpack,
             import_modrinth_modpack,
+            modpack_sharing::create_modpack_share,
+            modpack_sharing::import_modpack_share,
+            modpack_sharing::create_pack_channel,
+            modpack_sharing::create_pack_editor_invite,
+            modpack_sharing::create_pack_access_invite,
+            modpack_sharing::import_pack_channel,
+            modpack_sharing::join_pack_as_editor,
+            modpack_sharing::publish_pack_channel,
+            modpack_sharing::get_pack_channel_state,
+            modpack_sharing::get_pack_access_overview,
+            modpack_sharing::enable_pack_managed_access,
+            modpack_sharing::update_pack_member_role,
+            modpack_sharing::revoke_pack_member,
+            modpack_sharing::invalidate_pack_invite,
+            modpack_sharing::list_pack_channel_memberships,
+            modpack_sharing::apply_pack_channel_update,
             install_modrinth_content,
             launch_minecraft,
             choose_game_directory,
@@ -4372,7 +4902,45 @@ pub fn run() {
             wardrobe::import_locker_skin,
             wardrobe::apply_locker_skin,
             list_minecraft_accounts,
-            switch_minecraft_account
+            switch_minecraft_account,
+            utilities::get_global_file_sync_state,
+            utilities::save_global_file_sync_settings,
+            utilities::apply_global_file_sync,
+            utilities::open_global_sync_folder,
+            social::social_prepare_sign_in,
+            social::social_poll_sign_in,
+            social::social_session_state,
+            social::social_set_username,
+            social::social_snapshot,
+            social::social_wait_for_updates,
+            social::social_sync_messages,
+            social::social_encryption_details,
+            social::social_acknowledge_identity,
+            social::social_share_context,
+            social::social_send_friend_request,
+            social::social_accept_friend_request,
+            social::social_decline_friend_request,
+            social::social_remove_friend,
+            social::social_create_instance_invites,
+            social::social_claim_instance_invite,
+            social::social_complete_instance_invite,
+            social::social_release_instance_invite,
+            social::social_decline_instance_invite,
+            social::social_revoke_instance_invite,
+            social::social_send_message,
+            social::social_edit_message,
+            social::social_send_screenshot,
+            social::social_react,
+            social::social_pin_message,
+            social::social_create_group,
+            social::social_update_group,
+            social::social_add_group_member,
+            social::social_remove_group_member,
+            social::social_send_group_message,
+            social::social_edit_group_message,
+            social::social_react_group,
+            social::social_pin_group_message,
+            social::social_sign_out
         ])
         .run(tauri::generate_context!())
         .expect("error while running Bloom Client");
@@ -4382,7 +4950,8 @@ pub fn run() {
 mod tests {
     use super::{
         account_credential_name, allowed_pack_download, content_import_details, patch_options,
-        resolve_instance_target, safe_pack_path, split_credential_secret,
+        dependency_is_already_installed, resolve_instance_target, safe_pack_path,
+        split_credential_secret, CatalogInstallFile,
     };
 
     #[test]
@@ -4440,6 +5009,66 @@ mod tests {
         assert!(!allowed_pack_download(
             "file:///C:/Windows/System32/file.jar"
         ));
+    }
+
+    #[test]
+    fn installed_shared_dependencies_are_reused_without_skipping_the_requested_mod() {
+        let installed = std::collections::HashMap::from([(
+            "fabric-api".to_string(),
+            std::collections::HashSet::from(["fabric-api-version".to_string()]),
+        )]);
+        let dependency = CatalogInstallFile {
+            project_id: Some("fabric-api".into()),
+            version_id: Some("fabric-api-version".into()),
+            dependency_version_pinned: false,
+            file_name: "fabric-api.jar".into(),
+            download_url: "https://cdn.modrinth.com/data/fabric-api.jar".into(),
+            sha1: None,
+        };
+        assert!(dependency_is_already_installed(
+            "requested-mod",
+            &dependency,
+            &installed
+        ));
+        assert!(!dependency_is_already_installed(
+            "fabric-api",
+            &dependency,
+            &installed
+        ));
+    }
+
+    #[test]
+    fn pinned_dependency_versions_are_only_reused_when_the_exact_version_exists() {
+        let installed = std::collections::HashMap::from([(
+            "library".to_string(),
+            std::collections::HashSet::from(["old-version".to_string()]),
+        )]);
+        let dependency = CatalogInstallFile {
+            project_id: Some("library".into()),
+            version_id: Some("required-version".into()),
+            dependency_version_pinned: true,
+            file_name: "library.jar".into(),
+            download_url: "https://cdn.modrinth.com/data/library.jar".into(),
+            sha1: None,
+        };
+        assert!(!dependency_is_already_installed(
+            "requested-mod",
+            &dependency,
+            &installed
+        ));
+    }
+
+    #[test]
+    fn older_install_plans_default_to_exact_dependency_reuse() {
+        let dependency: CatalogInstallFile = serde_json::from_value(serde_json::json!({
+            "projectId": "library",
+            "versionId": "required-version",
+            "fileName": "library.jar",
+            "downloadUrl": "https://cdn.modrinth.com/data/library.jar",
+            "sha1": null
+        }))
+        .unwrap();
+        assert!(dependency.dependency_version_pinned);
     }
 
     #[test]

@@ -23,6 +23,10 @@ These instructions apply to Codex and other coding assistants working in this re
 - Update durable design or architecture documentation when the task changes an established rule or fixes a reusable regression.
 - Change `VERSION`, create or push tags, publish releases, merge pull requests, or push to upstream `main` only when Parks explicitly requests that exact action.
 
+THE FOLLOWING TRUMPS EVERYTHING SAID IN THIS MD FILE, THIS RULE STANDS ABOVE ALL ELSE!
+
+- Codex may inspect and modify the local Release Manager when Parks explicitly requests it. Codex may prepare local release builds but must not expose credentials, reveal signing keys, publish releases, push tags, or rotate secrets without a separate explicit instruction.
+
 ## Before handoff
 
 - Review the complete diff for accidental changes.

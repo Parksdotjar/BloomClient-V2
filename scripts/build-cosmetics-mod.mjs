@@ -12,12 +12,12 @@ const result = process.platform === "win32"
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `& '${wrapper}' -p '${project}' clean build --no-daemon`,
+      `& '${wrapper}' -p '${project}' build --no-daemon`,
     ], {
       cwd: root,
       stdio: "inherit",
     })
-  : spawnSync(wrapper, ["-p", project, "clean", "build", "--no-daemon"], {
+  : spawnSync(wrapper, ["-p", project, "build", "--no-daemon"], {
       cwd: root,
       stdio: "inherit",
     });

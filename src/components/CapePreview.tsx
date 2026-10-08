@@ -30,7 +30,7 @@ export function CapePreview({ texture, animation, skinUuid, skinTexture, variant
     ctx.clearRect(32, 0, 32, 16);
     setError("");
     try {
-      viewer = new SkinViewer({ canvas: canvas.current, width: 320, height: 430, skin: skinTexture || accountSkin || skin, model: variant === "slim" ? "slim" : variant === "classic" ? "default" : (skinTexture || accountSkin) ? "auto-detect" : "default", pixelRatio: Math.min(window.devicePixelRatio, 2) });
+      viewer = new SkinViewer({ canvas: canvas.current, width: 320, height: 430, skin: skinTexture || accountSkin || skin, model: variant === "slim" ? "slim" : variant === "classic" ? "default" : (skinTexture || accountSkin) ? "auto-detect" : "default", pixelRatio: Math.min(Math.max(window.devicePixelRatio, 2), 3) });
       viewer.playerObject.rotation.y = (front ? 0 : Math.PI) + 0.35;
       viewer.controls.enableZoom = false;
       viewer.controls.enablePan = false;

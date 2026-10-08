@@ -32,8 +32,7 @@ export function CapeDisplay({ texture, animation, motion = true, size = "card" }
       const unitX = frameWidth / 64;
       const unitY = frameHeight / 32;
       context.clearRect(0, 0, output.width, output.height);
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = "high";
+      context.imageSmoothingEnabled = false;
       context.drawImage(source, frameX + unitX, frameY + unitY, unitX * 10, unitY * 16, 0, 0, output.width, output.height);
     };
 

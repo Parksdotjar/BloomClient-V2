@@ -2,6 +2,9 @@ import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
 import { initializeCosmetics } from "./cosmetics/readiness.mjs";
+import { sharingFromEnvironment } from "./sharing/api.mjs";
+import { authFromEnvironment, createAccountApi } from "./auth/auth.mjs";
+import { createSocialApi } from "./social/api.mjs";
 
 const port = Number(process.env.PORT || 8110);
 const service = "bloom-minecraft-api";
@@ -9,7 +12,13 @@ const apiVersion = "v1";
 const modrinthBase = "https://api.modrinth.com/v2";
 const userAgent = "BloomClient/0.1.0 (support@bloomclient.org)";
 const cosmetics = await initializeCosmetics();
-const capabilities = Object.freeze({ catalog: true, modrinth: true, curseforge: false, modpacks: false, cosmetics: cosmetics.enabled });
+const accountRuntime = await authFromEnvironment();
+const accounts = createAccountApi(accountRuntime);
+let sharing;
+const social = createSocialApi({ ...accountRuntime, onInstanceInviteClosed: code => sharing?.invalidateInvite(code) });
+sharing = sharingFromEnvironment(process.env, { onInviteInvalidated: code => social.invalidateInstanceInviteByShareCode(code) });
+sharing.checkReadiness();
+const capabilities = Object.freeze({ catalog: true, modrinth: true, curseforge: false, modpacks: true, cosmetics: cosmetics.enabled, packSharing: true, packChannels: true, accounts: true, social: true });
 const cache = new Map();
 
 const sendJson = (response, status, body, cacheControl = "no-store") => {
@@ -67,7 +76,7 @@ const searchCatalog = async ({ query, gameVersion, offset }) => {
     query,
     facets,
     index: query ? "relevance" : "downloads",
-    limit: 20,
+    limit: 50,
     offset,
   });
   const items = (await Promise.all(result.hits.map(async (hit) => {
@@ -91,7 +100,7 @@ const searchCatalog = async ({ query, gameVersion, offset }) => {
       fileSize: file.size,
     };
   }))).filter(Boolean);
-  return { items, offset, limit: 20, total: result.total_hits };
+  return { items, offset, limit: 50, total: result.total_hits };
 };
 
 const resolveInstallPlan = async (projectId, gameVersion) => {
@@ -127,6 +136,7 @@ const resolveInstallPlan = async (projectId, gameVersion) => {
     files.push({
       projectId: nextProjectId,
       versionId: version.id,
+      dependencyVersionPinned: !root && Boolean(requestedVersionId),
       versionNumber: version.version_number,
       fileName: file.filename,
       fileSize: file.size,
@@ -142,7 +152,10 @@ const requestHandler = async (request, response) => {
   try {
     const url = new URL(request.url || "/", "http://localhost");
     const pathname = url.pathname.startsWith("/minecraft/") ? url.pathname.slice("/minecraft".length) : url.pathname;
+    if (await accounts.handle(request, response, pathname)) return;
+    if (await social.handle(request, response, pathname, url)) return;
     if (await cosmetics.handle(request, response, pathname, url)) return;
+    if (await sharing.handle(request, response, pathname, url)) return;
     if (request.method !== "GET") {
       response.setHeader("allow", "GET");
       return sendJson(response, 405, { error: "method_not_allowed" });
@@ -157,7 +170,7 @@ const requestHandler = async (request, response) => {
       const loader = (url.searchParams.get("loader") || "fabric").toLowerCase();
       const offset = Math.max(0, Math.min(10_000, Number(url.searchParams.get("offset") || 0) || 0));
       if (!validGameVersion(gameVersion) || loader !== "fabric") return sendJson(response, 400, { error: "invalid_catalog_filter" });
-      const key = `search:${query}:${gameVersion}:${offset}`;
+      const key = `search:v2:${query}:${gameVersion}:${offset}:50`;
       const result = await cached(key, query ? 60_000 : 5 * 60_000, () => searchCatalog({ query, gameVersion, offset }));
       return sendJson(response, 200, result, "public, max-age=30");
     }

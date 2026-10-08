@@ -4,6 +4,8 @@ This is the short list of designs the user has explicitly approved as especially
 
 Before designing a related interface, review this file alongside `DESIGN_RULES.md` and `UI_CHANGE_HISTORY.md`.
 
+For approved breakdowns of a professional changelog/timeline and a structured dashboard workspace, read [`PROFESSIONAL_INTERFACE_REFERENCE.md`](PROFESSIONAL_INTERFACE_REFERENCE.md). Use their hierarchy and composition lessons without copying either source design.
+
 ## Full-bleed artwork with hover-to-change
 
 **Approved:** August 20, 2026  

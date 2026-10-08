@@ -1,6 +1,6 @@
 # Bloom cosmetics rendering architecture
 
-> Current integration branch: only capes and the single-label nametag badge initialize. Hat/wing/bracelet sources remain dormant. Vanilla elytra is preserved. Renderer downloads are bounded and textures have memory accounting/disposal. Game-session credentials arrive through the child environment, not command arguments. See `CAPES_IMPLEMENTATION_STATUS.md`; runtime multiplayer acceptance is outstanding.
+> Current v1.1.5 integration: only capes and the single-label nametag badge initialize. Hat/wing/bracelet sources remain dormant. Vanilla elytra is preserved. Renderer downloads are bounded and textures have memory accounting/disposal. Game-session credentials arrive through the child environment, not command arguments. See `CAPES_IMPLEMENTATION_STATUS.md` for remaining multiplayer acceptance work.
 
 ## System flow
 
@@ -8,10 +8,10 @@ Bloom cosmetics were split across four responsibilities:
 
 1. The external manager authored and published catalogs, models, textures, previews, pivots, and animations.
 2. The backend stored authoritative catalog/ownership/equipped records and returned short-lived URLs for private assets.
-3. Bloom Client provided the Shop and equip UI and installed the Bloom Fabric renderer into managed instances.
+3. Bloom Client provides the free Locker and equip UI and installs the Bloom Fabric renderer into supported managed instances.
 4. The Fabric renderer looked up cosmetics for visible player UUIDs and attached them to Minecraft's player model parts.
 
-Shop and Locker are currently removed from the active client. `bloom-cosmetics-mod/` is intentionally preserved as dormant source, but its JAR is no longer bundled or automatically injected. `SHOP_LOCKER_RESTORATION.md` is the reactivation checklist.
+Locker is active. Shop, ownership, and paid catalog behavior remain removed. `bloom-cosmetics-mod/` is active source: its remapped JAR is embedded in Bloom and reconciled into supported Fabric 1.21.11 instances without deleting unknown user files.
 
 ## Runtime identity, batching, and performance
 
@@ -90,13 +90,17 @@ Keeping previews separate makes the Shop lightweight and lets the manager contro
 - A missing or invalid item must degrade to no cosmetic/static fallback, never crash the render loop.
 - The server should validate the Minecraft identity behind authenticated collection and equip mutations.
 
-## Dormant source retained for restoration
+## Build and bundle contract
 
-- `bloom-cosmetics-mod/`: Fabric renderer and model parsers.
-- `scripts/build-cosmetics-mod.mjs`: manual renderer build helper; it is not part of the active Tauri build.
+- `bloom-cosmetics-mod/`: active Fabric renderer and model parsers.
+- `scripts/build-cosmetics-mod.mjs`: builds the remapped renderer, copies it into Tauri resources, and writes its SHA-256 checksum.
+- `npm run tauri:dev`: builds the renderer before the Vite/Tauri development client starts.
+- `npm run tauri:build`: builds the renderer and frontend before Tauri creates installer and updater artifacts.
+- Enabled release compilation fails if the renderer is absent or its checksum is invalid. Only an explicit emergency `BLOOM_COSMETICS_ENABLED=false` build may omit active integration.
+- A locally generated unsigned installer proves compilation and bundling only. A publishable updater additionally requires the owner-only Release Manager to supply Tauri's private signing key; never weaken or bypass that signature requirement.
 - `BLOOM_ANIMATED_CAPES_GUIDE.md`: cape atlas authoring.
 - `BLOOM_ANIMATED_MINI_WINGS_GUIDE.md`: wing authoring and pivots.
 - `ANIMATED_COSMETICS_GUIDE.md`: common animation format.
 - `CUSTOM_HALO_HAT_GUIDE.md`: hat model example.
 
-When restoring, first deploy and contract-test the VPS API, then update the renderer API base, build the JAR, restore Tauri resource bundling, and re-enable instance injection. Only after Minecraft rendering is stable should the Shop UI and manager publish flow be considered live again.
+Do not bypass these scripts with a raw release Cargo build. The build contract prevents a distributable client from exposing Locker while silently omitting its renderer. Production publication still requires the live acceptance checks recorded in `CAPES_IMPLEMENTATION_STATUS.md`.

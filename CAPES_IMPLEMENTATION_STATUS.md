@@ -38,6 +38,7 @@
 - PNG checksum/bounded decompression and atlas/memory validation; automated API lifecycle and authorization tests.
 - Locker with account-specific backend operations, nine-item pagination, one focused 3D preview, and distinct loading/empty/offline states. Integration and badge controls live in a dedicated Cosmetics Settings category using Bloom's shared toggles.
 - Managed renderer build/checksum embedding and reconciliation. Instance listing no longer deletes cosmetics. Unknown duplicate JARs receive repair errors rather than silent deletion.
+- The normal Tauri development and production build paths compile, checksum, and embed the managed renderer automatically. Release compilation fails closed when an enabled renderer is missing or its checksum is invalid; a normal developer launch no longer exposes Locker while lacking the in-game renderer.
 - Cape-only Fabric 1.21.11 renderer, vanilla elytra preservation, single-label badge hook, bounded texture downloads, memory accounting/disposal, backoff and static fallback.
 - Redesigned Tauri Cape Studio around direct image positioning for separate cape and exact-shape elytra cutouts. It provides draggable positioning, smooth zoom, 256-to-4096 texture output, nearest-border edge extrusion, optional mirrored reverse placement, live previews, local drafts, and two-step draft deletion. Painting and manual UV tools remain intentionally removed.
 - Studio publishing no longer depends on a third-party Microsoft application registration. It exchanges a private password for a short-lived server session, stores only that session in Windows Credential Manager, and never embeds the password in the executable or project data.
@@ -46,6 +47,7 @@
 
 - Backend: `node --test backend/cosmetics/api.test.mjs` — 4 tests passed, including invalid/valid Studio password exchange and owner-route authorization.
 - Client: typecheck, production frontend build, locked Rust check passed.
+- Production-path verification now also produced the v1.1.5 Windows application and NSIS installer with a checksum-matched embedded renderer. The ordinary terminal correctly stopped before updater signing because it has no private signing key; the owner-only Release Manager must supply that key to create publishable updater signatures.
 - Fabric: remapped JAR build passed.
 - Studio: frontend/native checks, release executable and NSIS installer passed; the latest installer was installed and the native app launched successfully. Editor, preview and saved draft state were previously observed. This remains a startup smoke test, not full publishing acceptance.
 - Live launcher: the redesigned Locker and Cosmetics Settings section were inspected in the real Tauri dev client. The managed renderer JAR and ownership manifest were verified in the visible Fabric 1.21.11 instance; unsupported/hidden instances were untouched.

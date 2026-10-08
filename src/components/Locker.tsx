@@ -10,12 +10,14 @@ type Cape = { id: string; name: string; textureUrl: string; textureRevision: str
 type Profile = { id: string; name: string };
 type Me = { capeId: string | null; badgeVisible: boolean };
 const api = <T,>(method: string, path: string, accountId?: string, body?: unknown) => invoke<T>("cosmetics_request", { method, path, body: body ?? null, accountId: accountId ?? null });
+let cloakCatalogMemoryCache: Cape[] | null = null;
+window.addEventListener("bloom-clear-transient-caches", () => { cloakCatalogMemoryCache = null; });
 
 function CloakCollection({ profile, motion, onNotify }: { profile: Profile | null; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void }) {
-  const [items, setItems] = useState<Cape[]>([]);
+  const [items, setItems] = useState<Cape[]>(() => cloakCatalogMemoryCache || []);
   const [selected, setSelected] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cloakCatalogMemoryCache);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
@@ -27,10 +29,12 @@ function CloakCollection({ profile, motion, onNotify }: { profile: Profile | nul
   useEffect(() => {
     const current = ++generation.current;
     let stopped = false;
-    setLoading(true); setError(""); setMe(null); setItems([]); setBusy(false); setPage(1);
+    if (!cloakCatalogMemoryCache) setLoading(true);
+    setError(""); setMe(null); setBusy(false); setPage(1);
     void (async () => {
       const catalog = await api<{ items: Cape[] }>("GET", "/v1/capes");
       if (stopped) return;
+      cloakCatalogMemoryCache = catalog.items;
       setItems(catalog.items);
       setSelected(old => catalog.items.some(cape => cape.id === old) ? old : catalog.items[0]?.id || null);
       if (profile) {

@@ -1,0 +1,13 @@
+{
+  "name": "bloom-minecraft-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test auth/*.test.mjs cosmetics/*.test.mjs sharing/*.test.mjs social/*.test.mjs"
+  },
+  "dependencies": {
+    "better-auth": "1.7.7"
+  }
+}

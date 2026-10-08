@@ -18,3 +18,11 @@ tools/release-manager/publish/
 .env
 .env.*
 !.env.example
+# Local Bloom account and Social runtime state must never enter a release.
+/backend/.bloom-auth/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal

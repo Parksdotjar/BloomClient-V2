@@ -2,6 +2,10 @@
 
 This workflow lets Parks and Karsten build in parallel without sharing a working directory, overwriting unfinished work, or giving contributor code a path to production releases.
 
+For a complete disposable walkthrough of the first fork, draft pull request, isolated test, revision, and cleanup, follow [`FIRST_COLLABORATION_TEST.md`](FIRST_COLLABORATION_TEST.md).
+
+The planned desktop-app simplification—Bloom Workshop for contributors and the private Manager Reviews section for Parks—is specified in [`DEVELOPER_WORKFLOW_APP_SPEC.md`](DEVELOPER_WORKFLOW_APP_SPEC.md).
+
 ## Release boundary
 
 Parks remains the repository owner and final release authority. Parks may perform owner actions personally or explicitly delegate a specific action to Codex, including modifying the local Release Manager, committing approved work, merging into `main`, changing the release version, creating or pushing a tag, building release artifacts, and publishing a release.
@@ -11,6 +15,8 @@ Delegation must be explicit and limited to the requested action. Permission to i
 Codex may use the existing authenticated GitHub and signing configuration through its intended local tools, but must never print, expose, copy, commit, replace, or weaken credentials, signing keys, passwords, tokens, private catalogs, or `.env` contents. Secret rotation requires a separate explicit instruction from Parks.
 
 Before any merge or release, verify the complete diff, required frontend and Rust checks, the selected version, the target branch, repository synchronization, and the intended release destination. Report unresolved failures or production risks before publishing.
+
+Release version synchronization must update every generated version owner before locked checks run: `VERSION`, `package.json`, both root-version fields in `package-lock.json`, `src-tauri/Cargo.toml`, Bloom's package entry in `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. The sync command must be idempotent so retrying an interrupted release cannot fail merely because the target version is already present.
 
 
 ## Parks's normal loop

@@ -1,6 +1,6 @@
 [package]
 name = "bloomclient"
-version = "1.1.5"
+version = "1.1.6"
 description = "An open-source Minecraft desktop client"
 authors = ["Bloom Client contributors"]
 edition = "2021"
@@ -11,6 +11,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+sha2 = "0.10"
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
@@ -25,6 +26,16 @@ sha2 = "0.10"
 mc-launcher-core = "0.1.1"
 keyring = { version = "3.6.3", features = ["windows-native"] }
 base64 = "0.22"
+arboard = { version = "3.6.1", default-features = false }
 rfd = "0.15"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+aes-gcm = "0.10"
+rand = "0.8"
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+vodozemac = "0.11"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+
+[target.'cfg(windows)'.dependencies]
+junction = "1"
