@@ -1,0 +1,31 @@
+.screenshot-shelf { max-width: 1400px; margin: auto; }
+.screenshot-shelf button { cursor: pointer; }
+.shelf-heading-shell { margin-bottom: 18px; }
+.screenshot-shelf .shelf-heading { position: relative; z-index: 2; min-height: 92px; justify-content: center; padding: 20px 24px; border-radius: 14px 14px 22px 22px; box-shadow: 0 10px 13px -8px #000f, 0 23px 30px -17px #000d; }
+.screenshot-shelf .shelf-heading h1 { width: 100%; text-align: center; font-size: 36px; line-height: 1.15; }
+.shelf-toolbar { position: relative; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; margin-top: -18px; padding: 38px 22px 20px; background: color-mix(in srgb, var(--page) 78%, var(--panel)); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 14px 14px; }
+
+.shelf-toolbar > .select-wrap { width: min(280px, 100%); min-width: 0; }
+.shelf-toolbar > .select-wrap > button { min-height: 42px; font-size: 13px; }
+.screenshot-shelf .shelf-toolbar > button { width: 42px; height: 42px; flex-shrink: 0; padding: 0; }
+.shelf-toolbar > button, .shelf-grid footer button, .shelf-more, .shelf-preview button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--control); color: var(--text); font: inherit; font-size: 12px; }
+.shelf-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(240px,1fr)); gap: 18px; }
+.shelf-grid article { overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
+.shelf-thumbnail { display: block; width: 100%; aspect-ratio: 16/9; padding: 0; border: 0; background: #050607; overflow: hidden; }
+.shelf-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.shelf-image-placeholder { min-height: 120px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.shelf-caption { display: grid; gap: 6px; padding: 14px 16px; }
+.shelf-caption strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.shelf-caption span, .shelf-caption small { color: var(--muted); font-size: 11px; }
+.shelf-grid footer { display: flex; justify-content: space-between; gap: 8px; padding: 0 16px 16px; }
+.shelf-empty { min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
+.shelf-empty h2, .shelf-empty p { margin: 0; }
+.shelf-more { margin: 24px auto; }
+.shelf-preview { width: min(1100px,90vw); max-height: 90vh; padding: 18px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 16px; }
+.shelf-preview::backdrop { background: #000c; }
+.shelf-preview header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 14px; }
+.shelf-preview header strong { overflow-wrap: anywhere; }
+.shelf-preview > img { display: block; width: 100%; max-height: 70vh; object-fit: contain; }
+.shelf-preview p { color: var(--muted); }
+.screenshot-shelf button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.screenshot-shelf button:disabled { opacity: .5; cursor: wait; }

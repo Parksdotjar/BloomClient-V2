@@ -79,6 +79,7 @@ Windows, files, downloads, Java, and Minecraft
 
 - Node.js 20 or newer
 - Rust stable
+- JDK 21 or newer for the cosmetics mod build. Set `JAVA_HOME` to the JDK installation folder (not `bin`), or put both `java` and `javac` on `PATH`. Reopen PowerShell after changing environment variables.
 - Tauri's Windows prerequisites
 - Git
 
@@ -123,3 +124,5 @@ For interface changes, include screenshots or a short recording whenever possibl
 ## License
 
 Bloom Client is released under the [MIT License](LICENSE).
+
+Development runs (`npm.cmd run tauri dev`) do not check for or install production updates. The native updater is registered only in release builds; the development update-preview shortcut remains a local simulation.

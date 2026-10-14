@@ -188,7 +188,7 @@ For content-heavy pages, release history, activity streams, chronological status
 - The client stores opaque cape IDs and per-account cart, collection, and equipped state. Private storage paths, permanent bucket URLs, and privileged Supabase keys must never be embedded or persisted in the desktop client.
 - Cape textures must be requested through the restored VPS provider as short-lived leases. Private object URLs and privileged storage/database credentials never belong in the launcher or Fabric mod.
 - Repeated cape cards use cached texture previews and must not create one continuous WebGL renderer per card. Reserve live 3D rendering for a focused preview when it materially improves the experience.
-- Transient client-wide outcomes use the single full-width bar attached to the bottom edge. Success/normal outcomes use the approved green surface, failures use the error surface, copy stays centered, and entrance motion rises from below; do not add detached top toasts for these outcomes.
+- Transient client-wide outcomes use the single full-width bar attached to the bottom edge. Success/normal outcomes use the approved green surface, failures use the error surface, copy stays centered, and entrance motion rises from below; never show action notifications as standalone inline text or detached top toasts. Reuse this shared bottom bar, including image-copy and folder-open feedback.
 - Available client updates use the same bottom-edge model but retain the Bloom blue action color. Activating the bar expands that exact surface to cover the client while the signed update downloads and installs; never open a detached update modal. Mock update triggers must be development-only and absent from production builds.
 - Cape Studio separates broad artwork placement from exact pixel editing. Imported artwork uses one fixed cape-ratio crop with direct drag/zoom feedback, explicit output detail, automatic nearest-edge wrapping, and one switchable cape/elytra preview. Do not expose raw UV coordinates as the primary import experience.
 - Studio credentials never belong in the executable or project file. The private password is exchanged for a revocable session and the session is stored through the operating-system credential vault.
@@ -202,7 +202,7 @@ For content-heavy pages, release history, activity streams, chronological status
 ## Implementation checklist
 
 - Bloom opens centered at a generous desktop size without forcing maximized mode, while retaining a practical minimum window size.
-- Responsive layouts must reflow before labels or descriptions become cramped: reduce fixed rails, hide the ad rail when necessary, stack home columns, and never solve narrow layouts by shrinking readable text.
+- Responsive layouts must reflow before labels or descriptions become cramped: reduce fixed rails, stack home columns, and never solve narrow layouts by shrinking readable text.
 - Test the home screen at the default window size and at the minimum supported window size.
 
 - Test the screen at a short viewport and a tall viewport.
@@ -216,11 +216,51 @@ For content-heavy pages, release history, activity streams, chronological status
 - Dropdown menus attach directly beneath their triggers with no gap, use a slightly inset width, omit top corner rounding, and remain above surrounding content. Their optimized Anime.js reveal expands downward with ease-in-out motion and staggers only currently visible options; Ultra Performance Mode opens them immediately.
 - Toggle thumbs must keep equal inset spacing from the track edge in both off and on states; derive the on-state travel from track width, thumb size, and padding rather than visually guessing it.
 - Custom-background transparency and blur controls must override every theme surface consistently. Button blur applies only to filled controls, preserves accent meaning, and remains disabled by Ultra Performance Mode.
-- Custom-background mode uses one shared darkness value across the entire shell. The left sidebar and advertising rail use that dark translucent surface with blur; the center uses the exact same tint and opacity without blur; filled controls use a slightly denser version with blur. Do not expose separate blur switches that let these regions drift into incompatible states.
-- The custom-background Interface Darkness control is constrained to a readable 55–92% range. Its displayed percentage and track fill are normalized to that range, while Image Opacity remains an independent 0–100% control for the artwork itself.
-- Custom-background surface controls stay independent: Interface Darkness controls the equally dark center and blurred side rails, while Element Darkness controls the opacity of buttons, dropdowns, cards, slider readouts, and related glass controls. Element Darkness is constrained to 35–98% and must never silently inherit Interface Darkness.
+- The custom-background Interface Darkness control is adjustable across the full 0–100% range. Its displayed percentage and track fill are normalized to that range, while Image Opacity remains an independent 0–100% control for the artwork itself.
 - New custom backgrounds begin at 100% Image Opacity, 92% Interface Darkness, and 35% Element Darkness. These are defaults, not forced values: once a user adjusts a control, future launches preserve that choice.
-- Element Darkness must produce a visible tonal change even when an element sits on an already-dark parent. Its low end therefore blends toward a translucent charcoal glass floor instead of transparent black, which would visually collapse back into the parent surface. Apply it to all sidebar actions, settings navigation tabs, account cards, raised page shells, and instance content tabs—not only active states.
 - For user-directed UI revisions and regressions, update `UI_CHANGE_HISTORY.md`; add a durable bug entry to `BUGS.md` when a concrete failure and fix are identified.
 - Native Windows branding must come from the clean transparent high-resolution Bloom mark. The `.ico` must contain dedicated 16, 24, 32, 48, 64, and 256px layers; never ship a stale padded plate or rely on Windows to shrink one large bitmap for the taskbar.
 - Run `npm run typecheck` and `npm run build` before committing.
+
+- Custom-background uploads remain accessible while disabled and enable the image after saving. Independent sidebar and element frost sliders span 0–40px; zero means no blur. Neutral glass must mix with transparent so zero darkness has no hidden opaque tint.
+
+- Background settings use an image preview, an explicit labeled enable button, and Interface/Sidebar disclosure groups. Sidebar surface and control darkness/frost are independent of interface controls. Apply backdrop blur only to named glass surfaces, never every button: artwork overlays must stay sharp.
+
+
+- Settings headers remain opaque and dark. Settings navigation has a rounded panel with equal insets. Main content and sidebars have separate fill/frost controls; zero fill and outline mean transparent. Navigation selection uses weight rather than underlining.
+- Account dock, trigger, and dropdown stay equally opaque and dark because they overlap other content; sidebar fill/frost/outline/text customization excludes these surfaces.
+- Every custom color uses the shared circular trigger and HSV/hex picker with Apply/Cancel. Background artwork uses the existing dim-on-hover, scaling ArrowRightLeft affordance, including keyboard focus; empty backgrounds show a labeled upload target.
+
+
+- Reserve a real 32px title strip above main content. Its continuous drag handle runs from navigation to the window controls; never leave a percentage-based dead zone or overlay page actions.
+- Segmented tabs use one continuous track fill/frost and one rounded moving indicator. Individual tab buttons stay transparent and unblurred so corner seams cannot change the indicator’s apparent shape or opacity.
+
+- Reserved title space must visually continue the content surface at the same opacity. The drag target itself remains transparent; never expose an untinted background strip above darkened content.
+
+- Instance content search uses a bare 27px search icon, 17px semibold/bold input text, and a lifted charcoal field. Do not restore a separate icon tile on focus.
+
+- Instance and Spotlight Play buttons use the same solid accent fill as Add Mods, including with custom backgrounds enabled. Glass darkness does not dim primary Play actions; disabled states retain their feedback. Search uses darker charcoal without a background image, while retaining the lifted translucent fill in custom-background mode.
+
+- Search focus uses one gentle 1040ms transform rather than concurrent width/radius/shadow animations. Entrance animations must release transform ownership; text remains stable during focus.
+
+- Library Play and New Instance also retain solid accent fills under custom backgrounds. Settings navigation has an independent persisted fill, defaulting to 96%; its zero endpoint remains transparent.
+
+- Instance-content empty states use a simple muted PackageOpen outline (40px), never a broken brand mark or decorative icon tile.
+
+- File-drop overlays use the FileDown document-and-down-arrow icon to communicate importing files.
+
+- Background includes Image and Live backgrounds sources. Twelve local organic styles inherit the accent color and reuse glass/opacity settings. Preview tiles remain static; animation stops under reduced motion, disabled animations, and Ultra Performance. Choosing a live style enables it and persists through existing settings; uploaded artwork remains available.
+
+- Image/Live source selection is centered and reuses the instance segmented track and rounded sliding indicator, with 280ms motion and transparent buttons.
+
+- The shell content must flex to consume all space between navigation and the sponsored rail, including maximized ultrawide windows. Do not cap the outer content pane width; constrain inner page content instead. Rail scrollbar tracks stay transparent over the rail surface.
+
+- Screenshots is a first-class sidebar destination between Social and Utilities. Screenshot Shelf opens across all visible instances, includes every instance in its filter even when empty, and offers local image preview, image clipboard copy, and screenshot-folder opening. Preview and copy access must stay bounded to the owning instance.
+
+- All toggle tracks retain their solid off fill and solid accent on fill under Image and Organic backgrounds. Exclude toggles from glass opacity/frost overrides; thumb position and track color must both communicate state. Instance content actions use the shared bottom notification tray, never inline accent-colored status messages.
+
+- Progressive content lists must ignore loading-time scroll events and never reduce their visible-row limit during reveal. Only explicit navigation/search/page resets may reset the initial batch.
+
+- Sync setup uses plain Copy from / Copy to labels and explicitly distinguishes all-instance copying, selected voice-chat targets, and shared pack folders. Explanations belong in custom info tooltips, available on hover and keyboard focus with Escape dismissal; never rely on native title tooltips or add permanent helper paragraphs for this page.
+
+- Image and Organic backgrounds must never replace primary action fills with translucent or black-mixed accent colors. Preserve solid accent fills for AutoTune, catalog installs/imports, account actions, and updates. Glass applies to neutral surfaces; checked controls retain their state color. Disabled/pending feedback remains intentional.

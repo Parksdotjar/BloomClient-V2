@@ -1,3 +1,5 @@
+import { InfoTip } from "./components/InfoTip";
+import { ScreenshotShelf } from "./components/ScreenshotShelf";
 import {
   StrictMode,
   useEffect,
@@ -41,7 +43,7 @@ import {
   FolderOpen,
   History,
   House,
-  Inbox,
+  FileDown,
   Layers3,
   ListFilter,
   ImagePlus,
@@ -85,9 +87,22 @@ import { ShareInstanceDialog } from "./components/ShareInstanceDialog";
 import { ModDetailDrawer, type ModDrawerSelection, type ModProjectDetails } from "./components/ModDetailDrawer";
 import { OnboardingFlow, OnboardingSplash } from "./components/OnboardingFlow";
 
+const LIVE_BACKGROUNDS = [
+  { id: "aurora", name: "Aurora" }, { id: "tide", name: "Tide" },
+  { id: "bloom", name: "Bloom" }, { id: "dunes", name: "Dunes" },
+  { id: "mist", name: "Mist" },
+  { id: "petals", name: "Petals" }, { id: "ripple", name: "Ripple" },
+  { id: "silk", name: "Silk" }, { id: "lagoon", name: "Lagoon" },
+  { id: "ribbons", name: "Ribbons" }, { id: "halo", name: "Halo" },
+  { id: "contour", name: "Contour" },
+] as const;
+function OrganicBackground({ style, preview = false }: { style: SettingsState["liveBackground"]; preview?: boolean }) {
+  return <span className={"organic-background " + (preview ? "organic-preview" : "organic-live")} data-style={style} aria-hidden="true"><i /><i /><i /></span>;
+}
+
 type Theme = "oled";
 type HomeLayout = "Dashboard" | "Spotlight";
-type AppPage = "home" | "settings" | "autotune" | "utilities" | "social" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker";
+type AppPage = "screenshots" | "home" | "settings" | "autotune" | "utilities" | "social" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker";
 type WindowMenuName = "file" | "edit" | "view" | "help" | "compact";
 const PROFILE_ICON_STORAGE_KEY = "bloom-profile-icon";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "bloom-sidebar-collapsed";
@@ -121,7 +136,17 @@ type SettingsState = {
   animations: boolean;
   buttonPressDuration: number;
   customBackground: boolean;
+  backgroundMode: "image" | "live";
+  liveBackground: (typeof LIVE_BACKGROUNDS)[number]["id"];
   backgroundOpacity: number;
+  settingsPanelDarkness: number;
+  sidebarSurfaceDarkness: number;
+  sidebarElementDarkness: number;
+  sidebarElementFrost: number;
+  sidebarOutline: number;
+  sidebarTextColor: string;
+  sidebarFrost: number;
+  elementFrost: number;
   sidebarOpacity: number;
   elementOpacity: number;
   ultraPerformance: boolean;
@@ -151,7 +176,17 @@ const defaults: SettingsState = {
   animations: true,
   buttonPressDuration: 750,
   customBackground: false,
+  backgroundMode: "image",
+  liveBackground: "aurora",
   backgroundOpacity: 100,
+  settingsPanelDarkness: 96,
+  sidebarSurfaceDarkness: 92,
+  sidebarElementDarkness: 35,
+  sidebarElementFrost: 14,
+  sidebarOutline: 0,
+  sidebarTextColor: "#bdc5c6",
+  sidebarFrost: 22,
+  elementFrost: 14,
   sidebarOpacity: 92,
   elementOpacity: 35,
   ultraPerformance: false,
@@ -182,6 +217,7 @@ const nav = [
   [Layers3, "Instances"],
   [HangerIcon, "Locker"],
   [MessageCircle, "Social"],
+  [ImagePlus, "Screenshots"],
   [Wrench, "Utilities"],
   [SettingsIcon, "Settings"],
 ] as const;
@@ -242,12 +278,12 @@ function Toggle({
 function FillCheckbox({ value, onChange, label }: { value: boolean; onChange: (value: boolean) => void; label: string }) {
   return <button className={`fill-checkbox ${value ? "checked" : ""}`} onClick={() => onChange(!value)} aria-pressed={value} aria-label={label}><span /></button>;
 }
-function PercentSlider({ value, onChange, label, min = 0, max = 100 }: { value: number; onChange: (value: number) => void; label: string; min?: number; max?: number }) {
+function PercentSlider({ value, onChange, label, min = 0, max = 100, step = 1, unit = "%" }: { value: number; onChange: (value: number) => void; label: string; min?: number; max?: number; step?: number; unit?: string }) {
   const safeValue = Math.max(min, Math.min(max, value));
   const fill = max === min ? 100 : ((safeValue - min) / (max - min)) * 100;
   return <div className="setting-percent-slider" style={{ "--setting-range-fill": `${fill}%` } as CSSProperties}>
-    <input type="range" min={min} max={max} step="1" value={safeValue} aria-label={label} aria-valuetext={`${safeValue} percent`} onChange={event => onChange(Number(event.target.value))} />
-    <output>{safeValue}%</output>
+    <input type="range" min={min} max={max} step={step} value={safeValue} aria-label={label} aria-valuetext={`${safeValue}${unit}`} onChange={event => onChange(Number(event.target.value))} />
+    <output>{safeValue}{unit}</output>
   </div>;
 }
 
@@ -612,7 +648,7 @@ function hexToHsv(input: string): HsvColor {
   };
 }
 
-function CustomAccentPicker({ value, onApply }: { value: string; onApply: (color: string) => void }) {
+function CustomAccentPicker({ value, onApply, label = "Custom accent color", description = "Build your own Bloom accent.", showValue = false }: { value: string; onApply: (color: string) => void; label?: string; description?: string; showValue?: boolean }) {
   const [open, setOpen] = useState(false);
   const [color, setColor] = useState<HsvColor>(() => hexToHsv(value));
   const [hexDraft, setHexDraft] = useState(value.toUpperCase());
@@ -695,9 +731,10 @@ function CustomAccentPicker({ value, onApply }: { value: string; onApply: (color
       ref={triggerRef}
       type="button"
       className={`accent-custom-trigger ${customSelected ? "picked" : ""}`}
-      aria-label="Choose a custom accent color"
+      aria-label={`Choose ${label.toLowerCase()}`}
+      style={showValue ? { background: value } : undefined}
       aria-expanded={open}
-      title="Custom accent color"
+      title={label}
       onClick={() => open ? closePicker() : openPicker()}
     />
     {open && createPortal(
@@ -706,7 +743,7 @@ function CustomAccentPicker({ value, onApply }: { value: string; onApply: (color
         className="accent-picker-popover"
         role="dialog"
         aria-modal="false"
-        aria-label="Custom accent color"
+        aria-label={label}
         style={{
           position: "fixed",
           top: position.top,
@@ -719,7 +756,7 @@ function CustomAccentPicker({ value, onApply }: { value: string; onApply: (color
         } as CSSProperties}
       >
         <div className="accent-picker-heading">
-          <div><b>Custom color</b><span>Build your own Bloom accent.</span></div>
+          <div><b>Custom color</b><span>{description}</span></div>
           <span className="accent-picker-preview" aria-hidden="true" />
         </div>
         <div
@@ -1155,7 +1192,6 @@ function SettingsPage({
   const chooseBackground = async (file?: File) => {
     if (!file) return;
     setBackgroundMessage("");
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { setBackgroundMessage("Choose a PNG, JPEG, or WebP image."); return; }
     if (file.size > 32 * 1024 * 1024) { setBackgroundMessage("Choose an image smaller than 32 MB."); return; }
     setBackgroundBusy(true);
     const objectUrl = URL.createObjectURL(file);
@@ -1166,10 +1202,21 @@ function SettingsPage({
         image.onerror = () => reject(new Error("Bloom could not read that image."));
         image.src = objectUrl;
       });
-      if (dimensions.width > 4096 || dimensions.height > 4096) throw new Error("Background images can be up to 4096 pixels on either side.");
-      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      const image = new Image();
+      image.src = objectUrl;
+      await image.decode();
+      const scale = Math.min(1, 4096 / Math.max(dimensions.width, dimensions.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(dimensions.width * scale));
+      canvas.height = Math.max(1, Math.round(dimensions.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Could not prepare this image.");
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const normalized = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Could not convert this image.")), "image/webp", 0.92));
+      const bytes = Array.from(new Uint8Array(await normalized.arrayBuffer()));
       const saved = await invoke<string>("save_custom_background", { bytes });
       onBackgroundImageChange(saved);
+      setSettings({ ...settings, customBackground: true, backgroundMode: "image" });
       setBackgroundMessage(`${dimensions.width}×${dimensions.height} background saved locally.`);
     } catch (error) {
       setBackgroundMessage(String(error));
@@ -1292,30 +1339,46 @@ function SettingsPage({
           </div>
           <div className="settings-section" {...section("Background")}>
             <h2>Background</h2>
-            <p className="section-subtitle">Personalize Bloom with an image saved only on this computer.</p>
-            <div className="settings-card background-settings-card">
-              <SettingRow title="Custom Background" description="Use a local image behind Bloom Client. A 16:9 image is recommended.">
-                <FillCheckbox value={settings.customBackground} onChange={value => update("customBackground", value)} label="Use custom background" />
-              </SettingRow>
-              {settings.customBackground && <>
-                <SettingRow title="Background Image" description="Upload a PNG, JPEG, or WebP image up to 4K resolution.">
-                  <div className="background-upload-control">
-                    {backgroundImage && <span className="background-thumbnail" style={{ backgroundImage: `url(${backgroundImage})` }} />}
-                    <button disabled={backgroundBusy} onClick={() => backgroundInput.current?.click()}><Upload size={15} />{backgroundBusy ? "Saving…" : backgroundImage ? "Replace image" : "Upload image"}</button>
-                    <input ref={backgroundInput} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={event => void chooseBackground(event.target.files?.[0])} />
-                  </div>
-                </SettingRow>
-                <SettingRow title="Image Opacity" description="Lower values fade the background into black so controls remain readable.">
-                  <PercentSlider value={settings.backgroundOpacity} onChange={value => update("backgroundOpacity", value)} label="Background image opacity" />
-                </SettingRow>
-                <SettingRow title="Interface Darkness" description="Darken the sharp center and blurred sidebars together.">
-                  <PercentSlider value={settings.sidebarOpacity} min={55} max={92} onChange={value => update("sidebarOpacity", value)} label="Custom background interface darkness" />
-                </SettingRow>
-                <SettingRow title="Element Darkness" description="Adjust the opacity of buttons, dropdowns, cards, and other glass controls.">
-                  <PercentSlider value={settings.elementOpacity} min={35} max={98} onChange={value => update("elementOpacity", value)} label="Custom background element darkness" />
-                </SettingRow>
-                {backgroundMessage && <div className="background-settings-message">{backgroundMessage}</div>}
+            <div className="settings-card background-editor">
+              <div className="background-editor-header">
+                <div><strong>Background</strong><span>{settings.customBackground ? "On" : "Off"} · Saved on this computer</span></div>
+                <button className={"background-enable " + (settings.customBackground ? "on" : "")} aria-pressed={settings.customBackground} onClick={() => update("customBackground", !settings.customBackground)}>{settings.customBackground ? "Enabled" : "Disabled"}</button>
+              </div>
+              <div className="instance-content-segments background-mode-tabs" role="group" aria-label="Background source">
+                <span className="instance-segment-indicator" aria-hidden="true" style={{ transform: `translateX(${settings.backgroundMode === "live" ? 100 : 0}%)` }} />
+                <button aria-pressed={settings.backgroundMode === "image"} onClick={() => update("backgroundMode", "image")}>Image</button>
+                <button aria-pressed={settings.backgroundMode === "live"} onClick={() => update("backgroundMode", "live")}>Organic</button>
+              </div>
+              {settings.backgroundMode === "live" ? <div className="live-background-section">
+                <p>Organic motion in your accent color.</p>
+                <div className="live-background-grid">{LIVE_BACKGROUNDS.map(preset => <button key={preset.id} aria-pressed={settings.liveBackground === preset.id} onClick={() => setSettings({ ...settings, liveBackground: preset.id, customBackground: true })}>
+                  <OrganicBackground style={preset.id} preview /><span>{preset.name}{settings.liveBackground === preset.id && <Check size={14} />}</span>
+                </button>)}</div>
+                {(!settings.animations || settings.ultraPerformance) && <p>Motion is paused by your performance settings.</p>}
+              </div> : <>
+              <button className={`background-image-picker ${backgroundImage ? "has-image" : "is-empty"}`} aria-label={backgroundBusy ? "Saving background" : backgroundImage ? "Change background image" : "Choose background image"} disabled={backgroundBusy} onClick={() => backgroundInput.current?.click()}>
+                {backgroundImage && <img src={backgroundImage} alt="Current background" />}
+                <span aria-hidden="true">{backgroundBusy ? <RefreshCw size={24} className="spin" /> : backgroundImage ? <ArrowRightLeft size={27} strokeWidth={2.4} /> : <><Upload size={24} /><b>Choose background image</b></>}</span>
+              </button>
+              <input ref={backgroundInput} type="file" accept="image/*" hidden onChange={event => { void chooseBackground(event.target.files?.[0]); event.target.value = ""; }} />
               </>}
+              <div className="background-control-row"><span>Background opacity</span><PercentSlider value={settings.backgroundOpacity} onChange={value => update("backgroundOpacity", value)} label="Background image opacity" /></div>
+              <details className="background-group" open><summary>Main content<ChevronDown size={16} /></summary>
+                <div className="background-control-row"><span>Darkness</span><PercentSlider value={settings.sidebarOpacity} max={100} unit="%" onChange={value => update("sidebarOpacity", value)} label="Interface darkness" /></div>
+                <div className="background-control-row"><span>Button fill</span><PercentSlider value={settings.elementOpacity} max={100} unit="%" onChange={value => update("elementOpacity", value)} label="Interface control darkness" /></div>
+                <div className="background-control-row"><span>Button frost</span><PercentSlider value={settings.elementFrost} max={40} unit="px" onChange={value => update("elementFrost", value)} label="Interface control frost" /></div>
+              </details>
+              <details className="background-group"><summary>Sidebars & navigation<ChevronDown size={16} /></summary>
+                <div className="background-control-row"><span>Settings panel fill</span><PercentSlider value={settings.settingsPanelDarkness} onChange={value => update("settingsPanelDarkness", value)} label="Settings panel fill" /></div>
+                <div className="background-control-row"><span>Panel fill</span><PercentSlider value={settings.sidebarSurfaceDarkness} max={100} unit="%" onChange={value => update("sidebarSurfaceDarkness", value)} label="Sidebar surface darkness" /></div>
+                <div className="background-control-row"><span>Panel frost</span><PercentSlider value={settings.sidebarFrost} max={40} unit="px" onChange={value => update("sidebarFrost", value)} label="Sidebar surface frost" /></div>
+                <div className="background-control-row"><span>Button fill</span><PercentSlider value={settings.sidebarElementDarkness} max={100} unit="%" onChange={value => update("sidebarElementDarkness", value)} label="Sidebar control darkness" /></div>
+                <div className="background-control-row"><span>Button frost</span><PercentSlider value={settings.sidebarElementFrost} max={40} unit="px" onChange={value => update("sidebarElementFrost", value)} label="Sidebar control frost" /></div>
+                <div className="background-control-row"><span>Outline strength</span><PercentSlider value={settings.sidebarOutline} onChange={value => update("sidebarOutline", value)} label="Sidebar outline strength" /></div>
+                <div className="background-control-row"><span>Text & icons</span><div className="accent-picks"><CustomAccentPicker value={settings.sidebarTextColor} onApply={color => update("sidebarTextColor", color)} label="Sidebar text color" description="Text and icons in your navigation." showValue /></div></div>
+              </details>
+              <div className="background-editor-footer"><span>{settings.ultraPerformance ? "Frost is paused in Ultra Performance Mode." : "Changes apply live."}</span><button onClick={() => setSettings({ ...settings, backgroundOpacity: defaults.backgroundOpacity, sidebarOpacity: defaults.sidebarOpacity, elementOpacity: defaults.elementOpacity, sidebarFrost: defaults.sidebarFrost, elementFrost: defaults.elementFrost, settingsPanelDarkness: defaults.settingsPanelDarkness, sidebarSurfaceDarkness: defaults.sidebarSurfaceDarkness, sidebarElementDarkness: defaults.sidebarElementDarkness, sidebarElementFrost: defaults.sidebarElementFrost, sidebarOutline: defaults.sidebarOutline, sidebarTextColor: defaults.sidebarTextColor })}>Reset</button></div>
+              {backgroundMessage && <div className="background-settings-message" role="status">{backgroundMessage}</div>}
             </div>
           </div>
           <div className="settings-section" {...section("Performance")}>
@@ -2170,20 +2233,16 @@ function InstanceContentActions({
   </>;
 }
 
-function BrokenBloomMark() {
-  return <img className="broken-bloom-mark" src="/bloom-logo-broken.png" alt="" aria-hidden="true" />;
-}
-
 function ContentEmptyState({ title, description, actions }: { title: string; description: string; actions?: ReactNode }) {
   return <div className="content-empty" role="status">
-    <BrokenBloomMark />
+    <PackageOpen className="content-empty-icon" size={40} strokeWidth={1.5} aria-hidden="true" />
     <h3>{title}</h3>
     <p>{description}</p>
     {actions && <div className="content-empty-actions">{actions}</div>}
   </div>;
 }
 
-function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialCatalog = false, recentSearchesEnabled, onPlay, onShare, onDuplicate, onDelete, onChanged, onInstallContent }: { instance: InstanceDraft; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; recentSearchesEnabled: boolean; onPlay: () => void; onShare: () => void; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
+function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialCatalog = false, recentSearchesEnabled, onPlay, onShare, onDuplicate, onDelete, onChanged, onInstallContent, onMessage }: { onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; recentSearchesEnabled: boolean; onPlay: () => void; onShare: () => void; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
   const [tab, setTab] = useState<InstanceTab>(initialTab);
   const [items, setItems] = useState<InstanceContentItem[]>(() => initialTab === "settings" ? [] : instanceContentMemoryCache.get(instanceContentCacheKey(instance.id, initialTab)) || []);
   const [contentReady, setContentReady] = useState(() => initialTab === "settings" || instanceContentMemoryCache.has(instanceContentCacheKey(instance.id, initialTab)));
@@ -2203,11 +2262,13 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   const [instanceMenuPosition, setInstanceMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 320, maxHeight: 420 });
   const [instanceMenuBusy, setInstanceMenuBusy] = useState<"duplicate" | "delete" | null>(null);
   const [confirmInstanceDelete, setConfirmInstanceDelete] = useState(false);
-  const [message, setMessage] = useState("");
+
   const [modDrawer, setModDrawer] = useState<ModDrawerSelection | null>(null);
   const [modDrawerDetails, setModDrawerDetails] = useState<ModProjectDetails | null>(null);
   const [modDrawerLoading, setModDrawerLoading] = useState(false);
   const [modDrawerError, setModDrawerError] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [advancedJvmOpen, setAdvancedJvmOpen] = useState(false);
   const [name, setName] = useState(instance.name);
   const [memory, setMemory] = useState(instance.memory);
   const [jvmArguments, setJvmArguments] = useState(instance.jvmArguments);
@@ -2237,7 +2298,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       const next = await invoke<InstanceContentItem[]>("list_instance_content", { instanceId: instance.id, category });
       instanceContentMemoryCache.set(key, next);
       if (request === contentLoadSequence.current) { setItems(next); setContentReady(true); }
-    } catch (error) { if (request === contentLoadSequence.current) { setContentReady(true); setMessage(String(error)); } }
+    } catch (error) { if (request === contentLoadSequence.current) { setContentReady(true); onMessage(String(error), "error"); } }
   };
   useEffect(() => { void loadContent(); const focus = () => { if (!document.hidden) void loadContent(); }; window.addEventListener("focus", focus); return () => window.removeEventListener("focus", focus); }, [tab, instance.id]);
   useEffect(() => {
@@ -2255,7 +2316,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       }
       else {
         clearPending();
-        if (update.state === "error") setMessage(update.message);
+        if (update.state === "error") onMessage(update.message, "error");
       }
     }).then(value => { unlisten = value; });
     return () => unlisten?.();
@@ -2355,25 +2416,25 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
             void invoke<CatalogSearchResult>("search_modrinth_content", { query: search, gameVersion: instance.version, offset: (nextPage - 1) * 50, category }).then(next => { catalogMemoryCache.set(nextKey, next); warmCatalogImages(next); }).catch(() => {});
           }
           if (!cached && request === catalogLoadSequence.current) await waitForCatalogFirstBatch(result.items);
-          if (request === catalogLoadSequence.current) { setCatalog(result); setMessage(""); }
+          if (request === catalogLoadSequence.current) { setCatalog(result);  }
         })
-        .catch((error) => { if (request === catalogLoadSequence.current && !cached) setMessage(String(error)); })
+        .catch((error) => { if (request === catalogLoadSequence.current && !cached) onMessage(String(error), "error"); })
         .finally(() => { if (request === catalogLoadSequence.current) setCatalogLoading(false); });
     }, search ? 320 : 0);
     return () => window.clearTimeout(timer);
   }, [browsingCatalog, tab, search, contentPage, instance.version, recentSearchesEnabled]);
-  const toggleItem = async (item: InstanceContentItem, enabled: boolean) => { try { await invoke("toggle_instance_content", { instanceId: instance.id, category: tab, fileName: item.fileName, enabled }); await loadContent(); } catch (error) { setMessage(String(error)); } };
+  const toggleItem = async (item: InstanceContentItem, enabled: boolean) => { try { await invoke("toggle_instance_content", { instanceId: instance.id, category: tab, fileName: item.fileName, enabled }); await loadContent(); } catch (error) { onMessage(String(error), "error"); } };
   const deleteItem = async (item: InstanceContentItem) => {
     if (tab === "settings") return;
     try {
       await invoke("delete_instance_content", { instanceId: instance.id, category: tab, fileName: item.fileName });
-      setMessage(`${item.name} was deleted.`);
+      onMessage(`${item.name} was deleted.`);
       await loadContent();
-    } catch (error) { setMessage(String(error)); }
+    } catch (error) { onMessage(String(error), "error"); }
   };
-  const chooseIcon = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { void invoke<InstanceDraft>("set_instance_icon", { instanceId: instance.id, icon: String(reader.result) }).then(onChanged).catch(error => setMessage(String(error))); }; reader.readAsDataURL(file); };
-  const saveSettings = async () => { try { const saved = await invoke<InstanceDraft>("update_instance_settings", { instanceId: instance.id, name, memory, jvmArguments }); onChanged(saved); setMessage("Instance settings saved."); } catch (error) { setMessage(String(error)); } };
-  const applyJvmPreset = (preset: string) => { if (preset in JVM_PRESETS) setJvmArguments(JVM_PRESETS[preset as keyof typeof JVM_PRESETS]); };
+  const chooseIcon = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { void invoke<InstanceDraft>("set_instance_icon", { instanceId: instance.id, icon: String(reader.result) }).then(onChanged).catch(error => onMessage(String(error), "error")); }; reader.readAsDataURL(file); };
+  const saveSettings = async () => { if (savingSettings) return; setSavingSettings(true); try { const saved = await invoke<InstanceDraft>("update_instance_settings", { instanceId: instance.id, name, memory, jvmArguments }); onChanged(saved); onMessage("Instance settings saved."); } catch (error) { onMessage(String(error), "error"); } finally { setSavingSettings(false); } };
+  const applyJvmPreset = (preset: string) => { if (preset === "Custom") setAdvancedJvmOpen(true); if (preset in JVM_PRESETS) setJvmArguments(JVM_PRESETS[preset as keyof typeof JVM_PRESETS]); };
   const categoryLabel = tab === "mods" ? "Mods" : tab === "resourcepacks" ? "Resource Packs" : "Shaders";
   const matchingRecentModSearches = recentSearchesEnabled && tab === "mods"
     ? recentModSearches.filter(item => item.toLocaleLowerCase() !== search.trim().toLocaleLowerCase() && (!search.trim() || item.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())))
@@ -2438,7 +2499,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       await onInstallContent(item, tab);
     } catch (error) {
       setPendingCatalogItems(current => { const next = new Set(current); next.delete(key); return next; });
-      setMessage(String(error));
+      onMessage(String(error), "error");
     }
   };
   const visibleItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()) && (filter === "All" || (filter === "Enabled" ? item.enabled : !item.enabled))).sort((a, b) => sort === "Size" ? b.size - a.size : a.name.localeCompare(b.name));
@@ -2450,8 +2511,10 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   const catalogPages = Math.max(1, Math.ceil(catalog.total / Math.max(1, catalog.limit)));
   const revealMoreContent = (node: HTMLDivElement) => {
     if (tab !== "mods" || node.scrollTop + node.clientHeight < node.scrollHeight - 110) return;
+    if (browsingCatalog ? catalogLoading : !contentReady) return;
     const total = browsingCatalog ? catalog.items.length : pagedItems.length;
-    setRenderedItemCount(current => Math.min(total, current + 10));
+    // Scroll events during list replacement must never hide the initial batch.
+    setRenderedItemCount(current => Math.max(current, Math.min(total, current + 10)));
   };
   const changeCatalogPage = (nextPage: number) => {
     if (tab === "settings") return;
@@ -2464,12 +2527,12 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
     void openUrl(`https://modrinth.com/${section}/${encodeURIComponent(item.slug || item.projectId)}`);
   };
   const openCatalog = () => {
-    if (tab === "mods" && !instance.loader.toLowerCase().includes("fabric")) { setMessage("The built-in mod catalog currently supports Fabric instances only."); return; }
+    if (tab === "mods" && !instance.loader.toLowerCase().includes("fabric")) { onMessage("The built-in mod catalog currently supports Fabric instances only."); return; }
     const cached = tab === "settings" ? undefined : catalogMemoryCache.get(catalogCacheKey(tab, instance.version, "", 1));
     if (cached) { setCatalog(cached); setCatalogLoading(false); } else setCatalogLoading(true);
-    setSearch(""); setContentPage(1); setBrowsingCatalog(true); setMessage("");
+    setSearch(""); setContentPage(1); setBrowsingCatalog(true);
   };
-  const closeCatalog = () => { setBrowsingCatalog(false); setSearch(""); setContentPage(1); setMessage(""); void loadContent(); };
+  const closeCatalog = () => { setBrowsingCatalog(false); setSearch(""); setContentPage(1);  void loadContent(); };
   const updateContentSearch = (value: string) => {
     setSearch(value);
     setContentPage(1);
@@ -2488,13 +2551,13 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       if (event.payload.type === "drop") {
         setDraggingContent(false);
         const paths = event.payload.paths;
-        setMessage(`Importing ${paths.length} ${itemLabel}${paths.length === 1 ? "" : "s"}…`);
+        onMessage(`Importing ${paths.length} ${itemLabel}${paths.length === 1 ? "" : "s"}…`);
         const importRequest = category === "mods"
           ? invoke<string[]>("import_instance_mod_files", { instanceId: instance.id, paths })
           : invoke<string[]>("import_instance_content_files", { instanceId: instance.id, category, paths });
         void importRequest
-          .then((names) => { setBrowsingCatalog(false); setSearch(""); setContentPage(1); setMessage(`${names.length} ${itemLabel}${names.length === 1 ? "" : "s"} added to ${instance.name}.`); return loadContent(); })
-          .catch((error) => setMessage(String(error)));
+          .then((names) => { setBrowsingCatalog(false); setSearch(""); setContentPage(1); onMessage(`${names.length} ${itemLabel}${names.length === 1 ? "" : "s"} added to ${instance.name}.`); return loadContent(); })
+          .catch((error) => onMessage(String(error), "error"));
       }
     }).then((value) => { unlisten = value; });
     return () => unlisten?.();
@@ -2507,7 +2570,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
     setTab(nextTab);
   };
   return <div className="instance-workspace">
-    {draggingContent && <div className="content-drop-overlay" role="status" aria-label={`Drop files into ${categoryLabel}`}><Inbox className="content-drop-symbol" size={58} strokeWidth={2.15} /></div>}
+    {draggingContent && <div className="content-drop-overlay" role="status" aria-label={`Drop files into ${categoryLabel}`}><FileDown className="content-drop-symbol" size={58} strokeWidth={1.75} aria-hidden="true" /></div>}
     <section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} strokeWidth={2.4} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1>{instance.name}</h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy} onClick={onPlay}><Play size={17} fill="currentColor" />Play</button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
       <div className="instance-menu-identity"><span>{instance.icon ? <img src={instance.icon} alt="" /> : <b aria-hidden="true">?</b>}</span><div><strong title={instance.name}>{instance.name}</strong><small>{instance.version} <i>•</i> {instance.loader}</small></div></div>
       <span className="instance-menu-label">INSTANCE FILES</span>
@@ -2527,12 +2590,34 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       </div>
       <button className={`instance-settings-tab ${tab === "settings" ? "active" : ""}`} onClick={() => setTab("settings")} aria-label="Instance settings" title="Instance settings"><SettingsIcon size={18} /></button>
     </div></section>
-    {tab === "settings" && <><section className={`instance-group-role ${groupRole ?? "owner"}`}><span>Group Role</span><b>{groupRole === "editor" ? "EDITOR" : groupRole === "member" ? "GUEST" : "OWNER"}</b></section><section className="jvm-preset"><div className="jvm-preset-heading"><div><b>JVM Performance Profile</b><span>Optional Java tuning for this instance</span></div><div className="jvm-preset-actions"><Select value={jvmPreset} options={["Default", "Performance", "Overdrive", "Custom"]} onChange={applyJvmPreset} /><button disabled={!jvmArguments} onClick={() => applyJvmPreset("Default")}>Remove</button></div></div><div className={`jvm-preset-note ${jvmPreset.toLowerCase()}`}><Rocket size={17} /><div><b>{jvmPreset === "Default" ? "Launcher managed" : jvmPreset === "Performance" ? "Stable performance tuning" : jvmPreset === "Overdrive" ? "Experimental overdrive" : "Custom arguments"}</b><span>{jvmPreset === "Default" ? "Uses modern Java defaults. Safest choice and recommended when troubleshooting." : jvmPreset === "Performance" ? "May reduce garbage-collection stutter with conservative G1 settings. Raw FPS gains are not guaranteed." : jvmPreset === "Overdrive" ? "Aggressive G1 tuning for larger modpacks. May increase memory use or fail on an incompatible Java runtime." : "Manually edited arguments. Invalid or conflicting flags can prevent Minecraft from launching."}</span></div></div></section></>}
     {tab === "settings" ? (
-      <section className="instance-manager settings-manager">
-        <div className="manager-heading"><div><h2>Instance Settings</h2><p>Change settings used when this instance launches.</p></div><button className="add-content" onClick={saveSettings}>Save Changes</button></div>
-        <div className="instance-settings-grid"><label><span>Name</span><input value={name} onChange={event => setName(event.target.value)} /></label><label><span>Memory <b>{memory} MB</b></span><input type="range" min="1024" max="16384" step="512" value={memory} onChange={event => setMemory(Number(event.target.value))} /></label><label className="wide"><span>JVM Arguments</span><textarea value={jvmArguments} onChange={event => setJvmArguments(event.target.value)} placeholder="Optional Java arguments" /></label></div>
-        {message && <p className="instance-message">{message}</p>}
+      <section className="instance-manager settings-manager instance-preferences">
+        <header className="instance-preferences-heading">
+          <h2>Instance settings</h2>
+          {groupRole && <span className="instance-role-badge">{groupRole === "editor" ? "Editor" : groupRole === "member" ? "Guest" : "Owner"}</span>}
+          <button className="instance-preferences-save" disabled={savingSettings || !name.trim()} onClick={() => void saveSettings()}>{savingSettings ? "Saving…" : "Save changes"}</button>
+        </header>
+        <fieldset className="instance-preferences-fields" disabled={savingSettings}>
+          <div className="instance-preference-row">
+            <label htmlFor="instance-display-name">Instance name</label>
+            <input id="instance-display-name" value={name} onChange={event => setName(event.target.value)} />
+          </div>
+          <div className="instance-preference-row">
+            <div className="instance-preference-label">Memory<InfoTip label="Minecraft memory">The maximum RAM Minecraft can use for this instance. Larger modpacks may need more. Leave enough RAM for Windows and your other apps; allocating more does not always improve performance.</InfoTip></div>
+            <PercentSlider value={memory} onChange={setMemory} label="Minecraft memory" min={1024} max={16384} step={512} unit=" MB" />
+          </div>
+          <div className="instance-preference-row">
+            <div className="instance-preference-label">Java profile<InfoTip label="Java profile">Default uses launcher-managed Java settings. Performance uses conservative garbage-collection tuning. Overdrive is experimental and may use more memory or fail with incompatible Java versions. FPS gains are not guaranteed. Custom opens the argument editor.</InfoTip></div>
+            <Select value={jvmPreset} options={["Default", "Performance", "Overdrive", "Custom"]} onChange={applyJvmPreset} />
+          </div>
+          <details className="instance-java-advanced" open={advancedJvmOpen} onToggle={event => setAdvancedJvmOpen(event.currentTarget.open)}>
+            <summary>Advanced Java options<ChevronDown size={17} /></summary>
+            <div className="instance-java-editor">
+              <div className="instance-java-editor-heading"><label htmlFor="instance-jvm-arguments">JVM arguments</label><InfoTip label="JVM arguments">Extra flags passed to Java when this instance launches. Choosing a profile replaces these flags. Invalid or conflicting arguments can prevent launch. Reset to default clears the custom flags. Save changes applies your edits.</InfoTip><button type="button" disabled={!jvmArguments || savingSettings} onClick={() => applyJvmPreset("Default")}>Reset to default</button></div>
+              <textarea id="instance-jvm-arguments" value={jvmArguments} onChange={event => setJvmArguments(event.target.value)} placeholder="No custom arguments" spellCheck={false} />
+            </div>
+          </details>
+        </fieldset>
       </section>
     ) : (
       <section className={`instance-manager ${browsingCatalog ? "catalog-manager" : ""}`}>
@@ -2598,7 +2683,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
           onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setRecentSearchesOpen(false); }}
         >
           <span className="content-search-mark" aria-hidden="true">
-            <Search size={20} />
+            <Search size={27} />
           </span>
           <input
             value={search}
@@ -2621,7 +2706,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
             {matchingRecentModSearches.map(item => <button type="button" role="option" aria-selected="false" key={item} onMouseDown={event => event.preventDefault()} onClick={() => { updateContentSearch(item); setRecentModSearches(rememberRecentModSearch(item)); setRecentSearchesOpen(false); }}><History size={15} /><b>{item}</b></button>)}
           </div>}
         </div>
-        {message && <p className="instance-message">{message}</p>}
+
         {modDrawer && <ModDetailDrawer
           key={modDrawer.key}
           selection={modDrawer}
@@ -3209,6 +3294,8 @@ function App() {
   const [ringProgress, setRingProgress] = useState(0);
   const [gameRunning, setGameRunning] = useState(false);
   const [toast, setToast] = useState("");
+  const toolToastTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(toolToastTimer.current), []);
   const [toastKind, setToastKind] = useState<"notification" | "error">("notification");
   const [availableUpdate, setAvailableUpdate] = useState<TauriUpdate | null>(null);
   const [currentVersion, setCurrentVersion] = useState("1.0.0");
@@ -3323,7 +3410,7 @@ function App() {
       if (event.button !== 0 || document.documentElement.dataset.animations !== "on" || document.documentElement.dataset.performance === "ultra") return;
       const target = event.target instanceof Element ? event.target.closest<HTMLElement>("button, .instance-library-card") : null;
       if (!target || (target instanceof HTMLButtonElement && target.disabled)) return;
-      if (target.closest(".accent-picks") || target.closest(".window-menu") || target.classList.contains("instance-icon-picker") || target.classList.contains("profile-settings-avatar") || target.classList.contains("window-control")) return;
+      if (target.closest(".accent-picks") || target.closest(".window-menu") || target.classList.contains("background-image-picker") || target.classList.contains("instance-icon-picker") || target.classList.contains("profile-settings-avatar") || target.classList.contains("window-control")) return;
       const duration = Number(document.documentElement.dataset.buttonPressDuration || 0);
       activePresses.get(target)?.cancel();
       activePresses.delete(target);
@@ -3366,6 +3453,10 @@ function App() {
     return () => unlisten?.();
   }, [settings.tray]);
   const checkForUpdates = async (manual = false) => {
+    if (import.meta.env.DEV) {
+      if (manual) showToolMessage("Updates are disabled in development. Restart tauri dev to use your local changes.");
+      return;
+    }
     if (updateChecking) return;
     setUpdateChecking(true);
     try {
@@ -3396,7 +3487,7 @@ function App() {
       void getVersion().then(setCurrentVersion).catch(() => {});
       if (updateCheckStarted.current) return;
       updateCheckStarted.current = true;
-      if (settings.updates) void checkForUpdates(false);
+      if (!import.meta.env.DEV && settings.updates) void checkForUpdates(false);
     }, 1800);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, []);
@@ -3454,6 +3545,7 @@ function App() {
   }, [updatePanelOpen]);
 
   const installUpdate = async () => {
+    if (import.meta.env.DEV && !mockUpdateActive) return;
     if ((!availableUpdate && !mockUpdateActive) || !["ready", "error"].includes(updatePhase)) return;
     setUpdatePanelOpen(true);
     setUpdatePhase("downloading");
@@ -3842,9 +3934,10 @@ function App() {
   };
   const openSettings = (target = "General") => { setSettingsTarget(target); setSettingsNavigationKey(value => value + 1); setPage("settings"); };
   const showToolMessage = (message: string, kind: "notification" | "error" = "notification") => {
+    window.clearTimeout(toolToastTimer.current);
     setToastKind(kind);
     setToast(message);
-    window.setTimeout(() => setToast(""), 4000);
+    toolToastTimer.current = window.setTimeout(() => setToast(""), 4000);
   };
   const importModpack = async () => {
     if (download.active || gameRunning) return showToolMessage("Another download or game launch is already active.");
@@ -3871,12 +3964,21 @@ function App() {
     try { await invoke("repair_minecraft_installation", { instanceId: mostRecentInstance.id }); }
     catch (error) { setDownload({ active: false, progress: 0, state: "idle", message: "" }); showToolMessage(String(error), "error"); }
   };
-  const customBackgroundActive = settings.customBackground && Boolean(customBackgroundImage);
-  const customSurfaceDarkness = Math.max(55, Math.min(92, settings.sidebarOpacity));
-  const customElementDarkness = Math.max(35, Math.min(98, settings.elementOpacity));
+  const liveBackgroundActive = settings.backgroundMode === "live";
+  const customBackgroundActive = settings.customBackground && (liveBackgroundActive || Boolean(customBackgroundImage));
+  const customSurfaceDarkness = Math.max(0, Math.min(100, settings.sidebarOpacity));
+  const customElementDarkness = Math.max(0, Math.min(100, settings.elementOpacity));
   const customBackgroundStyle = {
-    "--custom-background-image": customBackgroundImage ? `url(${customBackgroundImage})` : "none",
+    "--custom-background-image": !liveBackgroundActive && customBackgroundImage ? `url(${customBackgroundImage})` : "none",
     "--custom-background-opacity": String(Math.max(0, Math.min(100, settings.backgroundOpacity)) / 100),
+    "--custom-sidebar-outline": `${Math.max(0, Math.min(100, settings.sidebarOutline))}%`,
+    "--custom-sidebar-text": /^#[0-9a-f]{6}$/i.test(settings.sidebarTextColor) ? settings.sidebarTextColor : defaults.sidebarTextColor,
+    "--custom-settings-panel-opacity": `${Math.max(0, Math.min(100, settings.settingsPanelDarkness))}%`,
+    "--custom-sidebar-surface-opacity": `${Math.max(0, Math.min(100, settings.sidebarSurfaceDarkness))}%`,
+    "--custom-sidebar-control-opacity": `${Math.max(0, Math.min(100, settings.sidebarElementDarkness))}%`,
+    "--custom-sidebar-control-frost": `${Math.max(0, Math.min(40, settings.sidebarElementFrost))}px`,
+    "--custom-sidebar-frost": `${Math.max(0, Math.min(40, settings.sidebarFrost))}px`,
+    "--custom-element-frost": `${Math.max(0, Math.min(40, settings.elementFrost))}px`,
     "--custom-surface-opacity": `${customSurfaceDarkness}%`,
     "--custom-control-opacity": `${customElementDarkness}%`,
   } as CSSProperties;
@@ -3902,12 +4004,12 @@ function App() {
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
+      {customBackgroundActive && liveBackgroundActive && <OrganicBackground style={settings.liveBackground} />}
       <div
         className="window-drag-region"
       >
         <div
           className="window-drag-handle"
-          data-tauri-drag-region
           onMouseDown={(event) => { if (event.button === 0) void getCurrentWindow().startDragging(); }}
           onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
         />
@@ -3978,6 +4080,7 @@ function App() {
                 (page === "home" && index === 0) ||
                 (page === "instances" && label === "Instances") ||
                 (page === "settings" && label === "Settings") ||
+                (page === "screenshots" && label === "Screenshots") ||
                 (page === "utilities" && label === "Utilities") ||
                 (page === "social" && label === "Social") ||
                 (page === "locker" && label === "Locker")
@@ -3988,7 +4091,7 @@ function App() {
               aria-label={label}
               title={sidebarCollapsed ? label : undefined}
               onClick={() =>
-                label === "Locker" ? setPage("locker") : label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "Utilities" ? setPage("utilities") : label === "Social" ? setPage("social") : setPage("home")
+                label === "Screenshots" ? setPage("screenshots") : label === "Locker" ? setPage("locker") : label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "Utilities" ? setPage("utilities") : label === "Social" ? setPage("social") : setPage("home")
               }
             >
               <Icon size={17} />
@@ -4096,11 +4199,13 @@ function App() {
       </aside>
       <main className={`content ${page === "social" ? "social-content" : ""}`}>
         {page === "instance" && selectedInstance ? (
-          <InstancePage key={`${selectedInstance.id}:${instanceDestination}`} instance={selectedInstance} groupRole={packMemberships.get(selectedInstance.id)} busy={download.active || gameRunning} initialTab={instanceDestination === "settings" ? "settings" : "mods"} initialCatalog={instanceDestination === "add-mods"} recentSearchesEnabled={settings.recentModSearches} onPlay={() => void launch(selectedInstance)} onShare={() => setShareInstance(selectedInstance)} onDuplicate={() => duplicateClientInstance(selectedInstance)} onDelete={() => deleteClientInstance(selectedInstance)} onInstallContent={(item, category) => installContent(selectedInstance, item, category)} onChanged={(changed) => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} />
+          <InstancePage onMessage={showToolMessage} key={`${selectedInstance.id}:${instanceDestination}`} instance={selectedInstance} groupRole={packMemberships.get(selectedInstance.id)} busy={download.active || gameRunning} initialTab={instanceDestination === "settings" ? "settings" : "mods"} initialCatalog={instanceDestination === "add-mods"} recentSearchesEnabled={settings.recentModSearches} onPlay={() => void launch(selectedInstance)} onShare={() => setShareInstance(selectedInstance)} onDuplicate={() => duplicateClientInstance(selectedInstance)} onDelete={() => deleteClientInstance(selectedInstance)} onInstallContent={(item, category) => installContent(selectedInstance, item, category)} onChanged={(changed) => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} />
         ) : page === "logs" ? (
           <LogsPage entries={logs} running={gameRunning || download.state === "launching"} onClear={() => setLogs([])} />
         ) : page === "autotune" ? (
           <AutoTuneFlow />
+        ) : page === "screenshots" ? (
+          <ScreenshotShelf instances={instances} SelectControl={Select} onMessage={showToolMessage} />
         ) : page === "utilities" ? (
           <UtilitiesPage instances={instances} SelectControl={Select} onOpenAutoTune={() => setPage("autotune")} onMessage={showToolMessage} />
         ) : page === "social" ? (

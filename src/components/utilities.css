@@ -162,3 +162,10 @@
 @media (prefers-reduced-motion: reduce) { .utilities-page * { transition: none !important; } }
 @media (max-width: 860px) { .utilities-grid, .pack-tab-grid, .pack-flow-choices.two, .pack-flow-choices.group { grid-template-columns: minmax(0, 1fr); } .utility-card-main { aspect-ratio: auto; } .utility-setting-stack, .pack-sharing-action-row, .pack-sharing-split, .pack-group-code-row { grid-template-columns: 1fr; } .pack-sharing-action-row > .utility-apply, .create-editor-code { width: 100%; }.utility-targets { grid-template-columns: 1fr; } .utility-confirmation { grid-template-columns: 42px 1fr; }.utility-confirmation button { grid-row: 2; }.utility-confirmation button:nth-last-child(2) { grid-column: 1; }.utility-confirmation button:last-child { grid-column: 2; } }
 @media (max-width: 620px) { .utilities-page { padding: 12px; }.utility-detail-heading { grid-template-columns: minmax(0, 1fr) 40px; padding: 15px; }.utility-detail-title > span { display: none; }.utility-detail-title h1 { font-size: 19px; } }
+
+/* Keep sync directions visible; explanations live in accessible info tips. */
+.utility-detail-title > div { display: flex; align-items: center; gap: 10px; }
+.utility-rule-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.utility-copy-destination { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.utility-copy-destination b { color: var(--text); font-weight: 650; }
+.utility-config-panel > footer .info-tip-trigger { width: 28px; min-height: 28px; height: 28px; padding: 0; align-self: center; margin-right: auto; border-radius: 50%; }

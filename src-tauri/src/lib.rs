@@ -1,3 +1,4 @@
+mod screenshots;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex, OnceLock,
@@ -4793,11 +4794,14 @@ fn repair_minecraft_installation(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(LauncherState::default())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+    // Development binaries must never download or install production updates.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    builder
         .setup(|app| {
             use tauri::{
                 menu::{Menu, MenuItem},
@@ -4827,6 +4831,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
+            screenshots::list_screenshots,
+            screenshots::screenshot_action,
             get_backend_status,
             cache::get_client_cache_status,
             cache::choose_client_cache_directory,
