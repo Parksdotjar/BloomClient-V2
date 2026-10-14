@@ -20,6 +20,7 @@
   border-radius: 18px; background: var(--panel); color: var(--accent); box-shadow: 0 16px 24px -19px #000;
 }
 .locker-state-mark img { width: 43px; height: 43px; object-fit: contain; opacity: .72; }
+.locker-state-mark.loading { width: 40px; height: 40px; border: 0; border-radius: 0; background: transparent; color: #fff; box-shadow: none; }
 .locker-state-mark.loading svg { animation: locker-soft-pulse 1.4s ease-in-out infinite; }
 .locker-state h2 { margin: 0; color: var(--text); font-size: 20px; letter-spacing: -.02em; }
 .locker-state p { margin: 7px 0 0; color: var(--muted); font-size: 12px; }

@@ -505,3 +505,30 @@ Use the next ID and record the same fields every time:
 - **Fix:** The frameless window now uses a bounded empty-space drag handle that does not cover right-side page actions. Social rejects stale loads across mutations, uses a functional selection fallback, updates pins optimistically, and serializes native vault snapshot, send, and pin writes.
 - **Verification:** Click every edge of the header pin, pinned-drawer X, and members-drawer X. Rapidly switch among several DMs while multiple four-second refreshes finish, then pin and unpin messages in direct and group conversations. Selection, drawer visibility, and final pin state must remain exactly where the user left them.
 - **Do not repeat:** Never use a full-width transparent drag overlay above page content, capture current selection in a long-lived polling closure, apply an older async result over a newer mutation, or permit concurrent load-modify-save cycles against the encrypted vault.
+
+## Toggle state hidden by custom-background glass
+
+- **Status:** Monitoring
+- **Cause:** The shared glass selector overrode both on and off toggle track fills with the same translucent black.
+- **Fix:** Exclude `.toggle` from that selector, preserving solid accent on tracks, neutral off tracks, and existing thumb movement across Image and Organic backgrounds.
+- **Regression check:** Inspect on/off settings and instance-content switches with background control darkness at 0 and 100 and frost at 0 and 40.
+
+## First-open Add Mods catalog appears blank
+
+- **Status:** Monitoring
+- **Cause:** A bottom scroll event during the empty loading phase reduced `renderedItemCount` from ten to zero. Catalog results then rendered an empty slice until reopening reset the count.
+- **Fix:** Ignore progressive-reveal scroll events while loading and keep the visible-row limit monotonic until the existing navigation reset.
+- **Regression check:** Open Add Mods with an empty cache and a scrolled installed list; delayed results must render the first ten rows without reopening. Further scrolling must reveal additional rows.
+
+## Primary actions dimmed by background glass
+
+- **Status:** Monitoring
+- **Cause:** A shared background override mixed primary accent fills with black and the element-opacity setting, making enabled actions look disabled.
+- **Fix:** Removed the entire accent-glass override instead of adding individual button exceptions; preserved intentional disabled and pending opacity.
+- **Regression check:** Compare AutoTune, catalog install, account and update actions with Image/Organic on and off, including zero element darkness. Enabled primary fills must remain solid accent.
+
+## Development client offers production updates
+
+- **Status:** Monitoring
+- **Cause:** Startup and manual updater checks ran in Vite development mode, and debug binaries registered the production updater plugin. Installing a release cannot update the running development checkout.
+- **Fix:** Skip real checks and installs in the development frontend and register the native updater only in release builds. The explicit dev-only mock update preview remains available.

@@ -26,7 +26,7 @@ sha2 = "0.10"
 mc-launcher-core = "0.1.1"
 keyring = { version = "3.6.3", features = ["windows-native"] }
 base64 = "0.22"
-arboard = { version = "3.6.1", default-features = false }
+arboard = { version = "3.6.1", default-features = false, features = ["image-data"] }
 rfd = "0.15"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 aes-gcm = "0.10"

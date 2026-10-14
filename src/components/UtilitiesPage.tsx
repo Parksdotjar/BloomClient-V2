@@ -20,6 +20,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import "./utilities.css";
+import { InfoTip } from "./InfoTip";
 
 export type UtilityInstance = {
   id: string;
@@ -123,7 +124,7 @@ export function UtilitiesPage({
   }, [instances]);
   const labels = useMemo(() => new Map(instanceChoices.map(instance => [instance.id, instance.label])), [instanceChoices]);
   const idsByLabel = useMemo(() => new Map(instanceChoices.map(instance => [instance.label, instance.id])), [instanceChoices]);
-  const instanceOptions = useMemo(() => ["Choose source", ...instanceChoices.map(instance => instance.label)], [instanceChoices]);
+  const instanceOptions = useMemo(() => ["Off — don’t copy", ...instanceChoices.map(instance => instance.label)], [instanceChoices]);
 
   const load = async () => {
     setLoading(true);
@@ -183,10 +184,11 @@ export function UtilitiesPage({
 
   const renderSource = (key: "options" | "servers" | "voicechat") => {
     const sourceId = settings[sourceKeys[key]] as string | null;
-    const value = sourceId ? labels.get(sourceId) ?? "Choose source" : "Choose source";
+    const value = sourceId ? labels.get(sourceId) ?? "Off — don’t copy" : "Off — don’t copy";
     return <div className="utility-setting-stack">
-      <label><span>Source instance</span></label>
+      <label><span>Copy from</span></label>
       <SelectControl value={value} options={instanceOptions} onChange={label => chooseSource(key, label)} />
+      {key !== "voicechat" && <div className="utility-copy-destination"><span>Copy to</span><b>All other instances</b></div>}
     </div>;
   };
 
@@ -207,7 +209,7 @@ export function UtilitiesPage({
         <article className="utility-card utility-product-card">
           <div className="utility-card-main">
             <span className="utility-card-icon"><RefreshCw size={48} strokeWidth={1.8} /></span>
-            <h3>Global File Sync</h3>
+            <h3>Sync Across Instances</h3>
           </div>
           <div className="utility-card-footer"><button onClick={() => { setActiveUtility("sync"); setConfirming(false); }}>Configure<ChevronRight size={15} /></button></div>
         </article>
@@ -217,39 +219,40 @@ export function UtilitiesPage({
 
   return <div className="utilities-page utility-detail-page">
     <header className="utility-detail-heading">
-      <div className="utility-detail-title"><span><RefreshCw size={25} /></span><div><h1>Global File Sync</h1></div></div>
+      <div className="utility-detail-title"><span><RefreshCw size={25} /></span><div><h1>Sync Across Instances</h1><InfoTip label="instance sync">Copy settings from one Minecraft instance to others, or let all instances use the same pack folders. Choose what to share, then select Sync now. Existing files are backed up before replacement.</InfoTip></div></div>
       <button className="utility-back" onClick={() => { setActiveUtility(null); setConfirming(false); }} aria-label="Back to Utilities" title="Back to Utilities"><ArrowLeft size={19} /></button>
     </header>
 
     <section className="utility-config-panel utility-detail-panel">
       <div className="utility-config-body">
-        <UtilityRule Icon={FileCog} title="Game Options">
+        <UtilityRule Icon={FileCog} title="Game Settings" help="Copy Minecraft settings, including controls, video, and sound, from the selected instance to every other instance. This replaces their game settings. Choose Off to leave them alone.">
           {renderSource("options")}
         </UtilityRule>
 
-        <UtilityRule Icon={Server} title="Server List">
+        <UtilityRule Icon={Server} title="Saved Servers" help="Copy the selected instance’s multiplayer server list to every other instance. This replaces each destination’s list rather than combining lists.">
           {renderSource("servers")}
         </UtilityRule>
 
-        <UtilityRule Icon={Mic} title="Voice Chat">
+        <UtilityRule Icon={Mic} title="Voice Chat Settings" help="Copy Simple Voice Chat client settings from the chosen instance to only the instances you select below. This does not install the voice chat mod.">
           {renderSource("voicechat")}
-          <div className="utility-targets"><div className="utility-targets-heading"><b>Destination instances</b></div>
+          <div className="utility-targets"><div className="utility-targets-heading"><b>Copy to selected instances</b></div>
             {instances.filter(instance => instance.id !== settings.voiceChatSource).map(instance => {
               const checked = settings.voiceChatTargets.includes(instance.id);
-              return <button key={instance.id} className={checked ? "selected" : ""} onClick={() => setSettings(current => ({ ...current, voiceChatTargets: checked ? current.voiceChatTargets.filter(id => id !== instance.id) : [...current.voiceChatTargets, instance.id] }))}><span>{checked && <Check size={14} strokeWidth={3} />}</span><div><b>{labels.get(instance.id) ?? instance.name}</b></div></button>;
+              return <button key={instance.id} className={checked ? "selected" : ""} aria-pressed={checked} onClick={() => setSettings(current => ({ ...current, voiceChatTargets: checked ? current.voiceChatTargets.filter(id => id !== instance.id) : [...current.voiceChatTargets, instance.id] }))}><span>{checked && <Check size={14} strokeWidth={3} />}</span><div><b>{labels.get(instance.id) ?? instance.name}</b></div></button>;
             })}
           </div>
         </UtilityRule>
 
-        <UtilityRule Icon={ImageIcon} title="Resource Packs">
+        <UtilityRule Icon={ImageIcon} title="Shared Resource Packs" help="Connect every instance to one resource-pack folder. Packs are available everywhere, but each instance still chooses which ones to enable. Changes to the shared files affect all connected instances.">
           <SharedFolderConfiguration checked={settings.shareResourcePacks} onChange={checked => setSettings(current => ({ ...current, shareResourcePacks: checked }))} onOpen={() => void invoke("open_global_sync_folder", { category: "resourcepacks" }).catch(error => onMessage(String(error), "error"))} />
         </UtilityRule>
 
-        <UtilityRule Icon={Sparkles} title="Shader Packs">
+        <UtilityRule Icon={Sparkles} title="Shared Shader Packs" help="Connect every instance to one shader-pack folder. Each instance still needs a compatible shader mod and chooses its own active shader. Changes to the shared files affect all connected instances.">
           <SharedFolderConfiguration checked={settings.shareShaderPacks} onChange={checked => setSettings(current => ({ ...current, shareShaderPacks: checked }))} onOpen={() => void invoke("open_global_sync_folder", { category: "shaderpacks" }).catch(error => onMessage(String(error), "error"))} />
         </UtilityRule>
       </div>
       <footer>
+        <InfoTip label="saving and syncing">Save setup remembers your choices without changing game files or the active sync rules. Sync now applies and activates these choices. Changed files are backed up first.</InfoTip>
         <button className="utility-save" disabled={saving || applying} onClick={() => void save()}><Save size={15} />{saving ? "Saving…" : "Save setup"}</button>
         <button className="utility-apply" disabled={saving || applying || !instances.length} onClick={() => setConfirming(true)}><RefreshCw size={15} />Sync now</button>
       </footer>
@@ -385,9 +388,9 @@ function ModpackSharingDetail({ instances, labels, idsByLabel, instanceOptions, 
   </div>;
 }
 
-function UtilityRule({ Icon, title, children }: { Icon: ComponentType<{ size?: number; strokeWidth?: number }>; title: string; children: ReactNode }) {
+function UtilityRule({ Icon, title, help, children }: { help?: string; Icon: ComponentType<{ size?: number; strokeWidth?: number }>; title: string; children: ReactNode }) {
   return <section className="utility-rule">
-    <header><span><Icon size={21} strokeWidth={1.9} /></span><div><h2>{title}</h2></div></header>
+    <header><span><Icon size={21} strokeWidth={1.9} /></span><div className="utility-rule-title"><h2>{title}</h2>{help && <InfoTip label={title}>{help}</InfoTip>}</div></header>
     <div className="utility-rule-body">{children}</div>
   </section>;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Check, ChevronLeft, ChevronRight, Feather, RotateCw } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Shirt, RotateCw } from "lucide-react";
 import { CapePreview, type CapeAnimation } from "./CapePreview";
 import { CapeDisplay } from "./CapeDisplay";
 import "./locker.css";
@@ -94,9 +94,8 @@ function CloakCollection({ profile, motion, onNotify }: { profile: Profile | nul
 
   return <>
       {loading ? <div className="locker-state" role="status">
-        <span className="locker-state-mark loading"><Feather size={27} /></span>
-        <h2>Opening your locker</h2>
-        <p>Loading the latest cloaks.</p>
+        <span className="locker-state-mark loading" aria-hidden="true"><Shirt size={36} strokeWidth={1.6} /></span>
+        <h2>Loading locker…</h2>
       </div> : items.length === 0 ? <div className="locker-state">
         <span className="locker-state-mark"><img src="/bloom-logo.png" alt="" /></span>
         <h2>{error ? "Locker unavailable" : "Cloaks coming soon"}</h2>

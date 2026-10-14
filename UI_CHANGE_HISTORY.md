@@ -564,3 +564,119 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 - **Copy verification and positive state:** Bloom now retries the native Windows clipboard write and reads the value back before the UI may claim success, preventing a green false-positive when the clipboard is busy or replaced. The confirmed code uses a brighter saturated green, while the complete code-and-link stack owns one continuous thin outline so both lower curves stay visible against black.
 - **Authorization border correction:** Removed competing borders from the code panel and browser button. One real border now belongs to the stationary outer stack, changes to the confirmed green as a unit, and uses a single internal divider, so opening Microsoft sign-in cannot carry a duplicate outline and every curved edge renders at the same thickness.
 - **Authorization border ownership correction:** The copied layout deliberately keeps two stationary 2px outlines: saturated green around the complete upper code section and neutral gray around the lower Microsoft section. The action button itself remains borderless, preventing focus or browser launch from moving an outline, while the heavier real borders keep all four curved corners equally visible.
+
+### Custom background controls and frost
+
+- Upload is always available and enables the background after saving. Browser-decodable images are normalized to WebP and resized to a maximum 4096-pixel edge, preserving native local storage.
+- Interface and element darkness now span 0–100%; neutral glass mixes with transparency. Sidebar and element frost independently span 0–40px, with a reset action and Ultra Performance override.
+
+### Background editor refinement
+- Replaced verbose rows and checkbox with a preview picker, labeled Enabled/Disabled action, compact sliders, and Interface/Sidebar disclosure groups.
+- Sidebar surfaces and navigation controls now have independent persisted darkness/frost values. Reset uses shared defaults.
+- Removed blanket button backdrop blur that obscured sidebar instance artwork under the play overlay.
+
+### Sidebar appearance and settings layout
+- Restored the dark Settings header and rounded navigation panel with symmetric insets.
+- Added persisted outline strength and text/icon color for navigation. Fill, frost and outline are independently adjustable, including transparent zero endpoints.
+- Verified native Bloom screenshots: sharp instance artwork, transparent buttons over maximum panel frost, and dark full-strength outlines with transparent centers.
+
+### Background controls: shared treatments
+- Account dock and dropdown now retain the same opaque dark surface, independently of sidebar customization. Removed navigation underlines.
+- Sidebar text color reuses the circular custom HSV/hex picker with Apply and Cancel.
+- Existing background artwork now dims on hover/focus and reveals the same scaling swap icon as instance artwork. Empty state is a labeled upload target; save continues through native local storage.
+- Consolidated superseded shared-darkness and charcoal-floor rules in DESIGN_RULES.md. Current groups use independent fills/frost, truly transparent zero values, and stable opaque overlapping account surfaces.
+
+### Sponsored rail removed
+- Removed the entire sponsored rail and placeholder ads. Main content now fills the workspace beside navigation; settings content stays centered in its column.
+- Removed rail-only responsive, theme, glass, scrollbar, and update-overlay offsets. Recommendations now describes client updates only.
+
+### Sponsored rail restored
+- Reversed the sponsored-rail removal at Parks’s request. Restored the recommendations-controlled rail, responsive widths, main-content sizing, and update-overlay offsets. Background and sidebar appearance refinements remain in place.
+
+### Sponsored title drag area
+- Added a dedicated drag handle above the sponsored rail; previously this empty strip fell outside the main title drag target. It supports native dragging and double-click maximize, follows the 330px/220px rail widths, and excludes window controls.
+
+### Continuous title drag and tab highlight correction
+- Replaced disconnected drag targets with one continuous 32px strip, reserving real space above main content so page actions remain clickable.
+- Removed per-button glass from instance content tabs. The shared track owns fill/frost; the moving indicator keeps its rounded silhouette across tab boundaries.
+
+### Invisible title drag strip
+- Extended the content surface tint into the reserved 32px title strip. It now uses the exact same theme fill or custom-background darkness as the content below, without a border, blur, or separate drag-box fill. The continuous drag target remains unchanged.
+
+### Instance search readability
+- Removed the search icon tile and its focus fill; enlarged the bare icon to 27px. Search text is now 17px with stronger weights, and the field uses a lighter charcoal fill while preserving custom-background opacity.
+
+### Play brightness and search contrast
+- Removed instance and Spotlight Play from the translucent accent glass override. Both now use the solid accent and dark text used by Add Mods.
+- Darkened the default search surface to #121719; preserved the existing #202629 custom-background fill and user opacity.
+
+### Search focus motion
+- Extended focus motion from 640ms to 1440ms and removed simultaneous width, radius, and shadow animation that forced layout/paint during the movement. Retained a gentle compositor transform and coordinated icon/color easing.
+- Entrance animation no longer retains transform ownership after finishing. Removed competing icon/placeholder transforms and lowered input text by 1px. Reduced-motion and Ultra Performance overrides remain active.
+
+- Search focus scale increased from 1.012 to 1.035 at Parks’s request for a more noticeable expansion; timing remains 1440ms.
+
+- Search focus timing adjusted to 1040ms; the 1.035 focus scale remains unchanged.
+
+### Library action brightness and settings panel
+- Removed New Instance and library Play from the dimmed accent glass rule, matching Add Mods and the other Play actions.
+- Added independent Settings panel fill at 96% by default, with a persisted slider and reset support. Existing sidebar preferences remain intact.
+
+- Settings title bar now uses opaque #050607, matching the sidebar control black instead of the lighter #090c0e tint.
+
+### Content empty-state icon
+- Replaced the large broken Bloom logo with a small, muted Lucide Inbox outline in instance-content empty states. Existing explanatory text and browse/folder actions remain.
+
+- Replaced the empty-content Inbox with PackageOpen. Drag-and-drop now uses FileDown (a document with a downward arrow), distinguishing file import from the empty-library state.
+
+### Live organic backgrounds
+- Added Aurora, Tide, Bloom, Dunes, and Mist under Background, with accent-aware preview tiles, selected indicators, and saved source/style. Selecting a style enables the background; switching back preserves uploaded artwork.
+- Procedural CSS artwork uses slow transform motion, existing background opacity and surface controls, and static rendering for reduced motion or performance settings. No downloads or remote assets are required.
+
+### Twelve live styles and segmented source switch
+- Added Petals, Ripple, Silk, Lagoon, Ribbons, Halo, and Contour, all accent-aware and using the existing motion/performance handling.
+- Centered Image/Live backgrounds in the shared instance-style segmented track with a sliding selection overlay and reduced-motion support.
+
+### Maximized right-edge strip
+- Removed the outer main pane’s 1500px cap so the sponsored rail reaches the window edge at wide resolutions without exposing the live/image background beside it.
+- Made the rail scrollbar track transparent so it blends with its containing dark surface. Scrolling and the thumb remain available.
+
+- Renamed the Background source tab from Live backgrounds to Organic.
+
+### Screenshot Shelf
+- Added Screenshots to the main and collapsed sidebar. All-instance gallery sorts newest first, filters by instance, and loads 24 cards at a time.
+- Added native bounded screenshot enumeration, resized previews, full-image clipboard copy, and Open Folder. PNG/JPEG/WebP supported; decoding is serialized and limited to 32 MB/32 megapixels. Unreadable previews and folder errors surface visibly.
+- Enabled arboard image-data support and updated its required lockfile dependencies.
+
+### Screenshot Shelf header and feedback
+- Centered and enlarged the title, removed the subtitle, and moved instance filtering, count, and refresh into the header. The gallery now follows directly below with an 18px gap.
+- Clipboard and folder actions reuse the green rising bottom notification; failures use its red variant. Removed inline action messages.
+
+### Toggle visibility and content notifications
+- Removed the Screenshot Shelf count from its header.
+- Excluded the shared toggle from background glass styling so every settings and content toggle keeps its distinct on/off track and thumb position for Image and Organic backgrounds.
+- Routed instance content import, deletion, settings-save feedback, and errors to the shared bottom tray; removed both inline message slots. Successive tool notifications reset their dismissal timer.
+
+- Screenshot Shelf now matches Locker’s layered header: a lighter rounded title platform over an attached darker control section containing the centered instance filter and reload button.
+
+### Simplified Locker loading state
+- Replaced the boxed accent feather with a bare white Shirt outline and the single label “Loading locker…”. Removed the secondary loading sentence; existing motion preferences still apply.
+
+### First-open mod catalog visibility
+- Prevented progressive scrolling from reducing the initial visible batch to zero while catalog results load. The first result batch now remains visible without leaving and reopening Add Mods; later scrolling still reveals more rows.
+
+### First-use sync guidance
+- Renamed the utility to Sync Across Instances, clarified Game Settings / Saved Servers, and exposed Copy from / Copy to directions. The Off choice explicitly disables copying.
+- Added custom info buttons for each sync category, the overall workflow, and Save versus Sync. Tooltips use an opaque portal above clipped panels, open on hover/focus/click, stay within the viewport, and dismiss with Escape or an outside click. No persistent explanatory subtext was added.
+
+### Global primary-action brightness
+- Removed the shared accent-glass override affecting AutoTune, catalog installs, account actions, updates, and benchmark controls, restoring their normal fills for Image and Organic backgrounds.
+- Made AutoTune primary actions and the Modrinth version-import button solid accent with dark text. Checked fill controls are also excluded from neutral glass styling. Disabled and pending states retain their visual feedback.
+
+### Instance settings cleanup
+- Combined name, memory, and Java profile into one aligned settings panel. Replaced the native memory track with the shared styled slider, preserving 512 MB steps.
+- Moved JVM arguments and a clearly labeled reset into an Advanced Java options disclosure; Custom opens it. Replaced profile description boxes with custom info tips. Group membership is a compact badge only for shared instances.
+- Save stays a solid accent action, prevents duplicate submissions, and reports through the existing bottom tray.
+
+### Development update isolation
+- Development frontend checks and real installs are disabled; debug Rust binaries do not register the native updater. Release builds continue using signed GitHub updates, and the dev-only mock preview remains available.

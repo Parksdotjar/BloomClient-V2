@@ -1,0 +1,4 @@
+.info-tip-trigger { display: inline-grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: help; }
+.info-tip-trigger:hover, .info-tip-trigger:focus-visible { color: var(--text); background: var(--control); }
+.info-tip-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.info-tip-bubble { position: fixed; z-index: 22000; width: max-content; max-width: min(320px, calc(100vw - 24px)); box-sizing: border-box; padding: 13px 15px; border: 1px solid var(--border); border-radius: 11px; background: #111619; color: #f2f5f1; box-shadow: 0 12px 32px #0008; font-size: 12px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
