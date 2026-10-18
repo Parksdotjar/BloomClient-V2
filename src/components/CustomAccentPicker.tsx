@@ -208,4 +208,3 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
     )}
   </>;
 }
-
