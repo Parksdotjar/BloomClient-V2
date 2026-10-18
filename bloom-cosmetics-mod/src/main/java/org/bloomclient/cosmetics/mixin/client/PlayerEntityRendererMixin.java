@@ -1,3 +1,4 @@
+//? if <26.1 {
 package org.bloomclient.cosmetics.mixin.client;
 
 import net.minecraft.client.render.entity.EntityRendererFactory;
@@ -25,3 +26,5 @@ public abstract class PlayerEntityRendererMixin {
         ((LivingEntityRendererAccessor) (Object) this).bloom$addFeature(new BloomBraceletFeatureRenderer(renderer));
     }
 }
+
+//?}

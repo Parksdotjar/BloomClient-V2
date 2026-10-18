@@ -1,14 +1,23 @@
 import { useEffect, useRef, useState, type ComponentType } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { Copy, FolderOpen, Image as ImageIcon, RefreshCw, X } from "lucide-react";
+import { invoke } from "../services/invoke";
+import { ArrowLeftRight, Check, Copy, FolderOpen, Image as ImageIcon, RefreshCw, X } from "lucide-react";
 import type { UtilityInstance } from "./UtilitiesPage";
 import "./utilities.css";
 import "./screenshot-shelf.css";
-type Shot = { instanceId: string; instanceName: string; name: string; modified: number };
+import { ScreenshotComparison } from "./ScreenshotComparison";
+import { cachedScreenshotShelf, listScreenshots, subscribeScreenshotShelf, screenshotImages, warmScreenshots, type ScreenshotShot as Shot } from "../services/screenshots";
 const action = (shot: Shot, action: string) => invoke<string>("screenshot_action", { instanceId: shot.instanceId, name: shot.name, action });
+const loadComparisonImage = (shot: Shot) => screenshotImages.get(shot, "preview");
+const shotKey = (shot: Shot) => JSON.stringify([shot.instanceId, shot.name]);
 function ScreenshotImage({ shot, preview = false }: { shot: Shot; preview?: boolean }) {
-  const [src, setSrc] = useState(""); const [error, setError] = useState("");
-  useEffect(() => { let live = true; setSrc(""); setError(""); action(shot, preview ? "preview" : "thumbnail").then(v => { if (live) setSrc(v); }).catch(e => { if (live) setError(String(e)); }); return () => { live = false; }; }, [shot.instanceId, shot.name, shot.modified, preview]);
+  const [src, setSrc] = useState(() => screenshotImages.peek(shot, preview ? "preview" : "thumbnail") || ""); const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    const kind = preview ? "preview" : "thumbnail";
+    setSrc(screenshotImages.peek(shot, kind) || ""); setError("");
+    screenshotImages.get(shot, kind, preview ? 100 : 60).then(value => { if (live) setSrc(value); }).catch(error => { if (live) setError(String(error)); });
+    return () => { live = false; };
+  }, [shot.instanceId, shot.name, shot.modified, shot.revision, preview]);
   return src ? <img src={src} alt={shot.name} /> : <span className="shelf-image-placeholder" title={error}>{error ? <><ImageIcon size={28} /><span>Preview unavailable</span></> : <RefreshCw className="spin" size={24} />}</span>;
 }
 function Preview({ shot, close }: { shot: Shot; close: () => void }) {
@@ -17,20 +26,51 @@ function Preview({ shot, close }: { shot: Shot; close: () => void }) {
   return <dialog ref={ref} className="shelf-preview" onClose={close} onClick={e => { if(e.target === e.currentTarget) close(); }}><header><strong>{shot.name}</strong><button onClick={close} aria-label="Close preview"><X size={20} /></button></header><ScreenshotImage shot={shot} preview /><p>{shot.instanceName}</p></dialog>;
 }
 export function ScreenshotShelf({ instances, SelectControl, onMessage }: { onMessage: (message: string, kind?: "notification" | "error") => void; instances: UtilityInstance[]; SelectControl: ComponentType<{value: string; options: string[]; onChange: (value: string) => void}> }) {
-  const [shots, setShots] = useState<Shot[]>([]); const [filter, setFilter] = useState(""); const [limit, setLimit] = useState(24);
-  const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [warnings, setWarnings] = useState<string[]>([]);
+  const [shots, setShots] = useState<Shot[]>(() => cachedScreenshotShelf()?.items || []); const [filter, setFilter] = useState(""); const [limit, setLimit] = useState(24);
+  const [loading, setLoading] = useState(!cachedScreenshotShelf()); const [error, setError] = useState(""); const [warnings, setWarnings] = useState<string[]>([]);
   const [preview, setPreview] = useState<Shot | null>(null); const [busy, setBusy] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [comparing, setComparing] = useState(false);
+  const selectedShots = selected.map(key => shots.find(shot => shotKey(shot) === key)).filter((shot): shot is Shot => !!shot);
   const request = useRef(0);
-  async function refresh() { const id = ++request.current; setLoading(true); setError(""); try { const data = await invoke<{items: Shot[]; warnings: string[]}>("list_screenshots"); if(id === request.current) {setShots(data.items);setWarnings(data.warnings);} } catch(e) { if(id === request.current) { setError(String(e)); onMessage(String(e), "error"); } } finally { if(id === request.current) setLoading(false); } }
+  const toggleShot = (shot: Shot) => {
+    const key = shotKey(shot);
+    setSelected(current => current.includes(key) ? current.filter(item => item !== key) : current.length < 2 ? [...current, key] : current);
+  };
+  useEffect(() => {
+    setSelected(current => current.filter(key => shots.some(shot => shotKey(shot) === key)));
+  }, [shots]);
+  async function refresh() { const id = ++request.current; setLoading(!cachedScreenshotShelf()); setError(""); try { const data = await listScreenshots(); if(id === request.current) {setShots(data.items);setWarnings(data.warnings);warmScreenshots(data.items);} } catch(e) { if(id === request.current) { setError(String(e)); onMessage(String(e), "error"); } } finally { if(id === request.current) setLoading(false); } }
   useEffect(() => { void refresh(); return () => { request.current++; }; }, []);
+  useEffect(() => subscribeScreenshotShelf(data => {
+    setShots(data.items); setWarnings(data.warnings);
+    setPreview(current => current ? data.items.find(shot => shotKey(shot) === shotKey(current)) || null : null);
+  }), []);
   const choices = instances.map(i => ({id: i.id, label: instances.filter(other => other.name === i.name).length > 1 ? `${i.name} · ${i.id}` : i.name}));
   const filtered = shots.filter(s => !filter || s.instanceId === filter);
+  useEffect(() => {
+    const visible = filtered.slice(0, limit);
+    screenshotImages.prefer(visible);
+    warmScreenshots(visible, 50);
+  }, [shots, filter, limit]);
   async function run(shot: Shot, operation: string) {setBusy(true);try {await action(shot, operation);onMessage(operation === "copy" ? "Image copied to clipboard." : "Screenshot folder opened.");}catch(e){onMessage(String(e), "error");}finally{setBusy(false);}}
+  async function exportComparison(render: () => Promise<string>) {
+    try {
+      const png = await render();
+      if (await invoke<boolean>("save_screenshot_comparison", { png })) onMessage("Comparison exported.");
+    } catch (error) { onMessage(String(error), "error"); }
+  }
   return <div className="utilities-page screenshot-shelf"><div className="shelf-heading-shell"><header className="utilities-heading shelf-heading"><h1>Screenshot Shelf</h1></header>
     <div className="shelf-toolbar"><SelectControl value={choices.find(c=>c.id===filter)?.label ?? "All instances"} options={["All instances", ...choices.map(c=>c.label)]} onChange={v=>{setFilter(choices.find(c=>c.label===v)?.id ?? "");setLimit(24);}} /><button onClick={()=>void refresh()} disabled={loading} aria-label="Refresh screenshots"><RefreshCw size={20} className={loading ? "spin" : ""} /></button></div></div>
+    <div className="shelf-comparison-toolbar">
+      <span>{selecting ? `${selectedShots.length}/2 selected` : ""}</span>
+      <div>{selecting ? <><button type="button" onClick={() => { setSelecting(false); setSelected([]); }}>Cancel</button><button type="button" className="shelf-compare-launch" disabled={selectedShots.length !== 2 || loading} onClick={() => setComparing(true)}><ArrowLeftRight size={16} />Compare ({selectedShots.length}/2)</button></> : <button type="button" disabled={loading || shots.length < 2} onClick={() => setSelecting(true)}><ArrowLeftRight size={16} />Compare screenshots</button>}</div>
+    </div>
     {warnings.length > 0 && <details><summary>Some folders could not be read</summary>{warnings.map((w,i)=><p key={i}>{w}</p>)}</details>}
-    {loading ? <div className="shelf-empty" role="status"><RefreshCw className="spin" />Loading screenshots…</div> : error ? <div className="shelf-empty"><ImageIcon size={40} /><h2>Screenshots unavailable</h2><p>Use refresh to try again.</p></div> : !filtered.length ? <div className="shelf-empty"><ImageIcon size={40} /><h2>No screenshots yet</h2><p>Take a screenshot in Minecraft with F2, then refresh.</p></div> : <div className="shelf-grid">{filtered.slice(0,limit).map(shot=><article key={`${shot.instanceId}/${shot.name}`}><button className="shelf-thumbnail" onClick={()=>setPreview(shot)} aria-label={`Preview ${shot.name} from ${shot.instanceName}`}><ScreenshotImage shot={shot} /></button><div className="shelf-caption"><strong title={shot.name}>{shot.name}</strong><span>{shot.instanceName}</span><small>{shot.modified ? new Date(shot.modified).toLocaleString() : "Unknown date"}</small></div><footer><button disabled={busy} onClick={()=>void run(shot,"copy")}><Copy size={15} />Copy image</button><button disabled={busy} onClick={()=>void run(shot,"folder")} aria-label={`Open screenshot folder for ${shot.instanceName}`} title="Open folder"><FolderOpen size={18} /></button></footer></article>)}</div>}
+    {loading ? <div className="shelf-empty" role="status"><RefreshCw className="spin" />Loading screenshots…</div> : error ? <div className="shelf-empty"><ImageIcon size={40} /><h2>Screenshots unavailable</h2><p>Use refresh to try again.</p></div> : !filtered.length ? <div className="shelf-empty"><ImageIcon size={40} /><h2>No screenshots yet</h2><p>Take a screenshot in Minecraft with F2, then refresh.</p></div> : <div className="shelf-grid">{filtered.slice(0,limit).map(shot=><article key={`${shot.instanceId}/${shot.name}`} className={selecting && selected.includes(shotKey(shot)) ? "comparison-selected" : ""}><button className="shelf-thumbnail" onPointerEnter={() => { void screenshotImages.get(shot, "preview", 150).catch(() => {}); }} onFocus={() => { void screenshotImages.get(shot, "preview", 150).catch(() => {}); }} onClick={()=>selecting ? toggleShot(shot) : setPreview(shot)} disabled={selecting && selectedShots.length === 2 && !selected.includes(shotKey(shot))} aria-pressed={selecting ? selected.includes(shotKey(shot)) : undefined} aria-label={`${selecting ? "Select" : "Preview"} ${shot.name} from ${shot.instanceName}${selecting ? " for comparison" : ""}`}><ScreenshotImage shot={shot} />{selecting && <span className={`shelf-selection-mark ${selected.includes(shotKey(shot)) ? "selected" : ""}`} aria-hidden="true">{selected.includes(shotKey(shot)) ? <><Check size={13} />{selected.indexOf(shotKey(shot)) === 0 ? "A" : "B"}</> : null}</span>}</button><div className="shelf-caption"><strong title={shot.name}>{shot.name}</strong><span>{shot.instanceName}</span><small>{shot.modified ? new Date(shot.modified).toLocaleString() : "Unknown date"}</small></div><footer><button disabled={busy} onClick={()=>void run(shot,"copy")}><Copy size={15} />Copy image</button><button disabled={busy} onClick={()=>void run(shot,"folder")} aria-label={`Open screenshot folder for ${shot.instanceName}`} title="Open folder"><FolderOpen size={18} /></button></footer></article>)}</div>}
     {!loading && filtered.length > limit && <button className="shelf-more" onClick={()=>setLimit(v=>v+24)}>Show more</button>}
+    {comparing && selectedShots.length === 2 && <ScreenshotComparison shots={[selectedShots[0], selectedShots[1]]} loadImage={loadComparisonImage} initialImages={(() => { const a = screenshotImages.peek(selectedShots[0], "preview"), b = screenshotImages.peek(selectedShots[1], "preview"); return a && b ? [a, b] : undefined; })()} close={() => setComparing(false)} exportImage={exportComparison} />}
     {preview && <Preview shot={preview} close={()=>setPreview(null)} />}
   </div>;
 }

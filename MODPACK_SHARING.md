@@ -18,6 +18,8 @@ Member clients compare a tiny revision marker every 15 minutes while the sharing
 
 Bloom does not upload mod JARs. The launcher hashes each enabled JAR with SHA-1 and resolves the complete set in one request through Modrinth's bulk version-file API. Managed Bloom Cosmetics files and disabled JARs are excluded. Every verified Modrinth file is published. Unresolved local JARs are reduced to safe filenames and carried separately so the recipient sees exactly what still needs to be found manually; they do not block sharing and are never uploaded.
 
+Sharing and installation use the same Fabric Loader resolver. A nonempty saved loader version takes priority. Older instances with a missing/blank version recover it from their own `logs/latest.log` startup identity when its Minecraft version matches; only the first 64 KiB is read, and log contents are never uploaded. If no matching startup identity exists, resolution uses the existing Fabric Meta latest-stable fallback. Sharing saves the resolved version through the existing instance configuration path, and successful loader installation remembers it too. A fresh configuration read preserves newer settings and does not replace an explicitly selected loader or a changed game/directory. Missing metadata produces a connection error rather than requiring a nonexistent loader-selection control.
+
 Version 1 manifests contain:
 
 - instance name;
@@ -43,6 +45,8 @@ Production stores shares in `shares.sqlite` beneath `BLOOM_SHARE_DATA_DIR`. The 
 
 Social delivery records live separately in `social.sqlite`. Creating invitations is transactional, friend-scoped, rate-limited, and idempotent per sender/request/recipient. A recipient must claim an invitation before Bloom reveals its internal capability code to the native client. Claims have a short lease, failed imports release the lease for retry, and only a completed local import marks the invitation accepted. Pending invitations may be declined, revoked, or expired without exposing the code through list responses.
 
+Opening Share restores and validates the saved Bloom session through the same native helper as Social, including legacy profile activation, before loading friends. Visiting Social first is never required. Authenticated Social requests refresh and retry once after a rejected access token; refreshes are serialized and reuse a session already renewed by another request. Sign-out uses the same credential lock, so an in-flight refresh cannot restore deleted credentials. Connectivity failures remain retryable loading errors rather than being presented as a signed-out account.
+
 The deployment installer explicitly restarts `bloom-api` after rebuilding the image; `enable --now` alone is not sufficient when an older service is already active. Repository shell scripts are locked to LF line endings so Windows packaging cannot corrupt Bash options such as `pipefail`.
 
 ## Import safety
@@ -55,6 +59,7 @@ Retrieved manifests are converted locally into a minimal `.mrpack` and passed to
 - lowercase code normalization;
 - unknown and expired codes;
 - Fabric-only enforcement;
+- missing/blank loader metadata, per-instance startup-log recovery, stable-loader fallback, and preserving explicit loader selections and newer instance settings;
 - empty, disabled-only, and Bloom-Cosmetics-only mod folders;
 - mixed Modrinth and non-Modrinth JARs;
 - filename-only shares when no JAR resolves through Modrinth;

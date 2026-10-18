@@ -1,0 +1,20 @@
+.screenshot-comparison { width: min(1200px, 94vw); max-height: 94vh; margin: auto; padding: 18px; overflow: auto; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 24px 70px var(--theme-shadow, #0009); }
+.screenshot-comparison::backdrop { background: var(--theme-overlay, #000d); }
+.screenshot-comparison header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.screenshot-comparison h2 { margin: 0; font-size: 20px; }
+.comparison-actions { display: flex; gap: 8px; }
+.screenshot-comparison button { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--control); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.screenshot-comparison button:disabled { opacity: .4; cursor: default; }
+.comparison-canvas { position: relative; width: 100%; height: min(61vh, 650px); min-height: 220px; overflow: hidden; border-radius: 10px; background: #030405; touch-action: none; cursor: col-resize; user-select: none; }
+.comparison-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.comparison-left { position: absolute; inset: 0; background: #030405; clip-path: inset(0 calc(100% - var(--comparison-position)) 0 0); pointer-events: none; }
+.comparison-divider { position: absolute; top: 0; bottom: 0; left: var(--comparison-position); width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 4px #000b; pointer-events: none; }
+.screenshot-comparison .comparison-handle { position: absolute; top: 0; bottom: 0; left: clamp(0px, calc(var(--comparison-position) - 20px), calc(100% - 40px)); width: 40px; padding: 0; border: 0; border-radius: 0; background: transparent; cursor: col-resize; }
+.comparison-handle span { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 2px solid #fff; border-radius: 9px; background: #15181de6; color: #fff; }
+.comparison-handle:focus-visible { outline: 0; }
+.comparison-handle:focus-visible span { outline: 2px solid var(--accent); outline-offset: 3px; }
+.comparison-side { position: absolute; top: 12px; padding: 5px 9px; border-radius: 6px; background: #111a; color: #fff; font-size: 12px; font-weight: 800; pointer-events: none; }
+.comparison-side-left { left: 12px; }
+.comparison-side-right { right: 12px; }
+.comparison-state { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); text-align: center; }
+@media (max-width: 700px) { .screenshot-comparison header { flex-wrap: wrap; } .comparison-canvas { height: 48vh; } }

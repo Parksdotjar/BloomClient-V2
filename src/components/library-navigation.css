@@ -1,0 +1,22 @@
+.quick-switcher { width: min(560px, calc(100vw - 48px)); max-height: 70vh; margin: 14vh auto auto; padding: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); color: var(--theme-ink, #f1f4f1); box-shadow: 0 24px 80px var(--theme-shadow, #0009); }
+.quick-switcher::backdrop { background: var(--theme-overlay, #0009); }
+.switcher-search { display: flex; align-items: center; gap: 12px; padding: 18px; border-bottom: 1px solid var(--border); }
+.switcher-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 17px; }
+.switcher-search button { background: transparent; border: 0; color: var(--muted); }
+.switcher-results { max-height: 44vh; overflow: auto; padding: 8px; }
+.switcher-results button { display: flex; align-items: center; gap: 13px; width: 100%; padding: 12px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: inherit; text-align: left; }
+.switcher-results button[aria-selected="true"] { background: var(--control); border-color: var(--border); }
+.switcher-results span { display: grid; gap: 3px; min-width: 0; }
+.switcher-results b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switcher-results small, .quick-switcher footer { color: var(--muted); font-size: 11px; }
+.quick-switcher footer { display: flex; gap: 20px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.switcher-empty { padding: 24px; text-align: center; color: var(--muted); }
+/* Flat instance library with the shared heading, top filter, and bottom search bar. */
+.instances-page { position: relative; display: flex; flex-direction: column; height: calc(100vh - 76px); min-height: 500px; padding: 12px 0 25px; }
+.instances-page .instances-page-heading { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; min-height: 92px; padding: 20px 24px; border: 1px solid var(--border); border-radius: 14px 14px 22px 22px; background: var(--panel); box-shadow: 0 10px 13px -8px var(--theme-shadow, #000f), 0 23px 30px -17px var(--theme-shadow, #000d); z-index: 4; }
+.instances-page .instances-page-heading h1 { font-size: 31px; letter-spacing: -.04em; text-align: center; }
+.instances-library-actions { display: flex; align-items: center; gap: 10px; justify-content: center; flex: 0 0 auto; margin-top: -18px; padding: 34px 22px 16px; background: color-mix(in srgb, var(--page) 78%, var(--panel)); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 14px 14px; }
+.instances-page > .instances-grid { flex: 1; min-height: 0; overflow: auto; align-content: start; padding: 22px 14px 60px; }
+.instances-library-empty { grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: var(--muted); }
+.instances-page .instances-search-dock { flex: 0 0 auto; width: min(900px, calc(100% - 56px)); margin: -35px auto 0; }
+@media (max-width: 1000px) { .instances-page .instances-search-dock { width: calc(100% - 24px); } }

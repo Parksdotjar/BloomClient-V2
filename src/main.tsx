@@ -1,3 +1,10 @@
+import { userError } from "./services/user-error";
+import { QuickSwitcher, type SwitchTarget } from "./components/QuickSwitcher";
+import { setScreenshotActivity, startScreenshotWarming } from "./services/screenshots";
+import { CustomAccentPicker, PRESET_ACCENTS } from "./components/CustomAccentPicker";
+import { AnimatedAccentEditor, useAnimatedAccent } from "./components/AnimatedAccentEditor";
+import { LIVE_BACKGROUNDS, OrganicBackground } from "./components/OrganicBackground";
+import { accentGradient, defaultAnimatedAccent, normalizeAnimatedAccent, type AnimatedAccent } from "./services/animated-accent";
 import { InfoTip } from "./components/InfoTip";
 import { ScreenshotShelf } from "./components/ScreenshotShelf";
 import {
@@ -8,13 +15,12 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type MouseEvent,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./services/invoke";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
@@ -79,6 +85,7 @@ import {
   X as CloseIcon,
 } from "lucide-react";
 import "./styles.css";
+import "./themes/light.css";
 import { monitorBackend } from "./services/backend";
 import { Locker } from "./components/Locker";
 import { UtilitiesPage } from "./components/UtilitiesPage";
@@ -87,27 +94,15 @@ import { ShareInstanceDialog } from "./components/ShareInstanceDialog";
 import { ModDetailDrawer, type ModDrawerSelection, type ModProjectDetails } from "./components/ModDetailDrawer";
 import { OnboardingFlow, OnboardingSplash } from "./components/OnboardingFlow";
 
-const LIVE_BACKGROUNDS = [
-  { id: "aurora", name: "Aurora" }, { id: "tide", name: "Tide" },
-  { id: "bloom", name: "Bloom" }, { id: "dunes", name: "Dunes" },
-  { id: "mist", name: "Mist" },
-  { id: "petals", name: "Petals" }, { id: "ripple", name: "Ripple" },
-  { id: "silk", name: "Silk" }, { id: "lagoon", name: "Lagoon" },
-  { id: "ribbons", name: "Ribbons" }, { id: "halo", name: "Halo" },
-  { id: "contour", name: "Contour" },
-] as const;
-function OrganicBackground({ style, preview = false }: { style: SettingsState["liveBackground"]; preview?: boolean }) {
-  return <span className={"organic-background " + (preview ? "organic-preview" : "organic-live")} data-style={style} aria-hidden="true"><i /><i /><i /></span>;
-}
-
-type Theme = "oled";
+type Theme = "oled" | "light";
+const themeLabel = { oled: "OLED Black", light: "Light" };
+const themeBackground = { oled: "#000000", light: "#f5f6f8" };
 type HomeLayout = "Dashboard" | "Spotlight";
 type AppPage = "screenshots" | "home" | "settings" | "autotune" | "utilities" | "social" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker";
 type WindowMenuName = "file" | "edit" | "view" | "help" | "compact";
 const PROFILE_ICON_STORAGE_KEY = "bloom-profile-icon";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "bloom-sidebar-collapsed";
 const ONBOARDING_COMPLETE_STORAGE_KEY = "bloom-onboarding-complete-v1";
-const PRESET_ACCENTS = ["#8ee365", "#5d9dff", "#a56bff", "#e957ad", "#f4a340", "#f05454"] as const;
 
 function HangerIcon({ size = 17 }: { size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -130,7 +125,7 @@ function WindowCloseIcon() {
   return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>;
 }
 
-type SettingsState = {
+type SettingsState = AnimatedAccent & {
   theme: Theme;
   accent: string;
   animations: boolean;
@@ -171,6 +166,7 @@ type SettingsState = {
   gameDirectory: string;
 };
 const defaults: SettingsState = {
+  ...defaultAnimatedAccent,
   theme: "oled",
   accent: "#a56bff",
   animations: true,
@@ -414,12 +410,14 @@ function Select({
   onChange,
   variant = "default",
   disabledOptions = [],
+  menuAnchorRef,
 }: {
   value: string;
   options: string[];
   onChange: (v: string) => void;
   variant?: "default" | "filter";
   disabledOptions?: string[];
+  menuAnchorRef?: { readonly current: HTMLDivElement | null };
 }) {
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 184, maxHeight: 330 });
@@ -430,18 +428,23 @@ function Select({
     const place = () => {
       const bounds = triggerRef.current?.getBoundingClientRect();
       if (!bounds) return;
-      const width = variant === "filter" ? 150 : Math.max(bounds.width - 10, 140);
-      const preferredLeft = variant === "filter" ? bounds.right - width : bounds.left + 5;
+      const width = variant !== "default" ? 150 : Math.max(bounds.width - 10, 140);
+      const preferredLeft = variant !== "default" ? bounds.right - width : bounds.left + 5;
       const contentHeight = menuRef.current?.scrollHeight || options.length * 38 + 10;
-      setMenuPosition(fitFloatingMenu(bounds, width, contentHeight, preferredLeft));
+      const anchorBounds = menuAnchorRef?.current?.getBoundingClientRect();
+      setMenuPosition(anchorBounds
+        ? { ...fitActionMenuBelow(anchorBounds, width, contentHeight, preferredLeft), maxHeight: Math.max(44, Math.min(330, window.innerHeight - anchorBounds.bottom - 8)) }
+        : fitFloatingMenu(bounds, width, contentHeight, preferredLeft));
     };
     const closeOutside = (event: PointerEvent) => { const target = event.target as Node; if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false); };
     place();
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
     document.addEventListener("pointerdown", closeOutside);
-    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", closeOutside); };
-  }, [open, options.length, variant]);
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeOnEscape); };
+  }, [open, options.length, variant, menuAnchorRef]);
   useEffect(() => {
     if (open && menuRef.current) revealDropdown(menuRef.current);
   }, [open, options.length]);
@@ -491,7 +494,7 @@ function ContentFilterMenu({
   onFilterChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 252, maxHeight: 330 });
+  const [position, setPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 276, maxHeight: 330 });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const filtered = sort !== "Name" || filter !== "All";
@@ -501,8 +504,8 @@ function ContentFilterMenu({
       const triggerBounds = triggerRef.current?.getBoundingClientRect();
       if (!triggerBounds) return;
       const headerBounds = triggerRef.current?.closest(".manager-heading")?.getBoundingClientRect() ?? triggerBounds;
-      const width = 252;
-      const contentHeight = menuRef.current?.scrollHeight || 114;
+      const width = 276;
+      const contentHeight = menuRef.current?.scrollHeight || 168;
       setPosition(fitActionMenuBelow(headerBounds, width, contentHeight, triggerBounds.right - width));
     };
     const closeOutside = (event: PointerEvent) => {
@@ -530,6 +533,7 @@ function ContentFilterMenu({
       className="content-filter-trigger"
       aria-label={`Filter content: sorted by ${sort}, showing ${filter.toLowerCase()}`}
       aria-expanded={open}
+      aria-haspopup="dialog"
       title="Sort and filter"
       onClick={() => setOpen(value => !value)}
     >
@@ -544,14 +548,14 @@ function ContentFilterMenu({
         style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }}
       >
         <div className="content-filter-section">
-          <span>Sort</span>
-          <div className="content-filter-options two">
+          <span>Sort by</span>
+          <div className="content-filter-options two" role="group" aria-label="Sort by">
             {["Name", "Size"].map(option => <button type="button" className={sort === option ? "chosen" : ""} aria-pressed={sort === option} key={option} onClick={() => onSortChange(option)}>{option}</button>)}
           </div>
         </div>
         <div className="content-filter-section">
           <span>Show</span>
-          <div className="content-filter-options three">
+          <div className="content-filter-options three" role="group" aria-label="Show content">
             {["All", "Enabled", "Disabled"].map(option => <button type="button" className={filter === option ? "chosen" : ""} aria-pressed={filter === option} key={option} onClick={() => onFilterChange(option)}>{option}</button>)}
           </div>
         </div>
@@ -607,212 +611,6 @@ function SettingRow({
       {children}
     </div>
   );
-}
-
-type HsvColor = { hue: number; saturation: number; value: number };
-
-function clampColorChannel(value: number, minimum = 0, maximum = 100) {
-  return Math.min(maximum, Math.max(minimum, value));
-}
-
-function hsvToHex({ hue, saturation, value }: HsvColor) {
-  const chroma = value / 100;
-  const saturationRatio = saturation / 100;
-  const channel = (segment: number) => {
-    const k = (segment + hue / 60) % 6;
-    return chroma - chroma * saturationRatio * Math.max(0, Math.min(k, 4 - k, 1));
-  };
-  return `#${[channel(5), channel(3), channel(1)]
-    .map(value => Math.round(value * 255).toString(16).padStart(2, "0"))
-    .join("")}`;
-}
-
-function hexToHsv(input: string): HsvColor {
-  const clean = input.trim().replace(/^#/, "");
-  const expanded = clean.length === 3 ? clean.split("").map(character => character.repeat(2)).join("") : clean;
-  if (!/^[0-9a-f]{6}$/i.test(expanded)) return { hue: 0, saturation: 0, value: 100 };
-  const [red, green, blue] = [0, 2, 4].map(offset => Number.parseInt(expanded.slice(offset, offset + 2), 16) / 255);
-  const maximum = Math.max(red, green, blue);
-  const minimum = Math.min(red, green, blue);
-  const delta = maximum - minimum;
-  let hue = 0;
-  if (delta) {
-    if (maximum === red) hue = 60 * (((green - blue) / delta) % 6);
-    else if (maximum === green) hue = 60 * ((blue - red) / delta + 2);
-    else hue = 60 * ((red - green) / delta + 4);
-  }
-  return {
-    hue: Math.round((hue + 360) % 360),
-    saturation: maximum ? Math.round((delta / maximum) * 100) : 0,
-    value: Math.round(maximum * 100),
-  };
-}
-
-function CustomAccentPicker({ value, onApply, label = "Custom accent color", description = "Build your own Bloom accent.", showValue = false }: { value: string; onApply: (color: string) => void; label?: string; description?: string; showValue?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [color, setColor] = useState<HsvColor>(() => hexToHsv(value));
-  const [hexDraft, setHexDraft] = useState(value.toUpperCase());
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const currentHex = hsvToHex(color);
-  const hexValid = /^#[0-9a-f]{6}$/i.test(hexDraft);
-  const customSelected = !PRESET_ACCENTS.some(preset => preset.toLowerCase() === value.toLowerCase());
-
-  const setHsv = (next: HsvColor) => {
-    const normalized = {
-      hue: ((next.hue % 360) + 360) % 360,
-      saturation: clampColorChannel(next.saturation),
-      value: clampColorChannel(next.value),
-    };
-    setColor(normalized);
-    setHexDraft(hsvToHex(normalized).toUpperCase());
-  };
-  const placePicker = () => {
-    const bounds = triggerRef.current?.getBoundingClientRect();
-    if (!bounds) return;
-    const width = pickerRef.current?.offsetWidth || 320;
-    const height = pickerRef.current?.offsetHeight || 390;
-    const viewportPadding = 12;
-    const preferredTop = bounds.bottom + 13;
-    const top = preferredTop + height <= window.innerHeight - viewportPadding
-      ? preferredTop
-      : Math.max(viewportPadding, bounds.top - height - 13);
-    setPosition({
-      top,
-      left: Math.max(viewportPadding, Math.min(bounds.right - width, window.innerWidth - width - viewportPadding)),
-    });
-  };
-  const openPicker = () => {
-    const next = hexToHsv(value);
-    setColor(next);
-    setHexDraft(hsvToHex(next).toUpperCase());
-    setPosition({ top: 0, left: 0 });
-    setOpen(true);
-  };
-  const closePicker = () => setOpen(false);
-  const updateFromSquare = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    setHsv({
-      ...color,
-      saturation: ((event.clientX - bounds.left) / bounds.width) * 100,
-      value: 100 - ((event.clientY - bounds.top) / bounds.height) * 100,
-    });
-  };
-  const changeHex = (next: string) => {
-    const prefixed = next.startsWith("#") ? next : `#${next}`;
-    setHexDraft(prefixed.toUpperCase());
-    if (/^#[0-9a-f]{6}$/i.test(prefixed)) setColor(hexToHsv(prefixed));
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const frame = window.requestAnimationFrame(placePicker);
-    const closeOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!triggerRef.current?.contains(target) && !pickerRef.current?.contains(target)) closePicker();
-    };
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") closePicker(); };
-    window.addEventListener("resize", placePicker);
-    window.addEventListener("scroll", placePicker, true);
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", placePicker);
-      window.removeEventListener("scroll", placePicker, true);
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  return <>
-    <button
-      ref={triggerRef}
-      type="button"
-      className={`accent-custom-trigger ${customSelected ? "picked" : ""}`}
-      aria-label={`Choose ${label.toLowerCase()}`}
-      style={showValue ? { background: value } : undefined}
-      aria-expanded={open}
-      title={label}
-      onClick={() => open ? closePicker() : openPicker()}
-    />
-    {open && createPortal(
-      <div
-        ref={pickerRef}
-        className="accent-picker-popover"
-        role="dialog"
-        aria-modal="false"
-        aria-label={label}
-        style={{
-          position: "fixed",
-          top: position.top,
-          left: position.left,
-          visibility: position.top ? "visible" : "hidden",
-          "--picker-hue": `hsl(${color.hue} 100% 50%)`,
-          "--picker-color": currentHex,
-          "--picker-saturation": `${color.saturation}%`,
-          "--picker-value": `${100 - color.value}%`,
-        } as CSSProperties}
-      >
-        <div className="accent-picker-heading">
-          <div><b>Custom color</b><span>{description}</span></div>
-          <span className="accent-picker-preview" aria-hidden="true" />
-        </div>
-        <div
-          className="accent-saturation-field"
-          role="slider"
-          tabIndex={0}
-          aria-label="Accent saturation and brightness"
-          aria-valuetext={`${Math.round(color.saturation)}% saturation, ${Math.round(color.value)}% brightness`}
-          onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); updateFromSquare(event); }}
-          onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) updateFromSquare(event); }}
-          onKeyDown={event => {
-            const step = event.shiftKey ? 10 : 2;
-            if (event.key === "ArrowLeft") setHsv({ ...color, saturation: color.saturation - step });
-            else if (event.key === "ArrowRight") setHsv({ ...color, saturation: color.saturation + step });
-            else if (event.key === "ArrowUp") setHsv({ ...color, value: color.value + step });
-            else if (event.key === "ArrowDown") setHsv({ ...color, value: color.value - step });
-            else return;
-            event.preventDefault();
-          }}
-        >
-          <i aria-hidden="true" />
-        </div>
-        <label className="accent-hue-control">
-          <span>Hue</span>
-          <input
-            type="range"
-            min="0"
-            max="359"
-            value={Math.round(color.hue)}
-            aria-label="Accent hue"
-            onChange={event => setHsv({ ...color, hue: Number(event.target.value) })}
-          />
-        </label>
-        <label className="accent-hex-control">
-          <span>Hex</span>
-          <input
-            value={hexDraft}
-            maxLength={7}
-            spellCheck={false}
-            className={hexValid ? "" : "invalid"}
-            aria-invalid={!hexValid}
-            aria-label="Custom accent hex color"
-            onChange={event => changeHex(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === "Enter" && hexValid) { onApply(currentHex); closePicker(); }
-            }}
-          />
-        </label>
-        <div className="accent-picker-actions">
-          <button type="button" className="accent-picker-cancel" onClick={closePicker}>Cancel</button>
-          <button type="button" className="accent-picker-apply" disabled={!hexValid} onClick={() => { onApply(currentHex); closePicker(); }}><Check size={15} />Apply color</button>
-        </div>
-      </div>,
-      document.body,
-    )}
-  </>;
 }
 
 type ManagedJavaRuntime = {
@@ -1281,10 +1079,13 @@ function SettingsPage({
                 description="Choose your preferred theme."
               >
                 <Select
-                  value="OLED Black"
-                  options={["OLED Black", "Coming soon"]}
-                  disabledOptions={["Coming soon"]}
-                  onChange={() => update("theme", "oled")}
+                  value={themeLabel[settings.theme]}
+                  options={["OLED Black", "Light"]}
+                  onChange={value => {
+                    const theme = value === "Light" ? "light" : "oled";
+                    const previousInk = settings.theme === "light" ? "#171b22" : defaults.sidebarTextColor;
+                    setSettings({ ...settings, theme, sidebarTextColor: settings.sidebarTextColor === previousInk ? theme === "light" ? "#171b22" : defaults.sidebarTextColor : settings.sidebarTextColor });
+                  }}
                 />
               </SettingRow>
               <SettingRow
@@ -1296,15 +1097,21 @@ function SettingsPage({
                     <button
                       type="button"
                       key={color}
-                      className={settings.accent.toLowerCase() === color ? "picked" : ""}
+                      className={settings.accentMode === "solid" && settings.accent.toLowerCase() === color ? "picked" : ""}
                       style={{ background: color }}
-                      onClick={() => update("accent", color)}
+                      onClick={() => setSettings({ ...settings, accent: color, accentMode: "solid" })}
                       aria-label={color}
                     />
                   ))}
-                  <CustomAccentPicker value={settings.accent} onApply={color => update("accent", color)} />
+                  <CustomAccentPicker selected={settings.accentMode === "solid" && !PRESET_ACCENTS.some(color => color === settings.accent.toLowerCase())} value={settings.accent} onApply={color => setSettings({ ...settings, accent: color, accentMode: "solid" })} />
+                  <button type="button" className={`gradient-accent-trigger ${settings.accentMode === "animated" ? "picked" : ""}`} style={{ background: accentGradient(settings.accentStops) }} aria-label="Animated gradient accent" aria-pressed={settings.accentMode === "animated"} title="Animated gradient accent" onClick={() => update("accentMode", "animated")} />
                 </div>
               </SettingRow>
+              {settings.accentMode === "animated" && <AnimatedAccentEditor
+                value={settings}
+                onChange={patch => setSettings({ ...settings, ...patch })}
+                slider={(value, change, label, min, max, unit) => <PercentSlider value={value} onChange={change} label={label} min={min} max={max} unit={unit} />}
+              />}
               <SettingRow
                 title="Show Animations"
                 description="Enable subtle animations throughout the client."
@@ -1350,7 +1157,7 @@ function SettingsPage({
                 <button aria-pressed={settings.backgroundMode === "live"} onClick={() => update("backgroundMode", "live")}>Organic</button>
               </div>
               {settings.backgroundMode === "live" ? <div className="live-background-section">
-                <p>Organic motion in your accent color.</p>
+                <p>Slow-moving artwork in your accent color.</p>
                 <div className="live-background-grid">{LIVE_BACKGROUNDS.map(preset => <button key={preset.id} aria-pressed={settings.liveBackground === preset.id} onClick={() => setSettings({ ...settings, liveBackground: preset.id, customBackground: true })}>
                   <OrganicBackground style={preset.id} preview /><span>{preset.name}{settings.liveBackground === preset.id && <Check size={14} />}</span>
                 </button>)}</div>
@@ -3012,6 +2819,8 @@ function DownloadArtwork({ source }: { source: string }) {
   const [image, setImage] = useState(source);
   useEffect(() => {
     let current = true;
+    setImage(source);
+    if (source.startsWith("data:")) return;
     void invoke<string | null>("get_cached_catalog_artwork", { sourceUrl: source })
       .then(cached => { if (current && cached) setImage(cached); })
       .catch(() => {});
@@ -3106,19 +2915,30 @@ function LoaderLogo({ loader }: { loader: string }) {
 }
 
 function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, onDelete, onPlay, onCreate }: { instances: InstanceDraft[]; busy: boolean; doubleClickToPlay: boolean; onOpen: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onShare: (instance: InstanceDraft) => void; onDelete: (instance: InstanceDraft) => Promise<void>; onPlay: (instance: InstanceDraft) => void; onCreate: () => void }) {
+  const actionsRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("All");
   const visible = instances.filter((instance) => instance.name.toLowerCase().includes(query.toLowerCase()) && (loader === "All" || instance.loader.toLowerCase() === loader.toLowerCase()));
   const loaders = ["All", ...Array.from(new Set(instances.map((instance) => instance.loader)))];
   return <div className="instances-page">
-    <header className="instances-page-heading"><div><span className="instances-eyebrow">YOUR LIBRARY</span><h1>All Instances</h1><p>Every world, pack, and client setup in one place.</p></div><button className="instances-create" onClick={onCreate}><CirclePlus size={17} />New instance</button></header>
-    <section className="instances-toolbar"><div className="instances-search"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your instances..." /></div><Select value={loader} options={loaders} onChange={setLoader} variant="filter" /></section>
-    {visible.length ? <div className="instances-grid">{visible.map((instance) => <InstanceLibraryCard key={instance.id} instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onShare={onShare} onDelete={onDelete} onPlay={onPlay} />)}</div> : <div className="instances-empty"><Cuboid size={30} /><h2>{instances.length ? "No matching instances" : "Your library is empty"}</h2><p>{instances.length ? "Try another name or loader filter." : "Create your first instance to start building your library."}</p>{!instances.length && <button onClick={onCreate}><CirclePlus size={16} />New instance</button>}</div>}
+    <header className="instances-page-heading"><h1>All Instances</h1></header>
+    <div ref={actionsRef} className="instances-library-actions"><button className="instances-create" onClick={onCreate}><CirclePlus size={17} />New instance</button><Select value={loader} options={loaders} onChange={setLoader} variant="filter" menuAnchorRef={actionsRef} /></div>
+    <div className="instances-grid">
+      {visible.map(instance => <InstanceLibraryCard key={instance.id} instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onShare={onShare} onDelete={onDelete} onPlay={onPlay} />)}
+      {!visible.length && <div className="instances-library-empty">{instances.length ? "No matching instances" : "No instances yet"}</div>}
+    </div>
+    <div className={`content-search instances-search-dock ${query ? "has-query" : ""}`} role="search" aria-label="Search instance library">
+      <span className="content-search-mark" aria-hidden="true"><Search size={27} /></span>
+      <input aria-label="Search your instances" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your instances…" />
+      {query && <button className="content-search-clear" aria-label="Clear instance search" onClick={() => setQuery("")}><CloseIcon size={17} /></button>}
+    </div>
   </div>;
 }
 
 function DownloadsPage({ download, instances, completed, missingMods, onClear, onCancel, onDismissMissing }: { download: DownloadViewState; instances: InstanceDraft[]; completed: CompletedDownload[]; missingMods: string[]; onClear: () => void; onCancel: () => void; onDismissMissing: () => void }) {
-  const activeInstance = instances.find(instance => instance.id === download.instanceId) || instances[0];
+  const activeInstance = instances.find(instance => instance.id === download.instanceId);
+  const gameTask = !download.taskKind || download.taskKind === "game";
+  const activeArtwork = download.taskIcon || (gameTask ? activeInstance?.icon : undefined);
   const failed = download.state === "error";
   const status = failed ? "Failed" : download.state === "launching" ? "Starting" : download.state === "running" ? "Ready" : download.state === "complete" ? "Completed" : "Downloading";
   return <div className="downloads-page">
@@ -3129,7 +2949,7 @@ function DownloadsPage({ download, instances, completed, missingMods, onClear, o
     </section>}
     <section className="download-section"><h2>Active</h2>
       {download.active || failed ? <div className={`download-task active-task ${failed ? "failed-task" : ""}`}>
-        <span className={`download-task-icon ${download.taskIcon ? "has-artwork" : ""}`}>{download.taskIcon ? <DownloadArtwork source={download.taskIcon} /> : download.taskKind === "mod" ? <Puzzle size={24} /> : download.taskKind === "resourcepack" ? <PackageOpen size={24} /> : <Cuboid size={24} />}</span>
+        <span className={`download-task-icon ${activeArtwork ? "has-artwork" : ""}`}>{activeArtwork ? <DownloadArtwork source={activeArtwork} /> : gameTask ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : download.taskKind === "mod" ? <Puzzle size={24} /> : download.taskKind === "resourcepack" ? <PackageOpen size={24} /> : <Cuboid size={24} />}</span>
         <div className="download-task-main"><div className="download-task-title"><div><b>{download.taskName || activeInstance?.name || "Minecraft"}</b><small>{download.taskKind && download.taskKind !== "game" ? `${download.taskVersion || (download.taskKind === "mod" ? "Fabric mod" : download.taskKind === "resourcepack" ? "Resource pack" : "Shader")} • Installing to ${activeInstance?.name || "instance"}` : activeInstance ? `${activeInstance.version} • ${activeInstance.loader}` : "Preparing instance"}</small></div><span>{Math.round(download.progress)}%</span></div><div className="download-linear"><i style={{ width: `${download.progress}%` }} /></div></div>
         <div className="download-metrics"><span>{failed ? "Task stopped" : download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Scanning files"}</span><small>{failed ? "See error" : download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : "Calculating speed"}</small></div>
         <div className="download-task-status"><b>{status}</b><small title={download.message}>{download.message || "Preparing files"}{download.message === "Loading assets" && <i className="loading-dots" />}</small></div>{!failed && <button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>}
@@ -3137,7 +2957,7 @@ function DownloadsPage({ download, instances, completed, missingMods, onClear, o
     </section>
     <section className="download-section completed-section"><h2>Completed</h2>
       {completed.length ? completed.map(item => <div className="download-task completed-task" key={item.id}>
-        <span className={`download-task-icon ${item.iconUrl ? "has-artwork" : ""}`}>{item.iconUrl ? <DownloadArtwork source={item.iconUrl} /> : item.kind === "mod" ? <Puzzle size={22} /> : item.kind === "resourcepack" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="download-task-main"><b>{item.name}</b><small>{item.kind && item.kind !== "game" ? `${item.version} • Installed to ${item.targetName}` : `${item.version} • ${item.loader || "Vanilla"}`}</small></div><span className="completed-time">Completed {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-Math.max(1, Math.round((Date.now() - item.completedAt) / 60000)), "minute")}</span><Check className="completed-check" size={20} />
+        <span className={`download-task-icon ${item.iconUrl ? "has-artwork" : ""}`}>{item.iconUrl ? <DownloadArtwork source={item.iconUrl} /> : (!item.kind || item.kind === "game") ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : item.kind === "mod" ? <Puzzle size={22} /> : item.kind === "resourcepack" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="download-task-main"><b>{item.name}</b><small>{item.kind && item.kind !== "game" ? `${item.version} • Installed to ${item.targetName}` : `${item.version} • ${item.loader || "Vanilla"}`}</small></div><span className="completed-time">Completed {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-Math.max(1, Math.round((Date.now() - item.completedAt) / 60000)), "minute")}</span><Check className="completed-check" size={20} />
       </div>) : <div className="downloads-empty compact"><Check size={18} /><div><b>No completed downloads yet</b><span>Finished installations will be saved here.</span></div></div>}
     </section>
     <footer className="downloads-footer"><span>Downloads are saved inside each instance directory.</span><button disabled={!completed.length} onClick={onClear}><Trash2 size={16} />Clear Completed</button></footer>
@@ -3355,7 +3175,9 @@ function App() {
         };
         localStorage.setItem(customBackgroundDefaultsMigrationKey, "complete");
       }
-      loaded = { ...loaded, theme: "oled" };
+      loaded = { ...loaded, ...normalizeAnimatedAccent(loaded), theme: loaded.theme === "light" ? "light" : "oled" };
+      delete (loaded as SettingsState & { finish?: unknown }).finish;
+      if (loaded.theme === "light" && loaded.sidebarTextColor === defaults.sidebarTextColor) loaded.sidebarTextColor = "#171b22";
       localStorage.setItem("bloom-settings", JSON.stringify(loaded));
       return loaded;
     } catch {
@@ -3395,22 +3217,48 @@ function App() {
     }, 500);
     return () => window.clearTimeout(timer);
   }, []);
+  useEffect(startScreenshotWarming, []);
+  useEffect(() => {
+    let disposed = false;
+    let receivedEvent = false;
+    let unlisten: (() => void) | undefined;
+    void listen<boolean>("minecraft-process-state", event => {
+      receivedEvent = true;
+      if (!disposed) setGameRunning(event.payload);
+    }).then(stop => {
+      if (disposed) { stop(); return; }
+      unlisten = stop;
+      void invoke<boolean>("get_minecraft_process_running").then(running => {
+        if (!disposed && !receivedEvent) setGameRunning(running);
+      });
+    });
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+  useEffect(() => { setScreenshotActivity(download.active || gameRunning); }, [download.active, gameRunning]);
+  useEffect(() => {
+    const nativeWindow = getCurrentWindow();
+    void Promise.allSettled([
+      nativeWindow.setTheme(settings.theme === "light" ? "light" : "dark"),
+      nativeWindow.setBackgroundColor(themeBackground[settings.theme]),
+    ]);
+  }, [settings.theme]);
+  useAnimatedAccent({ ...settings, animations: settings.animations && !download.active && !gameRunning });
   useEffect(() => {
     localStorage.setItem("bloom-settings", JSON.stringify(settings));
-    document.documentElement.style.setProperty("--accent", settings.accent);
     document.documentElement.dataset.theme = settings.theme;
-    document.documentElement.dataset.animations = settings.animations && !settings.ultraPerformance ? "on" : "off";
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeBackground[settings.theme]);
+    document.documentElement.dataset.animations = settings.animations && !settings.ultraPerformance && !download.active && !gameRunning ? "on" : "off";
     document.documentElement.dataset.performance = settings.ultraPerformance ? "ultra" : "normal";
     const buttonPressDuration = Math.max(0, Math.min(1500, settings.buttonPressDuration));
     document.documentElement.dataset.buttonPressDuration = String(buttonPressDuration);
-  }, [settings]);
+  }, [settings, download.active, gameRunning]);
   useEffect(() => {
     const activePresses = new WeakMap<HTMLElement, Animation>();
     const press = (event: PointerEvent) => {
       if (event.button !== 0 || document.documentElement.dataset.animations !== "on" || document.documentElement.dataset.performance === "ultra") return;
       const target = event.target instanceof Element ? event.target.closest<HTMLElement>("button, .instance-library-card") : null;
       if (!target || (target instanceof HTMLButtonElement && target.disabled)) return;
-      if (target.closest(".accent-picks") || target.closest(".window-menu") || target.classList.contains("background-image-picker") || target.classList.contains("instance-icon-picker") || target.classList.contains("profile-settings-avatar") || target.classList.contains("window-control")) return;
+      if (target.closest(".comparison-canvas") || target.closest(".animated-accent-editor") || target.closest(".accent-picks") || target.closest(".window-menu") || target.classList.contains("background-image-picker") || target.classList.contains("instance-icon-picker") || target.classList.contains("profile-settings-avatar") || target.classList.contains("window-control")) return;
       const duration = Number(document.documentElement.dataset.buttonPressDuration || 0);
       activePresses.get(target)?.cancel();
       activePresses.delete(target);
@@ -3679,7 +3527,7 @@ function App() {
           active: next.state === "installing" || next.state === "launching" || next.state === "running" || next.state === "complete",
           progress: next.progress,
           state: next.state,
-          message: next.message,
+          message: userError(next.message),
           instanceId: next.instanceId,
           downloadedBytes: next.downloadedBytes,
           totalBytes: next.totalBytes,
@@ -3690,21 +3538,18 @@ function App() {
           taskIcon: current.instanceId === next.instanceId ? current.taskIcon : undefined,
         }));
         if (next.state === "error") {
-          setGameRunning(false);
           setToastKind("error");
-          setToast(next.message);
+          setToast(userError(next.message));
           setLogs(current => [...current, { id: `${Date.now()}-launch-error`, instanceId: next.instanceId || "launcher", instanceName: instances.find(item => item.id === next.instanceId)?.name || next.instanceId || "Launcher", stream: "launcher", level: "error" as const, message: next.message, timestamp: Date.now() }].slice(-600));
           window.setTimeout(() => setToast(""), 5000);
         }
         if (next.state === "running") {
-          setGameRunning(true);
           if (settings.closeAfterLaunch) void invoke("exit_application");
         }
         if (next.state === "complete") {
           void invoke<InstanceDraft[]>("list_instances").then(setInstances);
         }
         if (next.state === "idle") {
-          setGameRunning(false);
           window.setTimeout(
             () =>
               setDownload({
@@ -3732,6 +3577,10 @@ function App() {
     }).then(value => { unlisten = value; });
     return () => unlisten?.();
   }, []);
+  useEffect(() => {
+    if (!download.instanceId || instances.some(instance => instance.id === download.instanceId)) return;
+    void invoke<InstanceDraft[]>("list_instances").then(setInstances).catch(() => {});
+  }, [download.instanceId]);
   useEffect(() => { localStorage.setItem("bloom-completed-downloads", JSON.stringify(completedDownloads.slice(0, 5))); }, [completedDownloads]);
   useEffect(() => { localStorage.setItem("bloom-shared-pack-missing-mods", JSON.stringify(sharedPackMissingMods)); }, [sharedPackMissingMods]);
   useEffect(() => {
@@ -3788,7 +3637,7 @@ function App() {
     lastCompletedTask.current = completionKey;
     const completedItem: CompletedDownload = download.taskKind && download.taskKind !== "game"
       ? { id: `${instance.id}-${Date.now()}`, name: download.taskName || "Content", version: download.taskVersion || (download.taskKind === "mod" ? "Fabric" : download.taskKind === "resourcepack" ? "Resource pack" : "Shader"), targetName: instance.name, kind: download.taskKind, iconUrl: download.taskIcon, completedAt: Date.now() }
-      : { id: `${instance.id}-${Date.now()}`, name: instance.name, version: instance.version, loader: instance.loader, kind: "game", completedAt: Date.now() };
+      : { id: `${instance.id}-${Date.now()}`, name: instance.name, version: instance.version, loader: instance.loader, kind: "game", iconUrl: instance.icon || undefined, completedAt: Date.now() };
     setCompletedDownloads(current => [completedItem, ...current.filter(item => item.name !== completedItem.name || item.targetName !== completedItem.targetName)].slice(0, 5));
   }, [download.state, download.instanceId, download.taskKind, download.taskName, download.taskVersion, download.taskIcon, instances]);
   useEffect(() => {
@@ -3870,7 +3719,7 @@ function App() {
     void launch(instance);
   };
   const installContent = async (instance: InstanceDraft, item: CatalogItem, category: Exclude<InstanceTab, "settings">) => {
-    if (gameRunning) throw new Error("Close Minecraft before installing new instance content.");
+    if (gameRunning && category === "mods") throw new Error("Close Minecraft before installing mods.");
     const taskKind: DownloadTaskKind = category === "mods" ? "mod" : category === "resourcepacks" ? "resourcepack" : "shaderpack";
     const taskIcon = item.iconSourceUrl || (item.iconUrl?.startsWith("https://") ? item.iconUrl : undefined);
     if (!download.active) setDownload({ active: true, progress: 1, state: "installing", message: `Queueing ${item.title}`, instanceId: instance.id, taskName: item.title, taskVersion: item.versionNumber, taskKind, taskIcon: taskIcon || undefined });
@@ -3936,7 +3785,7 @@ function App() {
   const showToolMessage = (message: string, kind: "notification" | "error" = "notification") => {
     window.clearTimeout(toolToastTimer.current);
     setToastKind(kind);
-    setToast(message);
+    setToast(userError(message));
     toolToastTimer.current = window.setTimeout(() => setToast(""), 4000);
   };
   const importModpack = async () => {
@@ -3964,6 +3813,11 @@ function App() {
     try { await invoke("repair_minecraft_installation", { instanceId: mostRecentInstance.id }); }
     catch (error) { setDownload({ active: false, progress: 0, state: "idle", message: "" }); showToolMessage(String(error), "error"); }
   };
+  const switchTargets: SwitchTarget[] = [
+    ...instances.map(instance => ({ id: `instance:${instance.id}`, label: instance.name, detail: `${instance.version} · ${instance.loader}`, kind: "instance" as const, run: () => openInstancePage(instance) })),
+    ...([ ["Home", "home"], ["Instances", "instances"], ["Locker", "locker"], ["Social", "social"], ["Screenshots", "screenshots"], ["Utilities", "utilities"], ["Downloads", "downloads"], ["Logs", "logs"], ["New instance", "new-instance"] ] as const).map(([label, destination]) => ({ id: `page:${destination}`, label, detail: "Page", kind: "page" as const, run: () => setPage(destination) })),
+    ...["General", "Appearance", "Background", "Performance", "Cache", "Minecraft", "Cosmetics", "Launcher", "Privacy", "Updates", "My Profile", "Advanced"].map(label => ({ id: `setting:${label}`, label, detail: "Settings", keywords: ({ Appearance: "theme accent color animations", Background: "image wallpaper organic opacity", Performance: "memory ram java arguments", Minecraft: "version loader", "My Profile": "account login avatar", Cache: "storage disk" } as Record<string, string>)[label], kind: "setting" as const, run: () => openSettings(label) })),
+  ];
   const liveBackgroundActive = settings.backgroundMode === "live";
   const customBackgroundActive = settings.customBackground && (liveBackgroundActive || Boolean(customBackgroundImage));
   const customSurfaceDarkness = Math.max(0, Math.min(100, settings.sidebarOpacity));
@@ -3972,7 +3826,7 @@ function App() {
     "--custom-background-image": !liveBackgroundActive && customBackgroundImage ? `url(${customBackgroundImage})` : "none",
     "--custom-background-opacity": String(Math.max(0, Math.min(100, settings.backgroundOpacity)) / 100),
     "--custom-sidebar-outline": `${Math.max(0, Math.min(100, settings.sidebarOutline))}%`,
-    "--custom-sidebar-text": /^#[0-9a-f]{6}$/i.test(settings.sidebarTextColor) ? settings.sidebarTextColor : defaults.sidebarTextColor,
+    "--custom-sidebar-text": /^#[0-9a-f]{6}$/i.test(settings.sidebarTextColor) ? settings.sidebarTextColor : settings.theme === "light" ? "#171b22" : defaults.sidebarTextColor,
     "--custom-settings-panel-opacity": `${Math.max(0, Math.min(100, settings.settingsPanelDarkness))}%`,
     "--custom-sidebar-surface-opacity": `${Math.max(0, Math.min(100, settings.sidebarSurfaceDarkness))}%`,
     "--custom-sidebar-control-opacity": `${Math.max(0, Math.min(100, settings.sidebarElementDarkness))}%`,
@@ -4004,6 +3858,7 @@ function App() {
       onKeyDown={handleKeyDown}
       tabIndex={-1}
     >
+      <QuickSwitcher targets={switchTargets} />
       {customBackgroundActive && liveBackgroundActive && <OrganicBackground style={settings.liveBackground} />}
       <div
         className="window-drag-region"

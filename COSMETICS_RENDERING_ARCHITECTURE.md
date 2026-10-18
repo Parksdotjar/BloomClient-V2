@@ -13,6 +13,16 @@ Bloom cosmetics were split across four responsibilities:
 
 Locker is active. Shop, ownership, and paid catalog behavior remain removed. `bloom-cosmetics-mod/` is active source: its remapped JAR is embedded in Bloom and reconciled into supported Fabric 1.21.11 instances without deleting unknown user files.
 
+## Stonecutter version builds
+
+The shared renderer now builds for Fabric **1.21.11, 26.1, 26.2, and 26.3** using Stonecutter 0.9.8. The controller is `bloom-cosmetics-mod/stonecutter.gradle`; its `chiseledBuild` task builds every target. `settings.gradle` defines the exact supported releases. Patch releases and snapshots are not implicitly supported.
+
+The 1.21.11 node uses Yarn mappings, remapping Loom, and Java 21. The 26.x nodes use unobfuscated Minecraft, non-remapping Loom, and a Java 25 toolchain (automatically resolved through Foojay when missing). Stonecutter replacements bridge the Minecraft names in the shared cape/presence/texture pipeline. Conditional comments omit dormant hat/wing/bracelet code on 26.x; those features remain inactive on every target.
+
+`npm run build:cosmetics` builds and bundles four distinct JARs with SHA-256 sidecars. Native compilation verifies each artifact, and enabled production builds require all four. The launcher selects the exact instance-version bundle and retains the existing visibility/Fabric, loader, opt-out, duplicate, and modified-file protections. Ownership records now store the managed filename; records without that field default to the old 1.21.11 filename. When an instance changes versions, only a checksum-verified owned file is migrated. Interrupted filename migration can resume. Unknown files remain repair errors. Normal launch still hands the scoped cosmetics session to the game through its environment.
+
+Compilation and installer lifecycle tests do not establish in-game visual acceptance. Test static/animated cloaks, separate elytra, multiplayer badge presence, account changes, and offline fallback in each target before release.
+
 ## Runtime identity, batching, and performance
 
 `BloomCosmeticsRuntime` uses `https://api.north.bloomclient.org/minecraft` as its historical API base and identifies itself as Bloom Cosmetics 1.5.0. It has one low-priority refresh worker, polls every two seconds, remembers players observed in the last 20 seconds, and caps a batch at 100 UUIDs.
@@ -104,3 +114,9 @@ Keeping previews separate makes the Shop lightweight and lets the manager contro
 - `CUSTOM_HALO_HAT_GUIDE.md`: hat model example.
 
 Do not bypass these scripts with a raw release Cargo build. The build contract prevents a distributable client from exposing Locker while silently omitting its renderer. Production publication still requires the live acceptance checks recorded in `CAPES_IMPLEMENTATION_STATUS.md`.
+
+## Name-tag badge spacing and artwork (2026-10-17)
+
+The client-only name-tag mixin adds exactly one logo run to vanilla's existing label. It does not render a second text/background layer or send a modified name to the server. A dedicated font supplies the current Bloom flower and a fixed three-unit spacer, keeping name/rank formatting independent. The badge disables bold, italic, decorations, obfuscation, and shadow. Existing Bloom markers prevent duplicate insertion. Badge lookup observes the player's stable UUID independently of cape rendering; server-authorized presence and badge visibility still determine who receives a badge. Players without the client/mod render ordinary names.
+
+The transparent font asset is a high-quality 128×128 reduction of `public/bloom-logo.png`, displayed at nine logical pixels. Do not copy the 512×512 source straight into this font: Minecraft's 256×256 glyph atlas cannot accommodate it. Keep the full flower rather than substituting a pixel-art glyph. Stonecutter builds the same behavior for 1.21.11 and 26.1–26.3.

@@ -1,0 +1,18 @@
+.animated-accent-editor { padding: 18px 20px; border-top: 1px solid var(--line); }
+.animated-accent-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.animated-accent-heading b { font-size: 12px; font-weight: 800; }
+.animated-accent-heading small { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+.animated-accent-heading button, .accent-stop-remove { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--control); color: var(--text); font-size: 11px; font-weight: 750; }
+.animated-accent-heading button span { color: var(--muted); }
+.animated-accent-editor button:disabled { opacity: .35; cursor: not-allowed; }
+.accent-gradient-rail { position: relative; height: 30px; margin: 24px 12px 23px; border-radius: 9px; box-shadow: 0 0 0 2px var(--theme-shadow, #000); touch-action: none; }
+.accent-gradient-stop { position: absolute; top: 19px; width: 22px; height: 22px; margin-left: -11px; padding: 0; border: 3px solid var(--theme-edge, #17191d); border-radius: 3px; background: var(--stop-color); box-shadow: 0 0 0 1px var(--theme-shadow, #000), 0 3px 6px var(--theme-shadow, #0009); cursor: ew-resize; touch-action: none; z-index: 1; }
+.accent-gradient-stop.selected { border-color: var(--theme-edge, #fff); z-index: 2; }
+.accent-gradient-stop:focus-visible { outline: 2px solid var(--theme-edge, #fff); outline-offset: 3px; }
+.accent-stop-controls { display: flex; align-items: center; gap: 12px; }
+.accent-stop-hex { color: var(--text); font: 750 11px ui-monospace, monospace; }
+.accent-stop-controls label { display: flex; align-items: center; gap: 7px; margin-left: auto; font-size: 11px; color: var(--muted); }
+.accent-stop-controls input { width: 58px; height: 32px; padding: 0 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--control); color: var(--text); text-align: center; font: inherit; }
+.accent-motion-control { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: center; gap: 16px; margin-top: 19px; font-size: 11px; color: var(--muted); }
+.accent-motion-note { margin: 16px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+@media (max-width: 1000px) { .animated-accent-heading { align-items: flex-start; } .animated-accent-heading small { max-width: 230px; } .accent-motion-control { grid-template-columns: 95px minmax(0, 1fr); } }

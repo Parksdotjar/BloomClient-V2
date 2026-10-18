@@ -1,3 +1,4 @@
+//? if <26.1 {
 package org.bloomclient.cosmetics;
 
 import com.google.gson.JsonArray;
@@ -271,3 +272,5 @@ public final class BloomHatMesh {
     private record Vertex(float x, float y, float z, float u, float v) {}
     private record Quad(Vertex[] vertices, Vector3f normal, WingPart part, Vector3f animationPivot) {}
 }
+
+//?}

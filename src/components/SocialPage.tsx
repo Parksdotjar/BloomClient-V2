@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/invoke";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import QRCode from "qrcode";
 import { BrowserQRCodeReader } from "@zxing/browser";

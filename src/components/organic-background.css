@@ -1,0 +1,47 @@
+/* Identical, authored vector artwork at thumbnail and desktop sizes. */
+.organic-background {
+  display: block;
+  overflow: hidden;
+  background: #040609;
+  pointer-events: none;
+  isolation: isolate;
+}
+.organic-background svg { display: block; width: 100%; height: 100%; }
+.organic-stop-light { stop-color: color-mix(in srgb, var(--accent) 48%, #f5ede6); }
+.organic-stop-accent { stop-color: var(--accent); }
+.organic-stop-mid { stop-color: color-mix(in srgb, var(--accent) 38%, #141922); }
+.organic-stop-dark { stop-color: color-mix(in srgb, var(--accent) 8%, #06090e); }
+.organic-live { position: fixed; inset: 0; z-index: -1; opacity: var(--custom-background-opacity); }
+.organic-preview { position: relative; aspect-ratio: 16 / 9; }
+.organic-live .organic-motion, .organic-live .organic-motion-secondary {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: organic-flow 22s ease-in-out infinite alternate;
+}
+.organic-live .organic-motion-secondary { animation-name: organic-counterflow; animation-duration: 29s; }
+.organic-live .organic-breathe { animation: organic-breathe 10s ease-in-out infinite; }
+.organic-live[data-style="mist"] .organic-breathe { animation-duration: 13s; }
+.organic-live[data-style="halo"] .organic-breathe { animation-duration: 9s; }
+.organic-live .organic-contour-shape { animation: organic-contour-wave 12s ease-in-out infinite alternate; }
+/* Individual translate/scale compose with the artwork's SVG layout transforms. */
+@keyframes organic-flow {
+  from { translate: 0 0; scale: 1; }
+  to { translate: -3% 2%; scale: 1.09; }
+}
+@keyframes organic-counterflow {
+  from { translate: 0 0; scale: 1; }
+  to { translate: 3.5% -2%; scale: 1.07; }
+}
+@keyframes organic-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .64; }
+}
+@keyframes organic-contour-wave {
+  from { d: path("M-300-260C-20-370 100-80 340-160S650 120 300 260S100 100-180 230S-650-90-300-260Z"); }
+  to { d: path("M-320-200C-120-370 160-170 340-100S610 200 260 240S-50 170-230 160S-540-30-320-200Z"); }
+}
+:root[data-animations="off"] .organic-live *,
+:root[data-performance="ultra"] .organic-live * { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .organic-live * { animation: none; }
+}

@@ -3,7 +3,8 @@
   "id": "bloom_cosmetics",
   "version": "${version}",
   "name": "Bloom Cosmetics",
-  "description": "Displays free Bloom capes and a single integrated Bloom nametag badge. Client-side, for Fabric Minecraft 1.21.11.",
+  "icon": "assets/bloom_cosmetics/icon.png",
+  "description": "Displays free Bloom capes and a single integrated Bloom nametag badge. Client-side, for Fabric Minecraft ${minecraft}.",
   "authors": ["Bloom Client"],
   "contact": {
     "homepage": "https://bloomclient.org",
@@ -22,7 +23,7 @@
   ],
   "depends": {
     "fabricloader": ">=0.19.2",
-    "minecraft": "1.21.11",
-    "java": ">=21"
+    "minecraft": "${minecraft}",
+    "java": ">=${java}"
   }
 }

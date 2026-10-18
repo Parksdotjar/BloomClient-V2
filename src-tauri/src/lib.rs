@@ -1,3 +1,5 @@
+mod fabric_loader;
+mod launch_cache;
 mod screenshots;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -675,6 +677,8 @@ struct MinecraftSession {
     access_token: String,
     refresh_token: String,
     client_id: String,
+    #[serde(default)]
+    expires_at: u64,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -705,6 +709,8 @@ struct LauncherState {
     cancel_requested: Arc<AtomicBool>,
     content_install_queue: Arc<Mutex<std::collections::VecDeque<QueuedContentInstall>>>,
     content_install_active: Arc<AtomicBool>,
+    content_cancel_requested: Arc<AtomicBool>,
+    game_running: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -840,8 +846,31 @@ fn get_minecraft_launch_status() -> LaunchProgress {
 }
 
 #[tauri::command]
+fn get_minecraft_process_running(state: tauri::State<'_, LauncherState>) -> bool {
+    state.game_running.load(Ordering::SeqCst)
+}
+
+fn cancel_active_task(state: &LauncherState) {
+    if state.content_install_active.load(Ordering::SeqCst) {
+        state.content_cancel_requested.store(true, Ordering::SeqCst);
+    } else {
+        state.cancel_requested.store(true, Ordering::SeqCst);
+    }
+}
+
+#[tauri::command]
 fn cancel_minecraft_launch(state: tauri::State<'_, LauncherState>) {
-    state.cancel_requested.store(true, Ordering::SeqCst);
+    cancel_active_task(&state);
+}
+
+fn validate_content_install_activity(category: &str, active: bool, running: bool) -> Result<(), String> {
+    if running && category == "mods" {
+        return Err("Close Minecraft before installing mods.".into());
+    }
+    if active && !running {
+        return Err("Minecraft is currently being installed or launched.".into());
+    }
+    Ok(())
 }
 
 fn legacy_saved_session() -> Option<MinecraftSession> {
@@ -862,6 +891,7 @@ fn legacy_saved_session() -> Option<MinecraftSession> {
         client_id: profile["clientId"].as_str()?.to_string(),
         access_token,
         refresh_token,
+        expires_at: 0,
     })
 }
 
@@ -1012,6 +1042,7 @@ fn save_account_session(session: &MinecraftSession, make_active: bool) -> Result
         client_id: session.client_id.clone(),
         access_token: String::new(),
         refresh_token: String::new(),
+        expires_at: session.expires_at,
     };
     keyring::Entry::new(
         "Bloom Client",
@@ -1244,6 +1275,7 @@ async fn minecraft_session_from_microsoft(
         access_token: minecraft_token.to_string(),
         refresh_token,
         client_id,
+        expires_at: minecraft["expires_in"].as_u64().filter(|seconds| *seconds <= 86400).map(|seconds| launch_cache::now().saturating_add(seconds)).unwrap_or(0),
     })
 }
 
@@ -1281,6 +1313,21 @@ async fn refresh_minecraft_session(session: &MinecraftSession) -> Result<Minecra
         refresh_token,
     )
     .await
+}
+
+async fn launch_session(stored: &MinecraftSession) -> Result<MinecraftSession, String> {
+    // Unknown/old expiry metadata forces the established full refresh path.
+    if !launch_cache::fresh_session(stored.expires_at, launch_cache::now()) {
+        return refresh_minecraft_session(stored).await;
+    }
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build().map_err(|e| e.to_string())?;
+    let response = client.get("https://api.minecraftservices.com/minecraft/profile").bearer_auth(&stored.access_token).send().await.map_err(|_| "Minecraft account validation could not be reached.".to_string())?;
+    if response.status() == 401 || response.status() == 403 { return refresh_minecraft_session(stored).await; }
+    let profile = read_auth_response(response, "Minecraft profile").await?;
+    if profile["id"].as_str() != Some(stored.uuid.as_str()) { return Err("The Minecraft account changed. Sign in again.".into()); }
+    let mut session = stored.clone();
+    if let Some(name) = profile["name"].as_str() { session.username = name.to_owned(); }
+    Ok(session)
 }
 
 #[tauri::command]
@@ -2591,6 +2638,10 @@ fn list_instance_content_blocking(
             continue;
         }
         let file_name = entry.file_name().to_string_lossy().to_string();
+        // Internal ownership records and interrupted writes are not installed content.
+        if file_name.starts_with('.') || file_name.ends_with(".bloom-part") {
+            continue;
+        }
         let enabled = !file_name.to_ascii_lowercase().ends_with(".disabled");
         let visible_name = file_name.strip_suffix(".disabled").unwrap_or(&file_name);
         let entry_metadata = entry.metadata().ok();
@@ -2894,27 +2945,49 @@ fn import_instance_mod_files_blocking(
 
 #[tauri::command]
 async fn import_instance_mod_files(
+    state: tauri::State<'_, LauncherState>,
     instance_id: String,
     paths: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let importing_mods = true;
+    if importing_mods {
+        let mut active = state.launch_active.lock().map_err(|_| "The launcher is busy.")?;
+        if *active { return Err("Close Minecraft and wait for downloads before importing mods.".into()); }
+        *active = true;
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || {
         import_instance_mod_files_blocking(instance_id, paths)
     })
     .await
-    .map_err(|error| format!("The mod importer stopped unexpectedly: {error}"))?
+    .map_err(|error| format!("The mod importer stopped unexpectedly: {error}"));
+    if importing_mods {
+        if let Ok(mut active) = state.launch_active.lock() { *active = false; }
+    }
+    result?
 }
 
 #[tauri::command]
 async fn import_instance_content_files(
+    state: tauri::State<'_, LauncherState>,
     instance_id: String,
     category: String,
     paths: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let importing_mods = category == "mods";
+    if importing_mods {
+        let mut active = state.launch_active.lock().map_err(|_| "The launcher is busy.")?;
+        if *active { return Err("Close Minecraft and wait for downloads before importing mods.".into()); }
+        *active = true;
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || {
         import_instance_content_files_blocking(instance_id, category, paths)
     })
     .await
-    .map_err(|error| format!("The content importer stopped unexpectedly: {error}"))?
+    .map_err(|error| format!("The content importer stopped unexpectedly: {error}"));
+    if importing_mods {
+        if let Ok(mut active) = state.launch_active.lock() { *active = false; }
+    }
+    result?
 }
 
 #[tauri::command]
@@ -3159,6 +3232,15 @@ fn import_fabric_modpack_path(
     state: &LauncherState,
     pack_path: std::path::PathBuf,
 ) -> Result<String, String> {
+    import_fabric_modpack_path_with_icon(app, state, pack_path, None)
+}
+
+fn import_fabric_modpack_path_with_icon(
+    app: tauri::AppHandle,
+    state: &LauncherState,
+    pack_path: std::path::PathBuf,
+    icon: Option<String>,
+) -> Result<String, String> {
     use std::io::Read;
     let file = std::fs::File::open(&pack_path).map_err(|error| error.to_string())?;
     let mut archive = zip::ZipArchive::new(file)
@@ -3231,7 +3313,7 @@ fn import_fabric_modpack_path(
     let mut config = InstanceConfig {
         id: id.clone(),
         name,
-        icon: None,
+        icon,
         loader: "Fabric".into(),
         loader_version: Some(fabric_version),
         version: minecraft_version,
@@ -3463,7 +3545,17 @@ async fn import_modrinth_modpack(
     let pack_path = imports.join(format!("{}-{}.mrpack", safe_project, safe_version));
     std::fs::write(&pack_path, bytes)
         .map_err(|error| format!("Bloom could not save the downloaded pack: {error}"))?;
-    import_fabric_modpack_path(app, &state, pack_path)
+    // Keep the canonical project artwork with the instance, including during installation.
+    let icon = async {
+        let project: serde_json::Value = client
+            .get(format!("https://api.modrinth.com/v2/project/{}", project_id.trim()))
+            .send().await.ok()?.error_for_status().ok()?.json().await.ok()?;
+        let url = project["icon_url"].as_str()?.to_string();
+        cache::warm_catalog_artwork(vec![url.clone()]).await;
+        // Validate the source and persist its small URL, not base64 image bytes.
+        cache::get_cached_catalog_artwork(url.clone()).ok().map(|_| url)
+    }.await;
+    import_fabric_modpack_path_with_icon(app, &state, pack_path, icon)
 }
 
 fn install_fabric_api(config: &InstanceConfig) -> Result<(), String> {
@@ -4073,6 +4165,9 @@ fn install_modrinth_content(
 ) -> Result<(), String> {
     let config = load_instance(&instance_id)?;
     catalog_category(&category)?;
+    if category == "mods" && state.game_running.load(Ordering::SeqCst) {
+        return Err("Close Minecraft before installing mods.".into());
+    }
     if category == "mods" && !config.loader.eq_ignore_ascii_case("fabric") {
         return Err("Modrinth mod installation currently supports Fabric instances only.".into());
     }
@@ -4118,11 +4213,9 @@ fn install_modrinth_content(
             .launch_active
             .lock()
             .map_err(|_| "The task manager is busy.")?;
-        if *active {
-            return Err("Minecraft is currently being installed or launched.".into());
-        }
+        validate_content_install_activity(&task.category, *active, state.game_running.load(Ordering::SeqCst))?;
         *active = true;
-        state.cancel_requested.store(false, Ordering::SeqCst);
+        state.content_cancel_requested.store(false, Ordering::SeqCst);
         state.content_install_active.store(true, Ordering::SeqCst);
     }
     queue.push_back(task);
@@ -4132,7 +4225,8 @@ fn install_modrinth_content(
         return Ok(());
     }
     let active = state.launch_active.clone();
-    let cancel = state.cancel_requested.clone();
+    let game_running = state.game_running.clone();
+    let cancel = state.content_cancel_requested.clone();
     let install_queue = state.content_install_queue.clone();
     let install_active = state.content_install_active.clone();
     std::thread::spawn(move || loop {
@@ -4143,9 +4237,9 @@ fn install_modrinth_content(
             };
             if queue.is_empty() {
                 if let Ok(mut value) = active.lock() {
-                    *value = false;
+                    install_active.store(false, Ordering::SeqCst);
+                    *value = game_running.load(Ordering::SeqCst);
                 }
-                install_active.store(false, Ordering::SeqCst);
                 None
             } else {
                 queue.pop_front()
@@ -4221,7 +4315,37 @@ fn install_modrinth_content(
     Ok(())
 }
 
-fn install_instance_files(
+fn install_instance_files(app: &tauri::AppHandle, instance_id: &str, config: &InstanceConfig, root: &std::path::Path, cancel: &AtomicBool, start: u8, end: u8) -> Result<String, String> {
+    install_instance_files_internal(app, instance_id, config, root, cancel, start, end, false)
+}
+
+fn extract_natives_cached(libraries: &[mc_launcher_core::core::version::Library], root: &std::path::Path, version: &str, repair: bool) -> Result<std::path::PathBuf, String> {
+    let key = format!("v1:{}:{version}:{}:{}:{}", root.display(), std::env::consts::OS, std::env::consts::ARCH, serde_json::to_string(libraries).map_err(|e| e.to_string())?);
+    let destination = mc_launcher_core::install::natives::natives_directory(root, version);
+    if !repair {
+        if let Some(receipt) = cache::read_json::<launch_cache::Receipt>("launch-natives", &key, None) {
+            if receipt.valid() { return Ok(destination); }
+        }
+    }
+    mc_launcher_core::install::natives::extract_natives(libraries, root, version).map_err(|e| e.to_string())?;
+    let mut paths = Vec::new();
+    for library in libraries {
+        if let Some(downloads) = &library.downloads {
+            for artifact in downloads.artifact.iter().chain(downloads.classifiers.values()) {
+                let path = root.join("libraries").join(&artifact.path);
+                if path.is_file() { paths.push(path); }
+            }
+        }
+    }
+    if launch_cache::tree(&destination, &mut paths).is_ok() {
+        if let Some(receipt) = launch_cache::Receipt::capture(version.into(), paths) {
+            let _ = cache::write_json("launch-natives", &key, &receipt);
+        }
+    }
+    Ok(destination)
+}
+
+fn install_instance_files_internal(
     app: &tauri::AppHandle,
     instance_id: &str,
     config: &InstanceConfig,
@@ -4229,7 +4353,9 @@ fn install_instance_files(
     cancel: &AtomicBool,
     range_start: u8,
     range_end: u8,
+    repair: bool,
 ) -> Result<String, String> {
+    let mut prepared_paths = Vec::new();
     let scale =
         |value: u8| range_start + (((range_end - range_start) as u16 * value as u16) / 100) as u8;
     emit_launch(
@@ -4246,6 +4372,7 @@ fn install_instance_files(
     let base_plan =
         mc_launcher_core::install::vanilla::plan_vanilla_downloads(&vanilla, minecraft_dir)
             .map_err(|error| error.to_string())?;
+    prepared_paths.extend(base_plan.tasks.iter().map(|task| task.destination.clone()));
     execute_download_plan(
         app,
         instance_id,
@@ -4265,6 +4392,7 @@ fn install_instance_files(
             &data,
             minecraft_dir,
         );
+        prepared_paths.extend(assets.tasks.iter().map(|task| task.destination.clone()));
         execute_download_plan(
             app,
             instance_id,
@@ -4285,16 +4413,7 @@ fn install_instance_files(
             scale(89),
             "Resolving Fabric Loader",
         );
-        let loader_version = if let Some(version) = config.loader_version.as_deref() {
-            version.to_string()
-        } else {
-            let loaders = mc_launcher_core::loader::fabric::list_loader_versions()
-                .map_err(|error| error.to_string())?;
-            mc_launcher_core::loader::fabric::latest_stable_loader(&loaders)
-                .map_err(|error| error.to_string())?
-                .version
-                .clone()
-        };
+        let loader_version = fabric_loader::resolve(config)?;
         let profile =
             mc_launcher_core::loader::fabric::fetch_profile(&config.version, &loader_version)
                 .map_err(|error| error.to_string())?;
@@ -4331,6 +4450,7 @@ fn install_instance_files(
                     label: library.name.clone(),
                 });
         }
+        prepared_paths.extend(loader_plan.tasks.iter().map(|task| task.destination.clone()));
         execute_download_plan(
             app,
             instance_id,
@@ -4341,11 +4461,7 @@ fn install_instance_files(
             "Installing Fabric Loader",
             false,
         )?;
-        mc_launcher_core::install::natives::extract_natives(
-            &merged.libraries,
-            minecraft_dir,
-            &version_id,
-        )
+        extract_natives_cached(&merged.libraries, minecraft_dir, &version_id, repair)
         .map_err(|error| error.to_string())?;
         if !instance_has_fabric_api(config) {
             emit_launch(
@@ -4357,19 +4473,66 @@ fn install_instance_files(
             );
             install_fabric_api(config)?;
         }
+        if let Err(error) = fabric_loader::remember(config, &loader_version) {
+            emit_game_log(app, instance_id, "launcher", error);
+        }
     } else {
-        mc_launcher_core::install::natives::extract_natives(
-            &vanilla.libraries,
-            minecraft_dir,
-            &version_id,
-        )
+        extract_natives_cached(&vanilla.libraries, minecraft_dir, &version_id, repair)
         .map_err(|error| error.to_string())?;
     }
     cosmetics::reconcile(config)?;
+    prepared_paths.push(minecraft_dir.join("versions").join(&config.version).join(format!("{}.json", config.version)));
+    prepared_paths.push(minecraft_dir.join("versions").join(&version_id).join(format!("{version_id}.json")));
+    let natives = mc_launcher_core::install::natives::natives_directory(minecraft_dir, &version_id);
+    let mut tracked = launch_cache::tree(&natives, &mut prepared_paths).is_ok();
+    let mods = std::path::Path::new(&config.directory).join("mods");
+    if mods.exists() { tracked &= launch_cache::tree(&mods, &mut prepared_paths).is_ok(); }
+    if tracked && launch_cache::reusable(config) {
+        if let Some(receipt) = launch_cache::Receipt::capture(version_id.clone(), prepared_paths) {
+            let _ = cache::write_json("launch-installations", &launch_cache::key(config, minecraft_dir), &receipt);
+        }
+    }
     Ok(version_id)
 }
 
-fn selected_java(
+fn prepare_instance_files(app: &tauri::AppHandle, instance_id: &str, config: &InstanceConfig, root: &std::path::Path, cancel: &AtomicBool, start: u8, end: u8) -> Result<String, String> {
+    if cancel.load(Ordering::SeqCst) { return Err("__cancelled__".into()); }
+    if launch_cache::reusable(config) {
+        if let Some(receipt) = cache::read_json::<launch_cache::Receipt>("launch-installations", &launch_cache::key(config, root), None) {
+            if receipt.valid() {
+                cosmetics::reconcile(config)?;
+                emit_launch(app, instance_id, "installing", end, "Using verified Minecraft installation");
+                return Ok(receipt.version_id);
+            }
+        }
+    }
+    install_instance_files(app, instance_id, config, root, cancel, start, end)
+}
+
+fn java_selection_key(config: &InstanceConfig, required: u32) -> String {
+    format!("java-v1:{required}:{}:{}", config.java, std::env::consts::ARCH)
+}
+fn cached_selected_java(config: &InstanceConfig, required: u32) -> Option<std::path::PathBuf> {
+    let receipt = cache::read_json::<launch_cache::Receipt>("launch-java", &java_selection_key(config, required), None)?;
+    receipt.valid().then(|| receipt.version_id.into())
+}
+fn selected_java(app: &tauri::AppHandle, instance_id: &str, config: &InstanceConfig, required: u32, cancel: &AtomicBool) -> Result<std::path::PathBuf, String> {
+    if cancel.load(Ordering::SeqCst) { return Err("__cancelled__".into()); }
+    let key = java_selection_key(config, required);
+    if let Some(path) = cached_selected_java(config, required) { return Ok(path); }
+    let path = selected_java_uncached(app, instance_id, config, required, cancel)?;
+    let mut files = vec![path.clone()];
+    if let Some(bin) = path.parent() {
+        let jvm = bin.join("server").join("jvm.dll");
+        if jvm.is_file() { files.push(jvm); }
+    }
+    if let Some(receipt) = launch_cache::Receipt::capture(path.to_string_lossy().into_owned(), files) {
+        let _ = cache::write_json("launch-java", &key, &receipt);
+    }
+    Ok(path)
+}
+
+fn selected_java_uncached(
     app: &tauri::AppHandle,
     instance_id: &str,
     config: &InstanceConfig,
@@ -4418,6 +4581,7 @@ async fn launch_minecraft(
     download_workers: u8,
     debug_logging: bool,
 ) -> Result<(), String> {
+    let launch_started = std::time::Instant::now();
     if !matches!(download_workers, 1 | 3 | 5) {
         return Err("Download workers must be 1, 3, or 5.".into());
     }
@@ -4445,27 +4609,40 @@ async fn launch_minecraft(
             }
             "Sign in with Microsoft before launching Minecraft.".to_string()
         })?;
-    let session = refresh_minecraft_session(&stored_session)
-        .await
-        .map_err(|error| {
-            if let Ok(mut active) = state.launch_active.lock() {
-                *active = false;
-            }
-            format!("The selected Microsoft account needs to reconnect: {error}")
-        })?;
-    save_account_session(&session, true).map_err(|error| {
-        if let Ok(mut active) = state.launch_active.lock() {
-            *active = false;
+    let session_store = state.session.clone();
+    let authentication_id = instance_id.clone();
+    let authentication_error = Arc::new(Mutex::new(None::<String>));
+    let authentication_error_for_task = authentication_error.clone();
+    let authentication_cancel = state.cancel_requested.clone();
+    let mut authentication = launch_cache::AbortTask(tauri::async_runtime::spawn(async move {
+        let outcome = async {
+        let auth_started = std::time::Instant::now();
+        let session = launch_session(&stored_session).await?;
+        if session.access_token != stored_session.access_token || session.username != stored_session.username || session.expires_at != stored_session.expires_at {
+            let to_save = session.clone();
+            tauri::async_runtime::spawn_blocking(move || save_account_session(&to_save, true)).await.map_err(|_| "Secure account storage stopped unexpectedly.")??;
         }
-        error
-    })?;
-    *state
-        .session
-        .lock()
-        .map_err(|_| "Unable to refresh the active account.")? = Some(session.clone());
+        *session_store.lock().map_err(|_| "Unable to update the active account.")? = Some(session.clone());
+        let auth_ms = auth_started.elapsed().as_millis();
+        let cosmetics_started = std::time::Instant::now();
+        let cosmetic_session = session.clone();
+        let token = tauri::async_runtime::spawn_blocking(move || {
+            load_instance(&authentication_id).ok().and_then(|config| cosmetics::prepare_session(&config, &cosmetic_session))
+        }).await.map_err(|_| "Cosmetics preparation stopped unexpectedly.")?;
+        Ok::<_, String>((session, token, auth_ms, cosmetics_started.elapsed().as_millis()))
+        }.await;
+        if let Err(error) = &outcome {
+            if let Ok(mut saved) = authentication_error_for_task.lock() { *saved = Some(error.clone()); }
+            authentication_cancel.store(true, Ordering::SeqCst);
+        }
+        outcome
+    }));
     let active = Arc::new(state.launch_active.clone());
     let cancel_requested = state.cancel_requested.clone();
+    let game_running = state.game_running.clone();
+    let content_active = state.content_install_active.clone();
     std::thread::spawn(move || {
+        let preparation_started = std::time::Instant::now();
         let config = match load_instance(&instance_id) {
             Ok(config) => config,
             Err(error) => {
@@ -4524,7 +4701,9 @@ async fn launch_minecraft(
             }
         };
         let launcher = mc_launcher_core::launcher::Launcher::new(&shared_minecraft);
-        let installed_version = match install_instance_files(
+        let known_java = launcher.load_version(&config.version).ok().and_then(|version| version.java_version).and_then(|java| cached_selected_java(&config, java.major_version.max(8) as u32));
+        let java_discovery = if known_java.is_none() { Some(std::thread::spawn(detect_java_installations_blocking)) } else { None };
+        let installed_version = match prepare_instance_files(
             &app,
             &instance_id,
             &config,
@@ -4535,7 +4714,11 @@ async fn launch_minecraft(
         ) {
             Ok(version) => version,
             Err(error) if error == "__cancelled__" => {
-                emit_launch(&app, &instance_id, "cancelled", 0, "Download cancelled");
+                if let Some(error) = authentication_error.lock().ok().and_then(|error| error.clone()) {
+                    emit_launch(&app, &instance_id, "error", 0, format!("The selected Microsoft account needs to reconnect: {error}"));
+                } else {
+                    emit_launch(&app, &instance_id, "cancelled", 0, "Launch cancelled");
+                }
                 if let Ok(mut value) = active.lock() {
                     *value = false;
                 }
@@ -4555,7 +4738,23 @@ async fn launch_minecraft(
                 return;
             }
         };
+        emit_game_log(&app, &instance_id, "launcher", format!("Launch timing: file preparation {} ms", preparation_started.elapsed().as_millis()));
         let result = (|| -> Result<(), String> {
+            let (session, cosmetic_token, auth_ms, cosmetics_ms) = loop {
+                if cancel_requested.load(Ordering::SeqCst) {
+                    if let Some(error) = authentication_error.lock().ok().and_then(|error| error.clone()) { return Err(format!("The selected Microsoft account needs to reconnect: {error}")); }
+                    return Err("__cancelled__".into());
+                }
+                if let Ok(result) = tauri::async_runtime::block_on(async { tokio::time::timeout(std::time::Duration::from_millis(100), &mut authentication.0).await }) {
+                    break result.map_err(|_| "Account preparation stopped unexpectedly.".to_string())??;
+                }
+            };
+            emit_game_log(&app, &instance_id, "launcher", format!("Launch timing: account {auth_ms} ms; cosmetics {cosmetics_ms} ms (parallel with files)"));
+            if cancel_requested.load(Ordering::SeqCst) { return Err("Minecraft launch was cancelled.".into()); }
+            let discovery_wait = std::time::Instant::now();
+            if let Some(discovery) = java_discovery { let _ = discovery.join(); }
+            emit_game_log(&app, &instance_id, "launcher", format!("Launch timing: Java discovery wait {} ms", discovery_wait.elapsed().as_millis()));
+            let java_started = std::time::Instant::now();
             let version = launcher
                 .load_version(&installed_version)
                 .map_err(|error| format!("Minecraft metadata could not be loaded: {error}"))?;
@@ -4610,7 +4809,7 @@ async fn launch_minecraft(
                 args.insert(main_index, argument.to_string());
             }
             let mut process = command_without_console(command.executable);
-            cosmetics::attach_session(&mut process, &config, &session);
+            cosmetics::attach_session(&mut process, &session, &cosmetic_token);
             process
                 .args(args)
                 .current_dir(command.working_dir)
@@ -4618,9 +4817,13 @@ async fn launch_minecraft(
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped());
+            emit_game_log(&app, &instance_id, "launcher", format!("Launch timing: Java selection and command {} ms", java_started.elapsed().as_millis()));
             let mut child = process
                 .spawn()
                 .map_err(|error| format!("Minecraft could not start: {error}"))?;
+            game_running.store(true, Ordering::SeqCst);
+            let _ = app.emit("minecraft-process-state", true);
+            emit_game_log(&app, &instance_id, "launcher", format!("Launch timing: Play to process {} ms", launch_started.elapsed().as_millis()));
             emit_launch(
                 &app,
                 &instance_id,
@@ -4671,9 +4874,9 @@ async fn launch_minecraft(
                     {
                         emit_game_log(&app, &instance_id, &stream, line.clone());
                     }
-                    if line.contains("Loading ") && line.contains(" mods") {
+                    if !ready && line.contains("Loading ") && line.contains(" mods") {
                         emit_launch(&app, &instance_id, "launching", 97, "Loading Fabric mods");
-                    } else if line.contains("Backend library") || line.contains("LWJGL Version") {
+                    } else if !ready && (line.contains("Backend library") || line.contains("LWJGL Version")) {
                         emit_launch(
                             &app,
                             &instance_id,
@@ -4681,7 +4884,7 @@ async fn launch_minecraft(
                             98,
                             "Initializing game renderer",
                         );
-                    } else if line.contains("Reloading ResourceManager") {
+                    } else if !ready && line.contains("Reloading ResourceManager") {
                         emit_launch(
                             &app,
                             &instance_id,
@@ -4696,6 +4899,7 @@ async fn launch_minecraft(
                             || line.contains("Created:"))
                     {
                         ready = true;
+                        emit_game_log(&app, &instance_id, "launcher", format!("Launch timing: Play to game-ready signal {} ms", launch_started.elapsed().as_millis()));
                         emit_launch(&app, &instance_id, "running", 100, "Minecraft is ready");
                     }
                 }
@@ -4716,12 +4920,15 @@ async fn launch_minecraft(
             Ok(())
         })();
         match result {
+            Err(error) if error == "__cancelled__" => emit_launch(&app, &instance_id, "cancelled", 0, "Launch cancelled"),
             Ok(()) => emit_launch(&app, &instance_id, "idle", 0, "Minecraft closed"),
             Err(error) => emit_launch(&app, &instance_id, "error", 0, error),
         }
         if let Ok(mut value) = active.lock() {
-            *value = false;
+            game_running.store(false, Ordering::SeqCst);
+            *value = content_active.load(Ordering::SeqCst);
         }
+        let _ = app.emit("minecraft-process-state", false);
     });
     Ok(())
 }
@@ -4769,7 +4976,7 @@ fn repair_minecraft_installation(
         let result = bloom_data_dir()
             .map(|path| path.join("minecraft"))
             .and_then(|shared| {
-                install_instance_files(&app, &instance_id, &config, &shared, &cancel, 1, 100)
+                install_instance_files_internal(&app, &instance_id, &config, &shared, &cancel, 1, 100, true)
                     .map(|_| ())
             });
         match result {
@@ -4833,6 +5040,7 @@ pub fn run() {
             greet,
             screenshots::list_screenshots,
             screenshots::screenshot_action,
+            screenshots::save_screenshot_comparison,
             get_backend_status,
             cache::get_client_cache_status,
             cache::choose_client_cache_directory,
@@ -4898,6 +5106,7 @@ pub fn run() {
             choose_game_directory,
             exit_application,
             get_minecraft_launch_status,
+            get_minecraft_process_running,
             cancel_minecraft_launch,
             repair_minecraft_installation,
             sign_out_minecraft,
@@ -5095,5 +5304,32 @@ mod tests {
         assert!(updated.contains("renderDistance:16"));
         assert!(updated.contains("simulationDistance:10"));
         let _ = std::fs::remove_file(path);
+    }
+}
+
+#[cfg(test)]
+mod live_content_tests {
+    use super::*;
+
+    #[test]
+    fn running_game_allows_packs_but_not_mods() {
+        assert!(validate_content_install_activity("resourcepacks", true, true).is_ok());
+        assert!(validate_content_install_activity("shaderpacks", true, true).is_ok());
+        assert!(validate_content_install_activity("mods", true, true).is_err());
+        for category in ["mods", "resourcepacks", "shaderpacks"] {
+            assert!(validate_content_install_activity(category, true, false).is_err());
+            assert!(validate_content_install_activity(category, false, false).is_ok());
+        }
+    }
+
+    #[test]
+    fn cancelling_a_pack_download_does_not_cancel_minecraft() {
+        let state = LauncherState::default();
+        state.game_running.store(true, Ordering::SeqCst);
+        state.content_install_active.store(true, Ordering::SeqCst);
+        cancel_active_task(&state);
+        assert!(state.content_cancel_requested.load(Ordering::SeqCst));
+        assert!(!state.cancel_requested.load(Ordering::SeqCst));
+        assert!(state.game_running.load(Ordering::SeqCst));
     }
 }

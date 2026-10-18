@@ -1,16 +1,22 @@
 <!doctype html>
-<html lang="en" style="background:#000;color-scheme:dark">
+<html lang="en" data-theme="oled">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
     <title>Bloom Client</title>
     <style>
-      html,body,#root{width:100%;height:100%;margin:0;background:#000}
+      :root{color-scheme:dark;--boot-surface:#000;--boot-ink:#92989a}
+      :root[data-theme="light"]{color-scheme:light;--boot-surface:#f5f6f8;--boot-ink:#626b77}
+      html,body,#root{width:100%;height:100%;margin:0;background:var(--boot-surface)}
       body{overflow:hidden}
-      #bloom-first-frame{display:grid;place-items:center;height:100%;font:600 14px system-ui,sans-serif;color:#92989a;letter-spacing:.02em}
+      #bloom-first-frame{display:grid;place-items:center;height:100%;font:600 14px system-ui,sans-serif;color:var(--boot-ink);letter-spacing:.02em}
       #bloom-first-frame img{display:block;width:34px;height:34px;object-fit:contain;margin:0 auto 12px}
+      :root[data-theme="light"] #bloom-first-frame img{filter:brightness(0)}
     </style>
+    <script>
+      try { const saved = JSON.parse(localStorage.getItem("bloom-settings") || "{}"); if (saved.theme === "light") document.documentElement.dataset.theme = saved.theme; } catch {}
+    </script>
   </head>
   <body>
     <div id="root"><div id="bloom-first-frame"><div><img src="/bloom-logo.png" alt="" />Opening Bloom Client</div></div></div>

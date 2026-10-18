@@ -53,6 +53,12 @@ public final class BloomCapeService {
         LOGGER.info("Bloom Cosmetics is ready for live static and animated cape updates.");
     }
 
+    public UUID observePlayer(UUID uuid) {
+        UUID identity = BloomCosmeticsRuntime.stableIdentity(MinecraftClient.getInstance(), uuid);
+        BloomCosmeticsRuntime.observe(observedPlayers, identity);
+        return identity;
+    }
+
     public Identifier textureFor(UUID uuid) {
         MinecraftClient minecraft = MinecraftClient.getInstance();
         UUID identity = BloomCosmeticsRuntime.stableIdentity(minecraft, uuid);

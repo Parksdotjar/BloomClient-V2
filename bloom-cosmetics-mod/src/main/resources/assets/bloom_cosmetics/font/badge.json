@@ -1,1 +1,1 @@
-{"providers":[{"type":"bitmap","file":"bloom_cosmetics:font/bloom.png","ascent":8,"height":9,"chars":["\ue042"]}]}
+{"providers":[{"type":"bitmap","file":"bloom_cosmetics:font/bloom.png","ascent":8,"height":9,"chars":["\ue042"]},{"type":"space","advances":{"\ue043":3}}]}

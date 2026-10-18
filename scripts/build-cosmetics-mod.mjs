@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, readdirSync, statSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, delimiter, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -29,13 +29,13 @@ const result = process.platform === "win32"
       "-NoProfile",
       "-NonInteractive",
       "-Command",
-      `& '${wrapper.replaceAll("'", "''")}' -p '${project.replaceAll("'", "''")}' build --no-daemon; exit $LASTEXITCODE`,
+      `& '${wrapper.replaceAll("'", "''")}' -p '${project.replaceAll("'", "''")}' chiseledBuild --no-daemon; exit $LASTEXITCODE`,
     ], {
       cwd: root,
       stdio: "inherit",
       env: buildEnv,
     })
-  : spawnSync(wrapper, ["-p", project, "build", "--no-daemon"], {
+  : spawnSync(wrapper, ["-p", project, "chiseledBuild", "--no-daemon"], {
       cwd: root,
       stdio: "inherit",
       env: buildEnv,
@@ -43,15 +43,13 @@ const result = process.platform === "win32"
 
 if (result.status !== 0) process.exit(result.status ?? 1);
 
-const libraries = resolve(project, "build", "libs");
-const builtJar = readdirSync(libraries)
-  .filter((name) => /^bloom-cosmetics-1\.21\.11-[\w.-]+\.jar$/.test(name) && !name.includes("sources"))
-  .map((name) => ({ name, modified: statSync(resolve(libraries, name)).mtimeMs }))
-  .sort((left, right) => right.modified - left.modified)[0]?.name;
-if (!builtJar) throw new Error("Bloom Cosmetics built successfully, but its remapped JAR was not found.");
-const source = resolve(libraries, builtJar);
-const destination = resolve(root, "src-tauri", "resources", "bloom-cosmetics-1.21.11.jar");
-mkdirSync(dirname(destination), { recursive: true });
-copyFileSync(source, destination);
-writeFileSync(destination.replace(/\.jar$/, ".sha256"), createHash("sha256").update(readFileSync(source)).digest("hex"));
-console.log(`Bloom Cosmetics bundled at ${destination}`);
+for (const minecraft of ["1.21.11", "26.1", "26.2", "26.3"]) {
+  const libraries = resolve(project, "versions", minecraft, "build", "libs");
+  const version = readFileSync(resolve(project, "gradle.properties"), "utf8").match(/^mod_version=(.+)$/m)?.[1].trim();
+  const source = resolve(libraries, `bloom-cosmetics-${minecraft}-${version}.jar`);
+  const destination = resolve(root, "src-tauri", "resources", `bloom-cosmetics-${minecraft}.jar`);
+  mkdirSync(dirname(destination), { recursive: true });
+  copyFileSync(source, destination);
+  writeFileSync(destination.replace(/\.jar$/, ".sha256"), createHash("sha256").update(readFileSync(source)).digest("hex"));
+  console.log(`Bloom Cosmetics ${minecraft} bundled at ${destination}`);
+}

@@ -680,3 +680,132 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 
 ### Development update isolation
 - Development frontend checks and real installs are disabled; debug Rust binaries do not register the native updater. Release builds continue using signed GitHub updates, and the dev-only mock preview remains available.
+
+
+### Internal content records and instance download artwork
+- Hide dotfiles and interrupted `.bloom-part` writes before installed-content cache lookup, so `.bloom-cosmetics.json` never appears as a Fabric mod or exposes content actions.
+- Modrinth modpack imports retain the project's cached artwork in the instance before installation starts. Downloads uses that artwork for active instance tasks and saves it in completed history. New import progress refreshes the instance identity; instances without artwork use the shared question-mark placeholder.
+- Download artwork resets when its source changes and renders local image data directly.
+
+### Bloom Cosmetics mod identity
+- The actual Bloom Cosmetics mod uses the existing `public/bloom-logo.png` Bloom logo, centered at approximately 72% of a pink (#ed83b5) square. Preserve the original logo artwork; do not redraw or simplify it. Fabric metadata points to the PNG so the installed list reads real artwork from every versioned JAR rather than showing its generic package icon.
+
+### Connected account dropdown centering
+- Removed asymmetric right padding from the connected account card's symmetric three-column grid. The add-account button keeps its 18px inset through its own margin, so the dropdown centers against the full card while the avatar stays flush left.
+
+
+### Custom animated accents
+- Added an opt-in Animated Accent under Appearance, with two to five draggable color stops, keyboard and numeric positioning, add/remove, cycle duration (4–60 seconds), and saturation intensity (0–100%). Stop spacing controls the fade timing and crossing stops changes their order.
+- Reused the custom color picker as a shared component; colors retain draft/Cancel/Apply semantics and typed hex values now apply exactly rather than being rounded through HSV conversion.
+- One throttled animation worker updates the existing accent token throughout the client, with a smooth forward/back cycle. Reduced motion, animations off, Ultra Performance, and hidden windows suspend it. Solid selections exit animation without discarding custom stops; existing settings migrate to solid mode and malformed gradients recover to safe defaults.
+- Verified interpolation, shifted/coincident stops, bounds, malformed persisted data, five-color limit, pointer dragging, keyboard movement, and picker application in an isolated component preview. Full native-app appearance remains a separate hands-on check.
+
+
+### Gradient swatch and direct stop editing
+- Animated Accent is now its own gradient circle beside the existing accent colors, using the same size and selection ring. Solid swatches exit gradient mode; the separate toggle is removed.
+- Gradient handles are equal-width/height squares. A click opens the existing color picker directly from that square; dragging adjusts the fade without opening it. Removed the extra selected-color circle, retaining numeric positioning, hex display, and removal.
+- Verified mode selection, direct picker opening, and pointer dragging without an accidental picker in the isolated editor preview.
+
+
+### Screenshot comparison
+- Added Compare screenshots to Screenshot Shelf. Comparison mode selects exactly two cards, marks their A/B order, and retains selection across instance filters. Normal thumbnail clicks still open the original preview outside comparison mode.
+- Added a native modal with a draggable wipe divider, arrow-key/Shift/Home/End positioning, Swap, centered Reset, Escape/backdrop/close, and focus restoration. Both images use the existing bounded native preview command and retain their proportions on one shared canvas.
+- Loading/missing-image errors offer Retry. Source screenshots remain unchanged. Verified image loading, dragging, keyboard adjustment, swap/reset, Escape/focus return, and failure feedback in an isolated component preview using repository reference images.
+
+
+### Persistent, prewarmed screenshots
+- Screenshot thumbnails/previews now persist in the existing managed cache. File revision keys include path, size, and high-resolution mtime; native path validation and decoder limits remain in place.
+- Discovery and two-worker background warming begin at startup and continue every 30 seconds while visible. Visible shots, hover/focus, and clicks take priority; identical requests share work. Unchanged collections are not repeatedly warmed.
+- Shared decoded image memory survives navigation within a 160 MiB estimate. Gallery, image preview, and comparison initialize from warm entries, avoiding forced loading flashes. Open shelves receive new/changed/deleted file revisions from background discovery.
+- First discovery and images evicted from hot memory can still load. Persistent entries obey the existing configurable disk capacity and Clear cache; source screenshots are untouched.
+- Six cache tests cover reuse, synchronous warm access, revision/instance/mode isolation, queue priority, concurrency, bounded retention, clearing in-flight work, and retry after failure.
+
+
+### Faster launch preparation and game resource priority
+- Added verified-installation, native-extraction, and Java-selection receipts; metadata changes or expiry use the original preparation path, and Repair always verifies/extracts through that path. Directory membership is checked explicitly because Windows directory timestamps alone did not reliably identify additions in testing.
+- Login validation/refresh and scoped cosmetics-session preparation run alongside file preparation. Secure expiry migration avoids needless full refreshes and credential writes while retaining profile validation and rejection fallback. Java discovery overlaps preparation only when the previous selection cannot be reused.
+- Added credential-free launch phase timings to Logs. Screenshot warming/discovery and decorative launcher motion suspend during launch/gameplay; explicit screenshot opens still work, including promoting a paused queued preview.
+- No JVM flags, RAM, graphics settings, or in-game mods were changed. Live launch-time and frame-time measurements remain needed before quoting a speedup.
+
+### Organic artwork and motion redesign
+- Replaced the shared gradient-blob treatment across all twelve styles with distinct local SVG compositions: aurora curtains, layered waves/dunes, a folded flower, mist veils, broad petals, ripples, silk folds, lagoon terraces, crossing ribbons, an eclipse ring, and topographic contours. Existing preset IDs, accent selection, opacity, glass settings, and saved image/source choices remain compatible.
+- Larger full-bleed 16:9 thumbnails use the exact same artwork component as the desktop background. Selection retains the accent outline/check and a visible keyboard focus ring. No generated thumbnail assets, requests, SVG filters, or new dependencies.
+- Added gentle brighten/dim breathing to Aurora, Mist, Ripple, Halo, and Contour. Contour's nested lines share one smoothly morphing curve with 12-second wave passes, keeping them aligned while the surface undulates; overall drift uses 22/29-second passes. Previews stay still, and reduced motion, Show Animations off, Ultra Performance, and launch/gameplay pause disable every effect.
+
+### Sharing immediately after startup
+- Share instance now restores the saved Bloom session through Social's shared native restoration helper before fetching friends. Users no longer need to visit Social to initialize their profile.
+- Authenticated Social requests renew a rejected access token and retry once. Credential refresh and sign-out share a lock to avoid competing token rotations or restoring credentials after sign-out.
+- Sharing displays the actual loading error with Try again; temporary service failures no longer claim the user is signed out.
+
+### Content filter readability
+- Reworked the cramped content filter into a 276px attached panel. Sort by and Show labels now sit above their full-width segmented controls, giving Name/Size and All/Enabled/Disabled equal, comfortable targets with larger type and clearer spacing.
+- Selected segments use white text over a restrained accent tint, avoiding low-contrast colored text with red or other dark accents. Keyboard focus uses a visible accent outline; hovering and clicking do not move the options.
+- Kept the existing live sort/status callbacks, pagination reset, active trigger dot, header attachment, and outside-click/Escape dismissal for Mods, Resource Packs, and Shaders.
+
+### Focused screenshot comparison and PNG export
+- Removed the comparison helper sentence, filenames/instance captions, footer note, and Shelf comparison marketing copy. Only the active selection count remains outside the viewer.
+- Made the divider's visible handle a true 40×40 rounded square with the same ArrowRightLeft icon and stroke weight as Change profile picture. Dragging and keyboard control remain intact.
+- Added PNG export of the current split and swapped order, preserving both images' proportions and letterboxing. The export uses existing previews up to 1920px on the longest edge, includes the divider, and excludes viewer controls. A native PNG Save dialog chooses the destination; cancellation does not show a success message, and errors/success use the existing notification tray. Source screenshots remain untouched.
+
+### Complete Light theme
+- Added Light beside OLED Black in Appearance, persisted through the existing settings. Startup restores its palette before rendering; window color-scheme, native window theme/background, browser theme color, and default custom-sidebar ink follow the selected theme.
+- Audited every UI stylesheet: main launcher/settings, Social and encryption panels, sharing/access dialogs, Locker/wardrobe, mod details, Utilities/Sync/AutoTune, screenshots/comparison, onboarding, tooltips, and accent editor. Shared surface/ink/status/depth tokens adapt hardcoded UI colors while keeping the original OLED values as fallbacks.
+- Light uses white controls, near-black text, cool-gray corner shading on the sidebar/main surface, and soft slate shadows. Accent foregrounds use a darker readable variant of the chosen accent. Neutral, selected, hover/focus, disabled, warning/error/success, glass, and scrollbar states are included.
+- Preserved media and color spectra. Comparison letterboxing, divider/handle, and PNG export follow the selected viewer palette; screenshot pixels and proportions remain unchanged. Built-in white identity marks switch to dark only in Light.
+- Added `npm run test:theme` to check every UI sheet for unthemed color declarations and undefined light tokens, with explicit artwork/picker exceptions.
+
+
+### Charcoal theme and independent Frosted finish
+- Added warm-graphite Charcoal across the complete theme token contract, with distinct panels/controls, soft ivory text, warm shadows, themed comparison canvas/export colors, status states, and native/boot appearance. Accent-fill labels use a separate foreground token.
+- Added the requested wider theme picker plus a compact 44px chevron button beside it. Its menu selects Unfrosted/Frosted, saved independently of theme. Escape returns focus to the trigger; outside clicks dismiss it.
+- Frosted uses translucent navigation and floating surfaces with restrained highlight edges, preserving readable content and real artwork. Existing custom-background controls keep their values. Ultra Performance suspends the finish; reduced-transparency and unsupported-blur environments use safe solid surfaces.
+- Extended the theme audit to validate complete Light and Charcoal token sets and contrast.
+
+
+### Retired Charcoal and desktop-aware Frosted shell
+- Removed Charcoal from the picker, startup palette, and runtime styles; persisted Charcoal values migrate to OLED while keeping the finish/background preferences.
+- Frosted uses Windows Acrylic to reveal the desktop behind the title strip, sidebar, and ad rail. The native window supports transparency, the webview/root layers clear, and Bloom's selected Image/Organic artwork stays inside the main pane. Navigation, Downloads and Logs lose the opaque boxes; instance rows and the account dock use light washes with visible interaction states. The overlapping account menu keeps a stronger glass tint for readable text.
+- Removed the main content pane's opaque top-strip shadow only in Frosted. Main content fill and media remain unchanged. Unfrosted clears native effects and restores an opaque window plus existing Background slider behavior without changing saved values; Ultra Performance and reduced-transparency do the same. Native appearance changes are serialized; native configuration requires a desktop app rebuild/restart.
+
+### Restored normal Light and OLED Black themes
+- At Parks's request, removed the Frosted selector, styling, saved finish preference, native Acrylic setup, and transparency permissions/configuration. The native window and normal theme surfaces are opaque again.
+- Theme uses one standard dropdown with only OLED Black and Light. Charcoal remains retired. Existing Image/Organic backgrounds, their controls, and the complete Light palette are preserved.
+
+### Instance folders and quick switcher
+- Instances now offers named folders with create/rename/remove, folder filtering, pointer dragging from a card grip, and a keyboard-accessible Move to menu. Removing a folder keeps every instance and returns its members to Ungrouped. Folder metadata uses `bloom-instance-folders-v1` in the existing local settings store; no game directories move. Search and loader filters compose with the selected folder. The sidebar remains the recent-access list.
+- Ctrl+K (Cmd+K on macOS) opens a focused search dialog for instances, pages, and Settings sections. Arrow keys select, Enter opens the existing destination, and Escape/backdrop dismisses with focus restoration. Common setting keywords such as theme, RAM, Java, and account find the relevant section. It does not launch Minecraft or interrupt an existing modal/onboarding flow.
+- Verified create, rename, drag, menu-based movement, filtering, persistence after reload, switcher search/navigation, and Escape focus restoration in an isolated component preview. Both Light and OLED use shared theme tokens.
+
+### Instance library header and bottom search
+- Simplified the raised library header to All Instances only. Removed the eyebrow and subtitle. Folder controls and New instance share a darker action bar underneath.
+- Reused the Mods search dock at the bottom, including its search mark, focus treatment, clear action, and loader filter. The card grid scrolls independently so the title, folder destinations, and bottom search stay accessible while filtering or dragging.
+
+### Locker-style instance header and cleaner cards
+- Matched Locker's centered title platform, rounded lower corners, shadow, and underlapping darker segmented shelf. Folder tabs use the same quiet selected tint; New instance remains on the shelf.
+- Removed the permanent grip, folder label, and second menu beneath instance cards. Move to actions now live in each card's existing overflow menu. Dragging starts from the card body and suppresses navigation after a drop; Play and other buttons remain independent.
+
+### Recessed folder editor drawer
+- Folder creation and management now share one centered, inset drawer beneath the darker folder shelf. The selected folder's chevron toggles its editor; the plus opens the same drawer for creation. Removed the separate rename/remove row.
+- Successful persistence replaces the form with a centered green Saved confirmation for one second, then retracts the drawer. Remove keeps every instance and shows Folder removed. Duplicate names remain editable with validation feedback; storage failures never show success. Escape/cancel restores trigger focus, and closed controls are inert.
+- Reveal and retraction respect reduced motion, Show Animations off, and Ultra Performance. Verified creation, green confirmation, retraction, and unified edit controls visually in an isolated preview.
+
+### 2026-10-15 — Remove instance organization folders
+
+- Removed folder tabs, creation/rename/removal drawers, drag grouping, and Move to menu entries. The library displays all instances directly.
+- Kept the centered title, New instance action, bottom search/loader filter, native folder opening, and Ctrl+K quick switcher. No instance files or saved installations are deleted.
+
+### 2026-10-15 — Top instance search and centered creation
+
+- Moved the complete search and loader-filter bar above the instance cards, retaining the existing search styling and working filters.
+- Centered New instance within the darker shelf directly beneath All Instances. The card grid still scrolls independently.
+
+### 2026-10-15 — Separate top filters from bottom search
+
+- Corrected the previous interpretation: search returns to the bottom with no filter control. Only the loader-filter button moves beside New instance, centered together on the darker header shelf.
+- The existing dropdown now anchors to the shelf bottom rather than the trigger bottom, so options emerge beneath the full darker bar. Search and loader filtering still combine.
+
+### 2026-10-17 — Badge artwork, live pack installs, and rate-limit copy
+
+- Restored the current Bloom logo in the name-tag font at atlas-safe high resolution, with explicit spacing and no duplicate label renderer. Badge-only players are observed independently of cape rendering.
+- Resource packs and shaders can install while Minecraft runs; mods remain blocked. Pack-list directory watchers discover completed files. Download cancellation and errors no longer stop or clear the game's running state.
+- Shared native invocation errors and status notifications normalize HTTP 429/rate-limit errors to “Whoa, slow down! Too many attempts. Please try again later.” Internal URLs and technical payloads are omitted from that message. Native Social 429 handling preserves the rate-limit meaning even for non-JSON responses.

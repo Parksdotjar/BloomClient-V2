@@ -16,15 +16,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(EntityRenderer.class)
 public abstract class BloomNametagMixin {
-    @Inject(method="updateRenderState",at=@At("RETURN"),require=0)
+    @Inject(method="updateRenderState",at=@At("RETURN"))
     private void bloom$badge(Entity entity, EntityRenderState state, float tickProgress, CallbackInfo callback) {
         if (!(entity instanceof AbstractClientPlayerEntity) || state.displayName==null || !BloomPresence.visible(entity.getUuid())) return;
+        // A full-resolution logo and explicit spacer reserve their own horizontal slot.
         // Modify the existing label only. Vanilla owns its background, visibility,
         // centering and depth passes; there is never a second label draw here.
         if (state.displayName.getString().indexOf('\uE042')>=0) return;
-        Text glyph=Text.literal("\uE042").setStyle(Style.EMPTY
+        Text glyph=Text.literal("\uE042\uE043").setStyle(Style.EMPTY
             .withFont(new StyleSpriteSource.Font(Identifier.of("bloom_cosmetics","badge")))
-            .withColor(0xffffff).withBold(false).withoutShadow());
-        state.displayName=Text.empty().append(glyph).append(" ").append(state.displayName);
+            .withColor(0xffffff).withBold(false).withItalic(false)
+            .withUnderline(false).withStrikethrough(false).withObfuscated(false).withoutShadow());
+        state.displayName=Text.empty().append(glyph).append(state.displayName);
     }
 }
