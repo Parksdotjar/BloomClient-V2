@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/invoke";
 import { Check, ChevronLeft, ChevronRight, Shirt, RotateCw } from "lucide-react";
 import { CapePreview, type CapeAnimation } from "./CapePreview";
 import { CapeDisplay } from "./CapeDisplay";

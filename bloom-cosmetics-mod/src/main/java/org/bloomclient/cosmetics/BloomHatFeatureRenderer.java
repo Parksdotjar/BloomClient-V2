@@ -1,3 +1,4 @@
+//? if <26.1 {
 package org.bloomclient.cosmetics;
 
 import net.minecraft.client.render.RenderLayers;
@@ -33,3 +34,5 @@ public final class BloomHatFeatureRenderer extends FeatureRenderer<PlayerEntityR
         matrices.pop();
     }
 }
+
+//?}

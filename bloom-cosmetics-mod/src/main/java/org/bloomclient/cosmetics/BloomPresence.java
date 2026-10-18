@@ -18,6 +18,7 @@ public final class BloomPresence {
         if (visible) BADGES.put(uuid,System.currentTimeMillis()+180_000); else BADGES.remove(uuid);
     }
     public static boolean visible(UUID uuid) {
+        uuid = BloomCapeService.get().observePlayer(uuid);
         Long until=BADGES.get(uuid);
         if (until==null) return false;
         if (until<System.currentTimeMillis()) { BADGES.remove(uuid); return false; }

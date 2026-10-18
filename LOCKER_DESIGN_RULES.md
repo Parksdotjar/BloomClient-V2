@@ -20,7 +20,7 @@ These rules are specific to Bloom Client's Locker and must be read before changi
 - Import saves locally; Use skin explicitly uploads to Minecraft. Offer Classic/Slim arms before applying. Never report success before Minecraft accepts the change.
 - Official capes and Bloom cloaks are independent selections. Bloom's existing mod gives its cloak priority; state this when choosing an official cape rather than silently clearing either selection.
 
-- Improve hierarchy through proportion, alignment, spacing, typography, and the existing OLED surface levels.
+- Improve hierarchy through proportion, alignment, spacing, typography, and the active theme's surface levels (OLED Black or Light).
 - Adjust cape-card size, grid density, preview scale, or panel proportions when the composition feels unbalanced.
 - Keep the player preview floating cleanly on its existing flat surface and keep the centered title unadorned.
 - Reuse existing Bloom controls and interaction behavior; avoid adding non-functional visual objects.

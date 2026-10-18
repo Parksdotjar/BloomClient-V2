@@ -225,11 +225,8 @@ fn create_manifest(instance_id: &str) -> Result<ShareManifest, String> {
     if !config.loader.eq_ignore_ascii_case("fabric") {
         return Err("Pack sharing currently supports Fabric instances only.".into());
     }
-    let loader_version = config
-        .loader_version
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or("Install or select a Fabric loader version before sharing this pack.")?;
+    let loader_version = super::fabric_loader::resolve(&config)?;
+    super::fabric_loader::remember(&config, &loader_version)?;
     let mods = std::path::PathBuf::from(&config.directory).join("mods");
     let mut entries = std::fs::read_dir(&mods)
         .map_err(|_| "This instance has no readable mods folder.".to_string())?

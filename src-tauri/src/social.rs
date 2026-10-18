@@ -44,6 +44,10 @@ fn auth_runtime() -> &'static Mutex<AuthRuntime> {
 }
 
 static SOCIAL_VAULT_IO: OnceLock<Mutex<()>> = OnceLock::new();
+static SOCIAL_CREDENTIAL_IO: OnceLock<Mutex<()>> = OnceLock::new();
+fn social_credential_io() -> &'static Mutex<()> {
+    SOCIAL_CREDENTIAL_IO.get_or_init(|| Mutex::new(()))
+}
 fn social_vault_io() -> &'static Mutex<()> {
     SOCIAL_VAULT_IO.get_or_init(|| Mutex::new(()))
 }
@@ -608,6 +612,9 @@ fn refresh_tokens(tokens: &SavedTokens) -> Result<SavedTokens, String> {
         .json(&serde_json::json!({ "refreshToken": tokens.refresh_token }))
         .send()
         .map_err(|error| format!("Bloom Social could not refresh your sign-in: {error}"))?;
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
+    }
     if !response.status().is_success() {
         return Err("Your Bloom Social sign-in expired. Sign in again.".into());
     }
@@ -622,6 +629,7 @@ fn refresh_tokens(tokens: &SavedTokens) -> Result<SavedTokens, String> {
 }
 
 fn current_tokens() -> Result<SavedTokens, String> {
+    let _guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
     let tokens = load_tokens().ok_or_else(|| "Sign in to your Bloom account first.".to_string())?;
     if tokens.refresh_expires_at <= timestamp() {
         return Err("Your Bloom Social sign-in expired. Sign in again.".into());
@@ -633,23 +641,62 @@ fn current_tokens() -> Result<SavedTokens, String> {
     }
 }
 
+fn refresh_rejected_tokens(name: &str, rejected: &SavedTokens) -> Result<SavedTokens, String> {
+    let _guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
+    if profile_secret("tokens") != name {
+        return Err("The Bloom account changed. Try sharing again.".into());
+    }
+    let current = load_tokens().ok_or("Sign in to your Bloom account first.")?;
+    if current.refresh_expires_at <= timestamp() {
+        return Err("Your Bloom Social sign-in expired. Sign in again.".into());
+    }
+    // Another request may already have rotated this session while /me was in flight.
+    if current.access_token != rejected.access_token && current.access_expires_at > timestamp() + 30_000 {
+        return Ok(current);
+    }
+    refresh_tokens(&current)
+}
+
+fn authenticated_response(
+    tokens: SavedTokens,
+    mut send: impl FnMut(&SavedTokens) -> Result<reqwest::blocking::Response, String>,
+    renew: impl FnOnce(&SavedTokens) -> Result<SavedTokens, String>,
+) -> Result<reqwest::blocking::Response, String> {
+    let response = send(&tokens)?;
+    if response.status() != reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(response);
+    }
+    drop(response);
+    // Retry authentication once, never loop on revoked/expired credentials.
+    let renewed = renew(&tokens)?;
+    send(&renewed)
+}
+
+fn authenticated_request(
+    method: reqwest::Method,
+    route: &str,
+    body: Option<serde_json::Value>,
+) -> Result<reqwest::blocking::Response, String> {
+    let name = profile_secret("tokens");
+    let tokens = current_tokens()?;
+    let client = http_client()?;
+    authenticated_response(tokens, |tokens| {
+        let mut request = client.request(method.clone(), format!("{SOCIAL_API}{route}")).bearer_auth(&tokens.access_token);
+        if let Some(body) = &body { request = request.json(body); }
+        request.send().map_err(|error| format!("Bloom Social is unavailable: {error}"))
+    }, |tokens| refresh_rejected_tokens(&name, tokens))
+}
+
 fn request<T: DeserializeOwned>(
     method: reqwest::Method,
     route: &str,
     body: Option<serde_json::Value>,
 ) -> Result<T, String> {
-    let tokens = current_tokens()?;
-    let client = http_client()?;
-    let mut request = client
-        .request(method, format!("{SOCIAL_API}{route}"))
-        .bearer_auth(tokens.access_token);
-    if let Some(body) = body {
-        request = request.json(&body);
-    }
-    let response = request
-        .send()
-        .map_err(|error| format!("Bloom Social is unavailable: {error}"))?;
+    let response = authenticated_request(method, route, body)?;
     let status = response.status();
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
+    }
     if !status.is_success() {
         let value: serde_json::Value = response.json().unwrap_or_default();
         return Err(value
@@ -666,17 +713,10 @@ fn request_empty(
     route: &str,
     body: Option<serde_json::Value>,
 ) -> Result<(), String> {
-    let tokens = current_tokens()?;
-    let client = http_client()?;
-    let mut request = client
-        .request(method, format!("{SOCIAL_API}{route}"))
-        .bearer_auth(tokens.access_token);
-    if let Some(body) = body {
-        request = request.json(&body);
+    let response = authenticated_request(method, route, body)?;
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
     }
-    let response = request
-        .send()
-        .map_err(|error| format!("Bloom Social is unavailable: {error}"))?;
     if response.status().is_success() {
         Ok(())
     } else {
@@ -826,6 +866,9 @@ fn upload_blob(friend_id: &str, ciphertext: Vec<u8>) -> Result<serde_json::Value
         .body(ciphertext)
         .send()
         .map_err(|error| format!("Bloom could not upload the encrypted screenshot: {error}"))?;
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
+    }
     if !response.status().is_success() {
         return Err("Bloom could not store the encrypted screenshot.".into());
     }
@@ -839,6 +882,9 @@ fn download_blob(blob_id: &str) -> Result<Vec<u8>, String> {
         .bearer_auth(tokens.access_token)
         .send()
         .map_err(|error| format!("Bloom could not download an encrypted screenshot: {error}"))?;
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
+    }
     if !response.status().is_success() {
         return Err("The encrypted screenshot is unavailable.".into());
     }
@@ -1008,6 +1054,9 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
             auth_runtime().lock().map_err(|_| "The sign-in manager is busy.".to_string())?.attempt = None;
             return Err("Bloom account connection was cancelled.".into());
         }
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
+        }
         if !response.status().is_success() {
             return Err("Bloom could not check that account approval. Try connecting again.".into());
         }
@@ -1017,12 +1066,16 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
         }
         let code = approval.code;
         let profile = approval.profile;
+        let credential_guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
         activate_profile(&profile, false)?;
         let (curve, signing) = identity_keys()?;
         let response = http_client()?.post(format!("{SOCIAL_API}/native/exchange")).json(&serde_json::json!({
             "code": code, "verifier": verifier, "deviceId": device_id()?, "deviceName": "Bloom Client on Windows",
             "curve25519Key": curve, "ed25519Key": signing,
         })).send().map_err(|error| format!("Bloom could not finish sign-in: {error}"))?;
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
+        }
         if !response.status().is_success() { return Err("Bloom could not verify that sign-in. Please try again.".into()); }
         let bundle: TokenBundle = response.json().map_err(|error| error.to_string())?;
         if bundle.user.as_ref().map(|user| user.id.as_str()) != Some(profile.as_str()) {
@@ -1032,6 +1085,7 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
         let mut vault = load_vault()?;
         vault.profile = bundle.user.clone();
         save_vault(&vault)?;
+        drop(credential_guard);
         if let Err(error) = upload_prekeys() {
             eprintln!("[Bloom Social] signed in, but prekey upload will retry later: {error}");
         }
@@ -1040,48 +1094,47 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
     }).await.map_err(|error| error.to_string())?
 }
 
+fn restore_session() -> Result<SocialSessionState, String> {
+    let signed_out = || SocialSessionState { signed_in: false, user: None, needs_username: false };
+    if load_tokens().is_none() {
+        return Ok(signed_out());
+    }
+    let result = request::<MeResponse>(reqwest::Method::GET, "/me", None);
+    let _vault_guard = social_vault_io().lock().map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+    let _credential_guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
+    // Sign-out may have completed while /me was in flight. Never reactivate that profile.
+    if load_tokens().is_none() {
+        return Ok(signed_out());
+    }
+    match result {
+        Ok(me) => {
+            if active_profile().is_none() {
+                activate_profile(&me.user.id, true)?;
+            }
+            if active_profile().as_deref() != Some(me.user.id.as_str()) {
+                return Err("The Bloom account changed. Try again.".into());
+            }
+            let mut vault = load_vault()?;
+            vault.profile = Some(me.user.clone());
+            save_vault(&vault)?;
+            Ok(SocialSessionState { signed_in: true, user: Some(me.user), needs_username: me.needs_username })
+        }
+        Err(error) => {
+            // Preserve the last verified profile during temporary service/network failures.
+            let cached = load_vault()?.profile;
+            if cached.is_some() {
+                eprintln!("[Bloom Social] session refresh deferred: {error}");
+                Ok(SocialSessionState { signed_in: true, user: cached, needs_username: false })
+            } else {
+                Err(error)
+            }
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn social_session_state() -> Result<SocialSessionState, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        if load_tokens().is_none() {
-            return Ok(SocialSessionState {
-                signed_in: false,
-                user: None,
-                needs_username: false,
-            });
-        }
-        match request::<MeResponse>(reqwest::Method::GET, "/me", None) {
-            Ok(me) => {
-                if active_profile().is_none() {
-                    activate_profile(&me.user.id, true)?;
-                }
-                let mut vault = load_vault()?;
-                vault.profile = Some(me.user.clone());
-                save_vault(&vault)?;
-                Ok(SocialSessionState {
-                    signed_in: true,
-                    user: Some(me.user),
-                    needs_username: me.needs_username,
-                })
-            }
-            Err(error) => {
-                // A temporary API or network failure must not make the client
-                // appear signed out. Preserve the last verified local profile;
-                // the snapshot refresh will surface the connectivity problem.
-                let cached = load_vault()?.profile;
-                if cached.is_some() {
-                    eprintln!("[Bloom Social] session refresh deferred: {error}");
-                    Ok(SocialSessionState {
-                        signed_in: true,
-                        user: cached,
-                        needs_username: false,
-                    })
-                } else {
-                    Err(error)
-                }
-            }
-        }
-    })
+    tauri::async_runtime::spawn_blocking(restore_session)
     .await
     .map_err(|error| error.to_string())?
 }
@@ -1555,20 +1608,24 @@ pub async fn social_acknowledge_identity(
 
 #[tauri::command]
 pub async fn social_share_context() -> Result<SocialShareContext, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let me: MeResponse = request(reqwest::Method::GET, "/me", None)?;
-        let friends: FriendsResponse = request(reqwest::Method::GET, "/friends", None)?;
-        Ok(SocialShareContext {
-            session: SocialSessionState {
-                signed_in: true,
-                user: Some(me.user),
-                needs_username: me.needs_username,
-            },
-            friends: friends.friends,
-        })
-    })
+    tauri::async_runtime::spawn_blocking(|| share_context_with(restore_session, || request(reqwest::Method::GET, "/friends", None)))
     .await
     .map_err(|error| error.to_string())?
+}
+
+fn share_context_with(
+    restore: impl FnOnce() -> Result<SocialSessionState, String>,
+    friends: impl FnOnce() -> Result<FriendsResponse, String>,
+) -> Result<SocialShareContext, String> {
+    let session = restore()?;
+    if !session.signed_in || session.user.is_none() {
+        return Err("Sign in to your Bloom account before sharing an instance.".into());
+    }
+    if session.needs_username {
+        return Err("Choose your Bloom username in Social before sharing an instance.".into());
+    }
+    let friends = friends()?;
+    Ok(SocialShareContext { session, friends: friends.friends })
 }
 
 #[tauri::command]
@@ -2462,6 +2519,7 @@ pub async fn social_pin_group_message(
 #[tauri::command]
 pub async fn social_sign_out() -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(|| {
+        let _guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
         let token_name = profile_secret("tokens");
         delete_secret(&token_name)?;
         // Clear the pre-profile migration credential too, otherwise it can be
@@ -2476,6 +2534,78 @@ pub async fn social_sign_out() -> Result<(), String> {
 #[cfg(test)]
 mod security_tests {
     use super::*;
+
+    fn test_tokens(access: &str) -> SavedTokens {
+        SavedTokens { access_token: access.into(), refresh_token: "test-refresh".into(), access_expires_at: u64::MAX, refresh_expires_at: u64::MAX }
+    }
+
+    fn test_response(status: u16) -> reqwest::blocking::Response {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            let mut buffer = [0; 2048];
+            stream.read(&mut buffer).unwrap();
+            write!(stream, "HTTP/1.1 {status} Test\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}").unwrap();
+        });
+        let response = reqwest::blocking::Client::builder().no_proxy().timeout(Duration::from_secs(3)).build().unwrap().get(format!("http://{address}")).send().unwrap();
+        server.join().unwrap();
+        response
+    }
+
+    #[test]
+    fn cold_sharing_restores_the_saved_session_before_loading_friends() {
+        let restored = std::cell::Cell::new(false);
+        let context = share_context_with(|| {
+            restored.set(true);
+            Ok(SocialSessionState { signed_in: true, needs_username: false, user: Some(SocialUser { id: "test-user".into(), username: Some("test".into()), display_name: None, minecraft_uuid: None, minecraft_username: None, avatar_url: None, provider: None }) })
+        }, || {
+            assert!(restored.get(), "sharing must restore the account without opening Social");
+            Ok(FriendsResponse { friends: vec![] })
+        }).unwrap();
+        assert!(context.session.signed_in);
+        assert_eq!(context.session.user.unwrap().id, "test-user");
+    }
+
+    #[test]
+    fn signed_out_sharing_does_not_load_friends_or_restore_a_removed_account() {
+        let error = share_context_with(|| Ok(SocialSessionState { signed_in: false, needs_username: false, user: None }), || panic!("signed-out requests must stop")).err().unwrap();
+        assert!(error.contains("Sign in"));
+        assert_eq!(share_context_with(|| Err("offline".into()), || panic!("restoration failed")).err().unwrap(), "offline");
+    }
+
+    #[test]
+    fn stale_access_tokens_refresh_once_and_retry_the_original_request() {
+        let calls = std::cell::Cell::new(0);
+        let response = authenticated_response(test_tokens("old"), |tokens| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 { assert_eq!(tokens.access_token, "old"); Ok(test_response(401)) }
+            else { assert_eq!(tokens.access_token, "renewed"); Ok(test_response(200)) }
+        }, |tokens| { assert_eq!(tokens.access_token, "old"); Ok(test_tokens("renewed")) }).unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[test]
+    fn authentication_retry_is_bounded_and_revoked_sessions_stay_rejected() {
+        let calls = std::cell::Cell::new(0);
+        let renewals = std::cell::Cell::new(0);
+        let response = authenticated_response(test_tokens("old"), |_| { calls.set(calls.get() + 1); Ok(test_response(401)) }, |_| { renewals.set(renewals.get() + 1); Ok(test_tokens("renewed")) }).unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
+        assert_eq!(calls.get(), 2);
+        assert_eq!(renewals.get(), 1);
+        let error = authenticated_response(test_tokens("old"), |_| Ok(test_response(401)), |_| Err("session expired".into())).err().unwrap();
+        assert_eq!(error, "session expired");
+    }
+
+    #[test]
+    fn success_and_connection_errors_do_not_rotate_credentials() {
+        assert_eq!(authenticated_response(test_tokens("valid"), |_| Ok(test_response(200)), |_| panic!("already authenticated")).unwrap().status(), reqwest::StatusCode::OK);
+        assert_eq!(authenticated_response(test_tokens("valid"), |_| Err("offline".into()), |_| panic!("network errors are not authentication rejection")).err().unwrap(), "offline");
+        assert_eq!(authenticated_response(test_tokens("valid"), |_| Ok(test_response(503)), |_| panic!("service failures are not authentication rejection")).unwrap().status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+    }
 
     fn device(id: &str, curve: &str, signing: &str) -> DeviceIdentity {
         DeviceIdentity {

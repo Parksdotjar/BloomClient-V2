@@ -1,33 +1,79 @@
-plugins {
-    id "net.fabricmc.fabric-loom-remap" version "${loom_version}"
-}
+def minecraftVersion = stonecutter.current.version
+def modern = stonecutter.eval(minecraftVersion, '>=26.1')
+apply plugin: modern ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap'
 
 version = project.mod_version
 group = project.maven_group
 
 base {
-    archivesName = project.archives_base_name
+    archivesName = "bloom-cosmetics-${minecraftVersion}"
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    minecraft "com.mojang:minecraft:${minecraftVersion}"
+    if (modern) implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    else {
+        mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+        modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    }
 }
 
 processResources {
     inputs.property "version", project.version
+    inputs.property 'minecraft', minecraftVersion
+    inputs.property 'java', modern ? 25 : 21
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand version: project.version, minecraft: minecraftVersion, java: modern ? 25 : 21
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
-    it.options.release = 21
+    it.options.release = modern ? 25 : 21
     it.options.encoding = "UTF-8"
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    toolchain.languageVersion = JavaLanguageVersion.of(modern ? 25 : 21)
+}
+
+stonecutter {
+    replacements.string {
+        direction = modern
+        replace('net.minecraft.client.MinecraftClient', 'net.minecraft.client.Minecraft')
+        replace('net.minecraft.client.network.AbstractClientPlayerEntity', 'net.minecraft.client.player.AbstractClientPlayer')
+        replace('net.minecraft.client.texture.NativeImageBackedTexture', 'net.minecraft.client.renderer.texture.DynamicTexture')
+        replace('net.minecraft.client.texture.NativeImage', 'com.mojang.blaze3d.platform.NativeImage')
+        replace('net.minecraft.util.Identifier', 'net.minecraft.resources.Identifier')
+        replace('net.minecraft.entity.player.SkinTextures', 'net.minecraft.world.entity.player.PlayerSkin')
+        replace('net.minecraft.util.AssetInfo', 'net.minecraft.core.ClientAsset')
+        replace('net.minecraft.client.render.entity.EntityRenderer', 'net.minecraft.client.renderer.entity.EntityRenderer')
+        replace('net.minecraft.client.render.entity.state.EntityRenderState', 'net.minecraft.client.renderer.entity.state.EntityRenderState')
+        replace('net.minecraft.entity.Entity', 'net.minecraft.world.entity.Entity')
+        replace('net.minecraft.text.Text', 'net.minecraft.network.chat.Component')
+        replace('net.minecraft.text.StyleSpriteSource', 'net.minecraft.network.chat.FontDescription')
+        replace('net.minecraft.text.Style', 'net.minecraft.network.chat.Style')
+        replace('MinecraftClient', 'Minecraft')
+        replace('AbstractClientPlayerEntity.class', 'AbstractClientPlayer.class')
+        replace('AbstractClientPlayerEntity player', 'AbstractClientPlayer player')
+        replace('(AbstractClientPlayerEntity)', '(AbstractClientPlayer)')
+        replace('instanceof AbstractClientPlayerEntity', 'instanceof AbstractClientPlayer')
+        replace('NativeImageBackedTexture', 'DynamicTexture')
+        replace('SkinTextures', 'PlayerSkin')
+        replace('AssetInfo.TextureAsset', 'ClientAsset.Texture')
+        replace('StyleSpriteSource.Font', 'FontDescription.Resource')
+        replace('.withUnderline(', '.withUnderlined(')
+        replace('Text.literal', 'Component.literal')
+        replace('Text.empty', 'Component.empty')
+        replace('Text glyph', 'Component glyph')
+        replace('Identifier.of(', 'Identifier.fromNamespaceAndPath(')
+        replace('.getSession().getUuidOrNull()', '.getUser().getProfileId()')
+        replace('.getUuid()', '.getUUID()')
+        replace('.world', '.level')
+        replace('.getTextureManager().registerTexture(', '.getTextureManager().register(')
+        replace('.destroyTexture(', '.release(')
+        replace('.setColorArgb(', '.setPixel(')
+        replace('.getColorArgb(', '.getPixel(')
+        replace('state.displayName', 'state.nameTag')
+        replace('method="updateRenderState"', 'method="extractRenderState"')
+    }
 }

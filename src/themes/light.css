@@ -1,0 +1,75 @@
+/* Light uses its own surface, ink, and slate depth palette. OLED retains literal fallbacks. */
+:root { color-scheme: dark; }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page: #f5f6f8;
+  --sidebar-surface: #f9fafb;
+  --panel: #ffffff;
+  --panel-strong: #eef0f4;
+  --rail: #f1f3f6;
+  --line: #e1e4e9;
+  --border: #dce0e6;
+  --muted: #626b77;
+  --text: #171b22;
+  --control: #ffffff;
+  --input: #ffffff;
+  --scroll-track: #f3f4f6;
+  --scroll-thumb: #c4cad3;
+  --accent-ink: color-mix(in srgb, var(--accent) 40%, #101114);
+  --theme-ink: #171b22;
+  --theme-on-accent: #171b22;
+  --theme-muted-ink: #626b77;
+  --theme-base: #f5f6f8;
+  --theme-surface: #ffffff;
+  --theme-inset: #f0f2f5;
+  --theme-raised: #e7eaf0;
+  --theme-hover-ink: #626d7b;
+  --theme-edge: #d8dde5;
+  --theme-outline-ink: #788392;
+  --theme-shadow: rgb(41 53 73 / .09);
+  --theme-shadow-soft: rgb(41 53 73 / .045);
+  --theme-highlight: rgb(255 255 255 / .65);
+  --theme-wash: rgb(56 68 88 / .045);
+  --theme-glass: rgb(255 255 255 / .85);
+  --theme-overlay: rgb(34 42 56 / .25);
+  --theme-success-ink: #17643e;
+  --theme-success-surface: #e4f3e9;
+  --theme-danger-ink: #a3293a;
+  --theme-danger-surface: #fbe9ec;
+  --theme-warning-ink: #835013;
+  --theme-warning-surface: #fff2d7;
+  --theme-info-ink: #245c9d;
+  --theme-info-surface: #e6eefb;
+  --theme-violet-ink: #66429b;
+  --theme-violet-surface: #f0eafb;
+}
+:root[data-theme="light"] .sidebar {
+  background: radial-gradient(ellipse at 0 0, #e3e6eb 0, transparent 46%), var(--sidebar-surface);
+}
+:root[data-theme="light"] .content {
+  background: radial-gradient(ellipse at 100% 0, #e9ecf1 0, transparent 40%), var(--page);
+}
+:root[data-theme="light"] nav button.active {
+  color: var(--text);
+  background: linear-gradient(135deg, #ffffff 0%, #f0f2f5 65%, #dfe3e9 100%);
+}
+:root[data-theme="light"] :focus-visible { outline-color: var(--accent-ink); }
+:root[data-theme="light"] .toggle:not(.on) span,
+:root[data-theme="light"] .utility-toggle:not(.on) span { background: #626b77; }
+/* Image controls and color sampling retain real pixel/spectrum colors. */
+:root[data-theme="light"] :is(.profile-settings-avatar, .instance-icon-picker, .background-image-picker.has-image) > span { color: #fff; }
+:root[data-theme="light"] :is(.profile-settings-avatar, .instance-icon-picker, .background-image-picker)::after { background: #000; }
+:root[data-theme="light"] :is(.onboarding-brand img, .onboarding-step-logo, .locker-state-mark img, .social-auth-flower, .social-invite-art img[src$="bloom-logo.png"]) { filter: brightness(0); }
+:root[data-theme="light"] .accent-saturation-field i,
+:root[data-theme="light"] .accent-hue-control input[type="range"]::-webkit-slider-thumb,
+:root[data-theme="light"] .accent-hue-control input[type="range"]::-moz-range-thumb { box-shadow: 0 0 0 1px #556172; }
+:root[data-theme="light"] .comparison-canvas,
+:root[data-theme="light"] .comparison-left { background: #f0f2f5; }
+:root[data-theme="light"] .comparison-divider { background: #566172; box-shadow: none; }
+:root[data-theme="light"] .comparison-handle span { background: #ffffffed; border-color: #566172; color: #171b22; }
+:root[data-theme="light"] .comparison-side { background: #ffffffdf; color: #171b22; }
+:root[data-theme="light"] .launch-toast { background: var(--theme-success-surface); border-color: #bbdcca; }
+:root[data-theme="light"] .launch-toast.error { background: var(--theme-danger-surface); border-color: #ecc2c9; }
+:root[data-theme="light"] .launch-toast > span { color: var(--text); }
+/* Explicitly chosen custom sidebar ink still wins when a custom background is enabled. */
+:root[data-theme="light"] .app-shell:not([data-custom-background="on"]) { --custom-sidebar-text: var(--text); }

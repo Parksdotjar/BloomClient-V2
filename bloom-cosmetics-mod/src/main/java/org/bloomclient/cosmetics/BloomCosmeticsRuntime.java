@@ -116,6 +116,7 @@ final class BloomCosmeticsRuntime {
         return result;
     }
 
+    //? if <26.1 {
     static CompletableFuture<ModelTexture> loadModelTexture(
         String category,
         String cosmeticId,
@@ -189,6 +190,8 @@ final class BloomCosmeticsRuntime {
             });
     }
 
+    //?}
+
     static String compactUuid(UUID uuid) {
         return uuid.toString().replace("-", "").toLowerCase(Locale.ROOT);
     }
@@ -214,5 +217,7 @@ final class BloomCosmeticsRuntime {
         return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_.-]", "-");
     }
 
+    //? if <26.1 {
     record ModelTexture(BloomHatMesh mesh, Identifier texture) {}
+    //?}
 }

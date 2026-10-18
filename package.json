@@ -11,6 +11,7 @@
     "dev:tauri": "npm run build:cosmetics && npm run dev",
     "typecheck": "tsc --noEmit",
     "test:social-state": "node --experimental-strip-types --test tests/social-message-state.test.ts",
+    "test:theme": "node scripts/audit-theme.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/invoke";
 import { SkinViewer } from "skinview3d";
 
 export type CapeAnimation = { atlasUrl: string; frameCount: number; columns: number; rows: number; frameWidth: number; frameHeight: number; fps: number; loop: boolean };

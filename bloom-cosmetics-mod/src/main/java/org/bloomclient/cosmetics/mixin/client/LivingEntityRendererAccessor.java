@@ -1,3 +1,4 @@
+//? if <26.1 {
 package org.bloomclient.cosmetics.mixin.client;
 
 import net.minecraft.client.render.entity.LivingEntityRenderer;
@@ -10,3 +11,5 @@ public interface LivingEntityRendererAccessor {
     @Invoker("addFeature")
     boolean bloom$addFeature(FeatureRenderer<?, ?> renderer);
 }
+
+//?}

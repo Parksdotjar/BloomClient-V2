@@ -1,3 +1,4 @@
+//? if <26.1 {
 package org.bloomclient.cosmetics;
 
 import com.google.gson.JsonArray;
@@ -199,3 +200,5 @@ public final class BloomHatService {
         boolean hideWithHelmet
     ) {}
 }
+
+//?}

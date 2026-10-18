@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/invoke";
 import { SkinViewer } from "skinview3d";
 
 const cache = new Map<string, string>();

@@ -5,8 +5,8 @@ src-tauri/target/
 src-tauri/gen/
 *.log
 *.tsbuildinfo
-/src-tauri/resources/bloom-cosmetics-1.21.11.jar
-/src-tauri/resources/bloom-cosmetics-1.21.11.sha256
+/src-tauri/resources/bloom-cosmetics-*.jar
+/src-tauri/resources/bloom-cosmetics-*.sha256
 # Unused local wordmark experiments from the retired sidebar brand treatment.
 /public/bloom-wordmark.png
 /public/bloom-wordmark-v2.png
