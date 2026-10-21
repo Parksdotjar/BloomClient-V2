@@ -25,6 +25,14 @@ These rules are specific to Bloom Client's Locker and must be read before changi
 - Keep the player preview floating cleanly on its existing flat surface and keep the centered title unadorned.
 - Reuse existing Bloom controls and interaction behavior; avoid adding non-functional visual objects.
 
+## Loading and refresh stability
+
+- Hidden card actions stay fully hidden until hover or keyboard focus, including while disabled for account loading or saving. Disabled opacity must never override the resting reveal state and paint Equip/Unequip over the item name.
+- Cached catalog contents have a valid selected preview immediately. Refresh keeps the selected item, confirmed equipped marker and an edited Classic/Slim choice when the item still exists. Imported skins use their recorded arm model; missing selections fall back to an available item and pagination clamps when a catalog shrinks.
+- Show refresh progress on the existing refresh icon and prevent overlapping refresh/equip actions. Apply/equip indicators change only after the native operation succeeds.
+- Card columns respond to the catalog's available width, not just the window width. Keep cards readable beside the preview; the preview keeps its own height and stays alongside long desktop grids rather than stretching with every row. The stacked compact layout scrolls normally.
+- Hover/focus reveals respect reduced motion, Show Animations off and Ultra Performance. Keep these cases in `tests/locker-ui.mjs`.
+
 ## Rejected treatment
 
 The October 2026 experiment that added a hanger/title lockup, a rail behind cape cards, a circular preview halo, and a fake floor shadow was rejected and fully reverted. Do not recreate or reinterpret that treatment.

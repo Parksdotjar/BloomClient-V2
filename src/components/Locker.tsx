@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "../services/invoke";
 import { Check, ChevronLeft, ChevronRight, Shirt, RotateCw } from "lucide-react";
 import { CapePreview, type CapeAnimation } from "./CapePreview";
 import { CapeDisplay } from "./CapeDisplay";
 import "./locker.css";
+import "./connected-toolbar.css";
 import { MinecraftWardrobe } from "./MinecraftWardrobe";
 
 type Cape = { id: string; name: string; textureUrl: string; textureRevision: string; animation?: CapeAnimation | null };
@@ -15,9 +16,10 @@ window.addEventListener("bloom-clear-transient-caches", () => { cloakCatalogMemo
 
 function CloakCollection({ profile, motion, onNotify }: { profile: Profile | null; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void }) {
   const [items, setItems] = useState<Cape[]>(() => cloakCatalogMemoryCache || []);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() => cloakCatalogMemoryCache?.[0]?.id || null);
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(!cloakCatalogMemoryCache);
+  const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
@@ -30,13 +32,14 @@ function CloakCollection({ profile, motion, onNotify }: { profile: Profile | nul
     const current = ++generation.current;
     let stopped = false;
     if (!cloakCatalogMemoryCache) setLoading(true);
-    setError(""); setMe(null); setBusy(false); setPage(1);
+    setRefreshing(true); setError("");
     void (async () => {
       const catalog = await api<{ items: Cape[] }>("GET", "/v1/capes");
       if (stopped) return;
       cloakCatalogMemoryCache = catalog.items;
       setItems(catalog.items);
       setSelected(old => catalog.items.some(cape => cape.id === old) ? old : catalog.items[0]?.id || null);
+      setPage(old => Math.min(old, Math.max(1, Math.ceil(catalog.items.length / 9))));
       if (profile) {
         try {
           const result = await api<Me>("GET", "/v1/cosmetics/me", profile.id);
@@ -54,7 +57,7 @@ function CloakCollection({ profile, motion, onNotify }: { profile: Profile | nul
         notify.current(String(reason), "error");
       }
     })
-      .finally(() => { if (!stopped && current === generation.current) setLoading(false); });
+      .finally(() => { if (!stopped && current === generation.current) { setLoading(false); setRefreshing(false); } });
     return () => { stopped = true; ++generation.current; };
   }, [profile?.id, refresh]);
 
@@ -77,7 +80,7 @@ function CloakCollection({ profile, motion, onNotify }: { profile: Profile | nul
       notify.current("Sign in with Minecraft to equip a cloak.", "error");
       return;
     }
-    if (!me || busy) return;
+    if (!me || busy || refreshing) return;
     const capeId = me.capeId === item.id ? null : item.id;
     const current = generation.current;
     void action(async () => {
@@ -103,7 +106,7 @@ function CloakCollection({ profile, motion, onNotify }: { profile: Profile | nul
         <button className="locker-state-action" onClick={() => setRefresh(value => value + 1)}><RotateCw size={15} />Try again</button>
       </div> : <div className="locker-content">
         <div className="locker-collection">
-          <div className="locker-collection-heading"><h2>Cloaks</h2><div><span>{items.length}</span><button className="locker-refresh" aria-label="Refresh cloaks" title="Refresh cloaks" disabled={busy || loading} onClick={() => setRefresh(value => value + 1)}><RotateCw size={16} /></button></div></div>
+          <div className="locker-collection-heading"><h2>Cloaks</h2><div><span>{items.length}</span><button className="locker-refresh" aria-label="Refresh cloaks" title="Refresh cloaks" disabled={busy || refreshing} onClick={() => setRefresh(value => value + 1)}><RotateCw size={16} className={refreshing ? "spin" : ""} /></button></div></div>
           <div className="locker-grid">
             {items.slice((page - 1) * 9, page * 9).map(item => {
               const isSelected = selected === item.id;
@@ -112,7 +115,7 @@ function CloakCollection({ profile, motion, onNotify }: { profile: Profile | nul
                 <button className="locker-art" aria-label={`Preview ${item.name}`} aria-pressed={isSelected}><CapeDisplay texture={item.textureUrl} animation={item.animation} motion={motion} /></button>
                 <div className="locker-cape-name">
                   <div className="locker-cape-identity"><strong>{item.name}</strong>{isEquipped && <span className="locker-equipped-mark" aria-label="Equipped" title="Equipped"><Check size={14} strokeWidth={3.2} /></span>}</div>
-                  <button className={`locker-card-equip ${isEquipped ? "equipped" : ""}`} disabled={busy || Boolean(profile && !me)} onClick={(event) => { event.stopPropagation(); equipItem(item); }}>
+                  <button className={`locker-card-equip ${isEquipped ? "equipped" : ""}`} disabled={busy || refreshing || Boolean(profile && !me)} onClick={(event) => { event.stopPropagation(); equipItem(item); }}>
                     {!profile ? "Sign in" : busy && isSelected ? "Saving…" : isEquipped ? "Unequip" : "Equip cloak"}
                   </button>
                 </div>
@@ -130,7 +133,7 @@ function CloakCollection({ profile, motion, onNotify }: { profile: Profile | nul
           <div className="locker-preview"><CapePreview texture={cape?.textureUrl} animation={cape?.animation} skinUuid={profile?.id} motion={motion} /></div>
           <div className="locker-detail-base">
             <div className="locker-detail-copy"><small>Selected cloak</small><h2>{cape?.name}</h2></div>
-            {!profile ? <div className="locker-signin-note">Sign in to equip this cloak.</div> : <button className={`locker-equip ${equipped ? "equipped" : ""}`} disabled={busy || !cape || !me} onClick={() => { if (cape) equipItem(cape); }}>{busy ? "Saving…" : equipped ? "Unequip" : "Equip cloak"}</button>}
+            {!profile ? <div className="locker-signin-note">Sign in to equip this cloak.</div> : <button className={`locker-equip ${equipped ? "equipped" : ""}`} disabled={busy || refreshing || !cape || !me} onClick={() => { if (cape) equipItem(cape); }}>{busy ? "Saving…" : equipped ? "Unequip" : "Equip cloak"}</button>}
           </div>
         </aside>
       </div>}
@@ -143,7 +146,9 @@ export function Locker(props: { profile: Profile | null; motion: boolean; onNoti
   return <section className="locker-workspace">
     <div className="locker-heading-shell">
       <header className="locker-platform"><h1>Locker</h1></header>
-      <div className="locker-tab-shelf"><div className="locker-tabs" role="tablist" aria-label="Locker category">
+      <div className="locker-tab-shelf"><div className="locker-tabs toolbar-segments" role="tablist" aria-label="Locker category"
+        style={{ "--segments": tabs.length, "--selected": tabs.indexOf(tab) } as CSSProperties}>
+        <i aria-hidden="true" />
         {tabs.map((name, index) => <button key={name} id={`locker-tab-${name}`} role="tab" aria-selected={tab === name} aria-controls="locker-panel" tabIndex={tab === name ? 0 : -1} onClick={() => setTab(name)} onKeyDown={event => {
           const offset = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
           if (!offset && event.key !== "Home" && event.key !== "End") return;
@@ -154,7 +159,7 @@ export function Locker(props: { profile: Profile | null; motion: boolean; onNoti
       </div></div>
     </div>
     <div className="locker-recess" id="locker-panel" role="tabpanel" aria-labelledby={`locker-tab-${tab}`}>
-      {tab === "cloaks" ? <CloakCollection key={props.profile?.id || "guest"} {...props} /> : props.profile ? <MinecraftWardrobe key={props.profile.id + tab} accountId={props.profile.id} tab={tab} motion={props.motion} onNotify={props.onNotify} /> : <div className="locker-state"><h2>Sign in to Minecraft</h2><p>Your account’s {tab} will appear here.</p></div>}
+      <div key={tab} className="toolbar-copy">{tab === "cloaks" ? <CloakCollection key={props.profile?.id || "guest"} {...props} /> : props.profile ? <MinecraftWardrobe key={props.profile.id + tab} accountId={props.profile.id} tab={tab} motion={props.motion} onNotify={props.onNotify} /> : <div className="locker-state"><h2>Sign in to Minecraft</h2><p>Your account’s {tab} will appear here.</p></div>}</div>
     </div>
   </section>;
 }

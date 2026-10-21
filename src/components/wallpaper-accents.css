@@ -1,0 +1,10 @@
+.setting-row:has(.accent-picker-stack) { flex-wrap: wrap; }
+.accent-picker-stack { min-width: 0; max-width: 100%; margin-left: auto; }
+.accent-picker-stack > .accent-picks { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; padding: 5px; }
+.wallpaper-accents { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.wallpaper-accents > span { color: var(--muted); font-size: 11px; }
+.wallpaper-accents .wallpaper-accent-swatches { gap: 8px; }
+.wallpaper-accents .wallpaper-accent-swatches { flex-wrap: wrap; justify-content: flex-end; padding: 5px; }
+.wallpaper-accents .wallpaper-accent-swatches > button { width: 20px; min-width: 20px; max-width: 20px; height: 20px; min-height: 20px; max-height: 20px; flex: 0 0 20px; }
+.wallpaper-accent-swatches > button::after { inset: -5px; }
+.wallpaper-accent-swatches > button:focus-visible { outline: 2px solid var(--theme-ink, #f1f4f1); outline-offset: 3px; }

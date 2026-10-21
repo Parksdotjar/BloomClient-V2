@@ -17,9 +17,10 @@ export function MinecraftWardrobe({ accountId, tab, motion, onNotify }: Props) {
   const [data, setData] = useState<Wardrobe | null>(cachedWardrobe);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(!cachedWardrobe);
+  const [refreshing, setRefreshing] = useState(true);
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState(() => tab === "skins" ? (cachedWardrobe?.currentSkin ? "current" : cachedWardrobe?.skins[0]?.id || "") : cachedWardrobe?.capes.find(cape => cape.active)?.id || cachedWardrobe?.capes[0]?.id || "");
-  const [variant, setVariant] = useState<"classic" | "slim">("classic");
+  const [variant, setVariant] = useState<"classic" | "slim">(() => cachedWardrobe?.currentSkin?.variant || cachedWardrobe?.skins[0]?.variant || "classic");
   const [page, setPage] = useState(1);
   const alive = useRef(true);
   const working = useRef(false);
@@ -27,21 +28,24 @@ export function MinecraftWardrobe({ accountId, tab, motion, onNotify }: Props) {
   const reload = async (selectId?: string, refresh = false) => {
     const version = ++request.current;
     if (!wardrobeMemoryCache.has(accountId)) setLoading(true);
-    setError("");
+    setRefreshing(true); setError("");
     try {
       const result = await invoke<Wardrobe>("get_minecraft_wardrobe", { accountId, refresh });
       if (!alive.current || version !== request.current) return;
       wardrobeMemoryCache.set(accountId, result);
       setData(result);
-      setSelected(selectId || (tab === "skins" ? "current" : result.capes.find(cape => cape.active)?.id || result.capes[0]?.id || ""));
-      setVariant(selectId ? "classic" : result.currentSkin?.variant || "classic");
+      const available = tab === "skins" ? [...(result.currentSkin ? [result.currentSkin] : []), ...result.skins] : result.capes;
+      const fallback = tab === "skins" ? available[0]?.id || "" : result.capes.find(cape => cape.active)?.id || available[0]?.id || "";
+      setSelected(previous => available.some(item => item.id === (selectId || previous)) ? selectId || previous : fallback);
+      if (selectId) setVariant(result.skins.find(item => item.id === selectId)?.variant || "classic");
+      setPage(previous => Math.min(previous, Math.max(1, Math.ceil((available.length + (tab === "skins" ? 1 : 0)) / 9))));
     } catch (reason) {
       if (alive.current && version === request.current) {
         if (wardrobeMemoryCache.has(accountId)) onNotify(String(reason), "error");
         else setError(String(reason));
       }
     }
-    finally { if (alive.current && version === request.current) setLoading(false); }
+    finally { if (alive.current && version === request.current) { setLoading(false); setRefreshing(false); } }
   };
   useEffect(() => { alive.current = true; void reload(); return () => { alive.current = false; ++request.current; }; }, [accountId, tab]);
   const work = async (operation: () => Promise<void>) => {
@@ -59,6 +63,7 @@ export function MinecraftWardrobe({ accountId, tab, motion, onNotify }: Props) {
   const skins = data ? [...(data.currentSkin ? [data.currentSkin] : []), ...data.skins] : [];
   const cape = capes.find(item => item.id === selected);
   const skin = skins.find(item => item.id === selected);
+  useEffect(() => { if (skin) setVariant(skin.variant); }, [skin?.id, skin?.variant]);
   const list = tab === "skins" ? skins : capes;
   const pages = Math.max(1, Math.ceil((list.length + (tab === "skins" ? 1 : 0)) / 9));
   const equip = () => void work(async () => {
@@ -92,7 +97,7 @@ export function MinecraftWardrobe({ accountId, tab, motion, onNotify }: Props) {
   const entries: (Skin | Cape | null)[] = tab === "skins" ? [null, ...skins] : capes;
   return <div className="locker-content">
     <div className="locker-collection">
-      <div className="locker-collection-heading"><h2>{tab === "skins" ? "Skins" : "Capes"}</h2><div><span>{list.length}</span><button className="locker-refresh" title="Reload from Minecraft" aria-label="Reload wardrobe from Minecraft" disabled={busy || loading} onClick={() => void reload(undefined, true)}><RotateCw size={16} /></button></div></div>
+      <div className="locker-collection-heading"><h2>{tab === "skins" ? "Skins" : "Capes"}</h2><div><span>{list.length}</span><button className="locker-refresh" title="Reload from Minecraft" aria-label="Reload wardrobe from Minecraft" disabled={busy || refreshing} onClick={() => void reload(undefined, true)}><RotateCw size={16} className={refreshing ? "spin" : ""} /></button></div></div>
       {loading ? <div className="locker-inline-state" role="status">Loading your Minecraft wardrobe…</div> : error ? <div className="locker-inline-state" role="alert">{error}<button className="locker-state-action" onClick={() => void reload()}>Try again</button></div> : <>
         <div className="locker-grid">{entries.slice((page - 1) * 9, page * 9).map(item => item === null ? <button key="upload" className="locker-upload-skin" onClick={upload} disabled={busy}><Plus size={30} strokeWidth={2.5} /><strong>Upload skin</strong></button> : <article key={item.id} className={`locker-cape ${selected === item.id ? "selected" : ""}`}>
           <button className="locker-art" aria-label={`Preview ${item.name}`} aria-pressed={selected === item.id} onClick={() => pick(item)}>{"variant" in item ? <SkinThumbnail texture={item.texture} variant={item.variant} /> : <CapeDisplay texture={item.texture} motion={false} />}</button>
@@ -106,7 +111,7 @@ export function MinecraftWardrobe({ accountId, tab, motion, onNotify }: Props) {
       <div className="locker-preview"><CapePreview texture={tab === "capes" ? cape?.texture : capes.find(item => item.active)?.texture} skinTexture={tab === "skins" ? skin?.texture : data?.currentSkin?.texture} skinUuid={accountId} variant={tab === "skins" ? variant : data?.currentSkin?.variant} front={tab === "skins"} motion={motion} /></div>
       <div className="locker-detail-base"><div className="locker-detail-copy"><small>{tab === "skins" ? "Selected skin" : "Official Minecraft cape"}</small><h2>{tab === "skins" ? skin?.name || "Skins" : cape?.name || "Capes"}</h2></div>
         {tab === "skins" && skin && skin.id !== "current" && <div className="locker-skin-model" role="group" aria-label="Skin arm model"><button aria-pressed={variant === "classic"} onClick={() => setVariant("classic")}>Classic</button><button aria-pressed={variant === "slim"} onClick={() => setVariant("slim")}>Slim</button></div>}
-        <button className="locker-equip" disabled={loading || busy || !!error || (tab === "skins" ? !skin || skin.id === "current" : !cape)} onClick={equip}>{busy ? "Saving…" : tab === "skins" ? skin?.id === "current" ? "Current skin" : "Use skin" : cape?.active ? "Unequip" : "Equip cape"}</button>
+        <button className="locker-equip" disabled={refreshing || busy || !!error || (tab === "skins" ? !skin || skin.id === "current" : !cape)} onClick={equip}>{busy ? "Saving…" : tab === "skins" ? skin?.id === "current" ? "Current skin" : "Use skin" : cape?.active ? "Unequip" : "Equip cape"}</button>
         {tab === "capes" && cape && <p className="locker-precedence-note">Unequip your Bloom cloak to show this cape in Bloom.</p>}
       </div>
     </aside>

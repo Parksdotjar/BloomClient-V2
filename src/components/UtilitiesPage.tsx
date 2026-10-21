@@ -1,3 +1,4 @@
+import { FolderOpen } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { invoke } from "../services/invoke";
 import {
@@ -7,7 +8,6 @@ import {
   Copy,
   Download,
   FileCog,
-  FolderOpen,
   Image as ImageIcon,
   Mic,
   RefreshCw,

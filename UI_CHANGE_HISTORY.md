@@ -1,5 +1,102 @@
 # Bloom Client UI Decision and Fix History
 
+This is a historical record of requests, implementations, corrections and rejections. Entries are not strictly date-sorted. Earlier wording such as “now” or “current” describes the decision at that time; it does not override a later correction. [DESIGN_RULES.md](DESIGN_RULES.md) contains the reconciled current requirements, and [GOOD_DESIGNS.md](GOOD_DESIGNS.md) identifies explicitly approved references and implementations.
+
+## October 20, 2026 — Locker loading and refresh fixes
+
+- Parks reported Equip/Unequip flashing over cloak names while opening the page, and requested a check of Cloaks, Capes and Skins. A shared disabled-button opacity rule overrode the hidden card-action state; disabled actions now stay hidden until hover/focus, including during saves. Reduced motion also disables the reveal transitions.
+- Cached cloaks start with a valid preview. Refresh preserves selections, equipped markers and edited skin arm models; imports use their saved model, missing current skins fall back to a local skin, and shrinking catalogs clamp pagination. Refresh feedback follows the real request and overlapping refresh/equip actions are disabled.
+- Card density responds to the catalog column's width. The side preview keeps its own height alongside long desktop grids; compact stacked layouts scroll normally.
+- Regression evidence: `tests/locker-ui.mjs` first reproduced all three hidden actions at 45% opacity during a delayed account response, then verified the fix, native-call sequencing, selection/model preservation, pagination, both themes, keyboard reveals and motion preferences using fixtures.
+- Parks separately approved the final screenshot Compare/Cancel interaction as looking great; it is now an explicit reference in GOOD_DESIGNS.md. The Locker fixes are implementation work, not a blanket visual approval.
+
+## October 20, 2026 — connected main toolbars and continuous-shelf correction
+
+- Parks requested the approved Mods toolbar's connected feel for other suitable main toolbars, preserving normal button styling and the sidebar.
+- All Instances reveals working loader choices inside its existing shelf; the card grid yields height while bottom search stays anchored. Screenshot comparison retains selections across instance filters and preserves the existing comparison action. Refresh feedback follows the actual request while cached images stay visible.
+- Locker's existing category track gets a moving neutral selection with immediate keyboard/content updates. Modpacks keeps one Close/Back button as its icon and header context change; returning retains focus and the native import path remains unchanged.
+- **First user correction:** The first attempt appended a lighter drawer below the dark control shelf. Parks rejected the light–dark–light stack. The existing shelf now expands downward as one continuous surface, with a smaller gap below the controls. Apply this correction to both Screenshot Shelf and All Instances; never reproduce the rejected extra tray.
+- **Second user correction:** Parks rejected the oversized empty A/B slots, tiny letter captions and plain Cancel button. Screenshot selection now uses a compact centered prompt, small removable thumbnails only for actual selections, and a prominent rounded red X. Motion emerges vertically at each element's own position; multiple elements are staggered left to right. The whole group must not travel from the left, and a single centered group remains centered throughout its reveal.
+- **Third user correction:** Parks liked the rounded X shape but requested a white X centered in a solid red button, replacing the bare red icon. He also rejected the plain muted selection sentence. The implementation now pairs an unboxed Lucide image symbol with a stronger two-line prompt and accent emphasis on the remaining selection; it changes from “Select two” to “Select one more” after a real selection. The row retains its compact height and in-place motion. This prompt treatment is an implementation of the request, not a newly approved reference.
+- **Fourth user correction — current:** Parks removed the entire lower selection area. The existing Compare button starts at `Compare (0/2)` after activation and updates directly as gallery images are selected or deselected. At zero or one selection it changes to Cancel on hover (also keyboard focus); activating it clears selection. At two it stays Compare and opens the existing viewer. Keep the button mounted, preserve its width and transition the label/icon in place. No prompt, thumbnail tray or separate cancel button remains. Escape and cross-instance selection still work. This supersedes the screenshot-specific tray treatments above, while the continuous-shelf rule still applies to drawers that have useful controls.
+- Shared toolbar primitives preserve the original Mods behavior. Closed drawers are inert; Escape, outside dismissal for transient filters, comparison cancellation and return focus work with all motion preferences. A StrictMode focus-restoration issue in screenshot comparison was corrected by remembering its original trigger across effect replay.
+- These adaptations are not a blanket visual approval. The original content toolbar and the final single-button screenshot Compare/Cancel interaction are explicitly approved; the earlier screenshot trays remain superseded.
+
+## October 20, 2026 — design memory reconciled
+
+- Parks explicitly approved the interactive content toolbar as “actually perfect” and “beautiful,” and asked for durable documentation that prevents repeating rejected ideas or misreading preferences.
+- Recorded the toolbar's composition, purposeful motion, contextual counts, reuse limits and regression checks in GOOD_DESIGNS.md with a local visual reference. Kept the established flat buttons and navigation highlights distinct from workspace depth.
+- Reconciled active rules for hidden scrollbars, the full-width content filter drawer, bare bottom-search icons, the direct New Instance form, current library/navigation layouts and content empty/import icons. External references now defer to Bloom's current themes and selected accent.
+- Historical attempts remain below as evidence. In particular, the small content-filter popup, three-card New Instance chooser and entire raised-button experiment are superseded; do not restore them from an old entry. AGENTS.md now requires reconciliation when future feedback changes a design decision.
+
+### Current outcomes for commonly confused decisions
+
+| Topic | Current outcome | Historical treatment superseded |
+| --- | --- | --- |
+| Content toolbar | Approved connected header, contextual readout, attached filter drawer and Add/Back transition | Boxed mod-count badge and compact 276px popup |
+| Action buttons | Original flat component styling | Raised lip, surrounding darker rim and thick bottom edge, including every contrast variant |
+| Navigation selection | Neutral raised highlight; separate from action-button styling | Old diagonal-gradient selection treatment |
+| New Instance | Direct form; Memory Allocation and Java visible; folder options under Advanced | Three-card entry chooser and hiding all launch settings under Advanced |
+| Scrollbars | Chrome hidden globally; scrolling remains functional | Earlier visible thin tracks/thumbs |
+| Instance content search | Anchored bottom dock with bare icon and approved focus motion | Boxed search icon or moving filters into the dock |
+| Content icons | PackageOpen for empty content; FileDown for import | Broken flower and Inbox empty-state experiments |
+
+## October 20, 2026 — drag content between instances
+
+- Added a translucent, eased copy ghost for installed mods/resource packs/shaders, neutral sidebar drop targets, and temporary access to every instance while dragging.
+- Dropping or using the existing action menu opens a focused compatibility review before any copy. Known version/loader conflicts block; unverified files require acknowledgement.
+- Native copies preserve source bytes and disabled state, prevent replacement and duplicate mod IDs, protect managed Bloom mods, and invalidate destination content caches after success.
+- Escape and cancelled drags consume the release click rather than opening details. Light/OLED, reduced motion and keyboard/menu paths share the same workflow.
+
+## October 19, 2026 — local server manager removed
+
+- Removed Servers navigation, workspace, quick-switcher entries, Downloads integration and background polling at Parks's request.
+- Removed native hosting commands, server-specific launch/update/exit hooks, dependencies, tests and planning documents. Existing server folders in application data are untouched.
+- The global hidden-scrollbar rule and unrelated UI improvements remain. Earlier Servers entries below are historical and superseded by this removal.
+
+## October 19, 2026 — invisible scrollbars and Social-style Servers layout
+
+- Hide vertical and horizontal native scrollbar chrome across every screen and body-portaled dropdown, retaining each container's scroll behavior. This supersedes earlier visible/thin scrollbar treatments.
+- Servers now uses Social's outlined rail with rounded top-right and bottom-right corners. Its lighter center fills the remaining column with a flush header and scrolling content; removed the inset outer card and its responsive margins.
+
+## October 19, 2026 — local server workspace
+
+- Added Servers beside Social, with its own compact rail and lighter content panel rounded at both top corners. Overview, Console, Plugins, Players, World, Backups and Settings use native commands.
+- Shared neutral dropdowns/toggles cover OLED and Light. Setup has an unchecked EULA gate; server selection, local join and quick-switcher navigation target specific records.
+- Draft settings survive section/page navigation; repeated saves refresh their revision. Console is virtualized. Pending plugin changes, busy operations and force stop are explicit.
+- Native and browser simulations were used; real Minecraft was not started. The implementation and its accompanying documents were subsequently removed at Parks's request. No release or version change.
+
+
+## October 2026 — full-turn Body animation
+
+- Creator’s existing Body rotation fields accept ±720 degrees; other bones retain ±180 and positions retain ±12 pixels. No new controls or layout changes.
+- The Body gizmo keeps the Euler turn nearest the authored rotation rather than reducing a 360-degree key to zero. Layers, import, native Send and the Bloom validator retain full turns. Existing projects and revisions remain unchanged.
+
+## October 2026 — traversal playback
+
+- Added Traversal to Creator’s existing Playback mode dropdown, sharing the same sizing, themes and menu. It stores a looping traversal mode through project save/open, native Send, catalog build and multiplayer revision lookup. Choosing any ordinary mode disables traversal.
+- Traversal keeps playing through movement, jumping and idle. B stops it directly, consuming that physical press; the next hold opens the existing wheel. Screen text input remains unaffected. Ordinary emote cancellation is unchanged.
+- New animation drafts are JSON-only review artifacts. Parks adds them himself; never silently install an assistant-created animation.
+
+
+## October 2026 — Creator emote library removal
+
+- Added File → Manage emotes and an entry from the Send/Open dialogs. The existing modal, theme tokens, restrained list rows and Lucide trash action expose the actual exported library, with one inline removal confirmation.
+- Removal archives the complete source directory and refreshes the catalog after success. Build mod uses the existing Stonecutter build; a later Send/build also excludes removed entries. Empty libraries remain supported, and the UI distinguishes a saved removal from a completed build requiring a Minecraft restart.
+
+## October 2026 — hold-to-select in-game emote wheel
+
+- Hold B to open; point and release to play/close. The wheel uses opaque OLED black with restrained pink selection and readable text. Drawing remains circular; angular hit regions continue beyond its edge, including screen corners. Visual seams do not become unselectable hit gaps. Escape/focus loss cancel; center stops active playback; empty slots close without playing.
+- Retired the nine demo emotes. Empty libraries work throughout import, Creator export and packaging. Creator Name suggests the animation ID until manually edited. Tauri dev prebuild reports included emotes and confirms all four updated cosmetic-mod bundles. Existing Minecraft processes restart to load changed bundled content.
+
+## October 2026 — separate Bloom Animation Creator
+
+- Animation authoring lives in the sibling `BloomAnimationCreator` app, with the current OLED Black/Light palette, Bloom logo, Lucide controls, pill switches, custom attached dropdowns, restrained raised headers, and bottom notifications.
+- The editing workspace uses a left bone hierarchy, central 3D player/gizmos, right transform inspector, and resizable bottom timeline with independent position and rotation tracks. Selecting a bone reveals its track; dropdowns remain visible near panel and window edges.
+- Creator refinements: rounded title-bar hover states, Edit → Preview skin (PNG or public Minecraft username/UUID), ruler-only scrubbing with marquee key selection, and a square easing graph with saved presets and explicit Apply. Bones/Graph share one panel size; switching tabs never expands it. Both side panels and Timeline resize with bounded, persistent dimensions. Curves bake into the existing numeric animation format and keep editable handles in the project. Backspace/Delete remove selected keys with undo; native browser context menus, devtools and browser shortcuts are disabled while editor shortcuts and text editing remain available.
+- Timeline body parts are collapsible groups. A compact + menu adds independent additive Rotation/Position layers; each keeps its own keys and easing. The selected-layer inspector owns naming and enable/remove controls, with a per-row eye toggle. Numeric fields edit the selected contribution; the viewport and exports combine enabled layers. Schema-2 projects retain the layers and migrate older projects. Hidden groups are excluded from marquee selection. Bones/Graph sizing remains shared and the graph remains square.
+- File → Send to Bloom opens a focused native export/build dialog. It reuses this checkout's validator and Stonecutter build, preserves replacement backups, and never publishes releases. See the sibling app's README and IMPLEMENTATION.md for behavior and acceptance evidence.
+
 ## October 2026 — structured instance action drawer
 
 - Rebuilt the instance header's three-dot menu as a 320px attached action drawer while preserving the approved squared upper edge, rounded lower corners, and under-card reveal.
@@ -116,7 +213,9 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 6. Run `npm run typecheck` and `npm run build`.
 7. Add or update an entry below with the request, cause, fix, and regression checks.
 
-## Current interaction decisions
+## Interaction decisions recorded at the time
+
+These notes preserve earlier decisions. Apply the current rules in DESIGN_RULES.md, including its explicitly scoped motion exceptions; do not read the original blanket hover/focus prohibition as a rejection of the later approved search, reveal or toolbar interactions.
 
 ### Buttons
 
@@ -160,6 +259,14 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 - The former logo-and-name lockup is no longer part of the client. Home begins beneath the draggable title-menu region, as recorded in “Brandless sidebar and fourth sponsored slot.”
 - Keep this record only as a superseded decision. Do not restore the Bloom wordmark, its dedicated surface, separator, subtitle, optical offsets, or reserved height.
 
+### October 19, 2026 — clearer main sidebar selection
+
+- Replaced the old active gradient/flat background override with a neutral rounded raised surface, brighter text/icons, and quieter inactive rows. OLED uses a lifted dark surface; Light uses white with restrained slate depth.
+- Custom Image/Organic styling previously assigned identical fills and ink to selected and inactive navigation. The scoped navigation stylesheet preserves selection with custom opacity and text colors, without changing other sidebar controls.
+- Icons inherit their row's ink; hover/focus preserve geometry and keyboard focus remains visible. Collapsed navigation keeps the same selected treatment. Reduced Motion, disabled animations, and Ultra Performance disable the transition.
+- Route selection and `aria-current` share the same destination mapping. Instance detail/creation retain Instances; AutoTune retains Utilities.
+- Regression coverage: both themes, plain/custom backgrounds, collapsed/expanded navigation, mouse and keyboard navigation, minimum window size, and motion settings.
+
 ### Primary sidebar navigation typography
 
 - Home, Instances, AutoTune, and Settings use the same bold 800-weight label treatment as sidebar instance names and profile account names.
@@ -167,7 +274,7 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 - Active-page experiment replaces the flat selected surface and inset outline with one restrained accent-to-neutral gradient. It uses no dots, bars, streaks, glow, or extra ornament, and follows the selected route rather than special-casing Utilities.
 - OLED selector correction: the first experiment only changed the retired Dark-theme override, so the selectable OLED theme still showed its old flat surface. The gradient now lives on the real base active-navigation rule with a deliberately stronger accent mix that remains visible against the near-black sidebar.
 - Gradient direction follow-up reverses that active surface: it now begins neutral beside the icon and label, then develops the accent toward the row's right edge.
-- Gray diagonal experiment removes the accent from the selected surface itself. The background now travels diagonally from dark gray at the bottom-right to lighter gray at the top-left, while the existing accent remains limited to the icon and label.
+- Gray diagonal experiment removed the accent from the selected surface itself. Superseded by the October 19 neutral raised selection above, including neutral theme-aware icon and label colors.
 
 ### Two-surface sidebar instance cards
 
@@ -738,6 +845,9 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 - Sharing displays the actual loading error with Try again; temporary service failures no longer claim the user is signed out.
 
 ### Content filter readability
+
+**Superseded:** The October 20 approved content toolbar replaces this compact popup with a full-width drawer and neutral moving selection surfaces. Preserve the working filter/sort behavior, not this older geometry.
+
 - Reworked the cramped content filter into a 276px attached panel. Sort by and Show labels now sit above their full-width segmented controls, giving Name/Size and All/Enabled/Disabled equal, comfortable targets with larger type and clearer spacing.
 - Selected segments use white text over a restrained accent tint, avoiding low-contrast colored text with red or other dark accents. Keyboard focus uses a visible accent outline; hovering and clicking do not move the options.
 - Kept the existing live sort/status callbacks, pagination reset, active trigger dot, header attachment, and outside-click/Escape dismissal for Mods, Resource Packs, and Shaders.
@@ -809,3 +919,115 @@ This is the durable record of user-directed UI decisions, regressions, and prove
 - Restored the current Bloom logo in the name-tag font at atlas-safe high resolution, with explicit spacing and no duplicate label renderer. Badge-only players are observed independently of cape rendering.
 - Resource packs and shaders can install while Minecraft runs; mods remain blocked. Pack-list directory watchers discover completed files. Download cancellation and errors no longer stop or clear the game's running state.
 - Shared native invocation errors and status notifications normalize HTTP 429/rate-limit errors to “Whoa, slow down! Too many attempts. Please try again later.” Internal URLs and technical payloads are omitted from that message. Native Social 429 handling preserves the rate-limit meaning even for non-JSON responses.
+
+### October 19, 2026 — saved appearance presets
+
+- Settings > Appearance includes named preview cards with Save current, Apply, Rename, and confirmed Remove. Save captures theme, solid/animated accent (all stops, duration, intensity), Image/Organic choice, background opacity, and every main/sidebar surface, frost, outline, and text-color control. Performance, accounts, game settings, and animation preferences are unchanged.
+- Presets own their image data in a versioned local IndexedDB store, avoiding the localStorage image quota. A preset remains intact when the current wallpaper is replaced. Mutations report success only after transaction completion; errors remain visible and retryable.
+- Applying restores the image through the existing native background writer (or clears it with the bounded app-data command), then merges only appearance fields into the latest settings. An older startup image read cannot overwrite an applied preset. Removal deletes only the saved preset, not the active appearance.
+- Preview cards reuse Organic artwork and show the saved accent and surface balance. Both OLED and Light use the existing semantic controls and focus styling.
+
+### October 19, 2026 — compact appearance preset dropdown
+
+- Replaced the separate preset card gallery with one normal Settings row above Theme, sharing its trigger styling, portal placement, and reveal animation. The first dropdown action is + Save new, followed by saved names, accent swatches, and a check on the current preset.
+- Rename and remove remain compact actions inside each menu row. Naming and removal confirmation reveal inline only when requested. Success is announced without a permanent status paragraph. Existing saved records and wallpaper copies are preserved.
+- Width correction: measure the trigger's exact border-box width and left edge. Do not impose a wider minimum or a horizontal inset on the preset menu; both edges remain aligned while resizing and scrolling.
+- Verified save/apply/rename/delete and reload persistence in an isolated browser, keyboard arrows/Enter/Escape, outside dismissal, OLED/Light, and viewport placement. Native calls were stubbed; typecheck, build, theme audit and locked Rust check passed.
+
+## October 19, 2026 — shared dropdown surface and corner underlap
+
+- Standard selectors and saved appearances share a lighter opaque menu surface, full trigger width, and an underlap behind the rounded trigger corners. Above-opening menus move the underlap to the upper corners. The Home selector also uses its full width and complete corner depth.
+- Apply this treatment to future dropdowns; retain content-sized icon menus and their header anchors. OLED uses a lifted neutral menu and Light uses white with the existing restrained edge/shadow tokens.
+
+## October 19, 2026 — final dropdown preference
+
+- Supersedes the full-width/lighter-surface direction above: restore original menu colors and center menus with a 5px inset per side. Keep the corner attachment within the inset.
+- Saved appearances expose Save new, Apply and confirmed Remove only. Removed Rename; existing saved names and records remain intact.
+
+## October 19, 2026 — unified preset rows
+
+- Saved appearance selection and hover use one neutral rounded highlight across the complete row, including Remove. No accent-filled selection, checkmark, separate delete tile or rename action. The apply button exposes its selected state through aria-pressed; deletion remains independently clickable with confirmation.
+
+## October 19, 2026 — neutral dropdown selections throughout Bloom
+
+- Settings selectors, instance selectors and filter choices now share the same neutral selected/hover tokens as saved appearances. Selected Home instance subtitles stay muted rather than accent-colored. Window-menu hover uses the same neutral treatment; destructive text keeps its semantic color.
+- Preset row highlighting uses those shared tokens while preserving its full-row treatment and separate Remove action.
+
+## October 19, 2026 — image-focused Screenshot Shelf
+
+- Retained the centered layered header, with Filter, Refresh and Compare together on its lower shelf. Comparison selection replaces Compare with Cancel and the live two-image count; removed the separate toolbar above the grid.
+- Larger responsive cards show complete uncropped images above one compact footer: instance name, short local date/time, and permanently available copy/folder icons. Filenames remain in preview, accessible labels and the title tooltip; full timestamps remain available on hover.
+- Preserved native action paths, caching, selection across filters, loading/error states and comparison export. Browser checks used actual local screenshots read-only and stubbed native commands; typecheck, production build, theme audit and locked Rust check passed.
+
+## October 19, 2026 — recessed tabs, artwork progress and folder flap
+
+- Added shared recessed selected-tab surfaces for Settings, Locker, pack sharing, instance content/settings and background source tabs, preserving sliding indicators and custom-background visibility.
+- Active download artwork uses the existing cached source and actual progress, revealing full color from bottom to top without a boundary accent. Completed entries stay fully colored and error states preserve their partial fill.
+- Replaced folder-action icons with a shared split-path Lucide folder. Only the flap moves; buttons stay stationary, press settles the flap and all motion preferences are respected.
+- Browser checks covered custom-background tab depth, stationary folder buttons, hover/press, all motion overrides, and event-driven progress at 0/25/50/100 and failure. Native calls were stubbed; screenshots reviewed in OLED and Light.
+
+## October 19, 2026 — static folder icons restored
+
+- Removed the folder flap animation at Parks’s request and restored standard Lucide FolderOpen icons. Recessed tabs and download artwork progress remain.
+
+## October 19, 2026 — Settings selection matches main sidebar
+
+- Removed the recessed slot and under-label line from Settings navigation. It now shares the main sidebar selection stylesheet, including raised fill, subtle edge/shadow, ink, corner radius, inactive/hover styling and motion preferences in both themes and custom backgrounds.
+
+## October 19, 2026 — wallpaper accent swatches
+
+- Added a compact From wallpaper row beneath Accent Color with up to five distinct actual sampled colors, reusing circular swatches and selection rings. Clicking applies and persists the exact solid color while retaining stored gradient settings.
+- Sampling uses the existing local wallpaper, a maximum 96px canvas, bounded color buckets and a one-image promise cache. Disabled/Organic/missing/unreadable backgrounds hide the row; source changes cannot show stale samples. Monochrome images show only their available colors.
+- Verified real-image sampling, exact application and reload persistence, Organic hiding, transparent/solid/unreadable image cases and OLED/Light layouts with a stubbed native bridge.
+
+## October 19, 2026 — wallpaper colors inside the picker
+
+- Moved From wallpaper into the bottom of the custom accent picker below Cancel/Apply. The Settings row shows only its normal swatches. Clicking a sampled color applies that exact solid hex and closes the picker.
+- The picker observes its size so asynchronously loaded samples remain within the viewport. Verified popup-only placement, exact selection persistence, cancellation and OLED/Light positioning.
+
+## October 19, 2026 — wallpaper picker visibility correction
+
+- Shared the saved wallpaper source with every Settings color picker, including gradient-stop popups. Removed the active Image-mode gate and load the saved wallpaper even when backgrounds are disabled.
+- Missing/loading/unreadable sources now show concise states rather than silently disappearing. Sampling a gradient color updates that stop through its existing callback.
+- Verified sampled buttons in main and gradient pickers while Organic is selected and backgrounds are disabled; exact solid application, popup positioning, typecheck, build and locked Rust check pass.
+
+## October 19, 2026 — removed decorative tab underlines
+
+- Removed the fading under-label line from every recessed tab, including Image/Organic, instance content, Locker and pack sharing. Selection keeps its continuous surface and depth. Do not reintroduce fading underlines or decorative edge beams.
+
+## October 19, 2026 — three-card New Instance chooser
+
+**Rejected implementation:** Superseded by the direct form restoration and visible launch-setting correction immediately below. The original external reference remains inspiration only.
+
+- Added Vanilla, Modded and Import pack cards with unboxed Lucide icons, aligned actions and a restrained accent hover/focus surface, adapting the approved choice-dialog reference to Bloom.
+- Vanilla/Fabric setup now starts with Name, Version and Directory; folder options join Java/performance under Advanced. Back retains the draft. Empty names and duplicate pending submissions are blocked.
+- Import pack exposes local Fabric .mrpack/Modrinth ZIP import and the existing Modrinth browser. No mock actions, new backend routes or native packaging changes.
+- Verified native-command arguments for Vanilla/Fabric creation, save error/retry, import cancellation/error/success, Modrinth open/close, advanced options, draft retention and responsive OLED/Light rendering using a stubbed native bridge. Typecheck, build, theme audit and locked Rust check passed.
+
+## October 19, 2026 — original New Instance form restored
+
+- Removed the three-card chooser at Parks’s request. Restored the original direct setup form, Loader selector, visible Select Components, header Import/Add from Modrinth actions and Cancel/Create footer.
+- Kept all unrelated appearance, navigation, screenshot and download changes. The earlier choice-dialog reference remains inspiration only; its New Instance implementation was rejected.
+
+## October 19, 2026 — prioritize launch settings during creation
+
+- Replaced the always-visible folder toggles with Memory Allocation and Java selection. Automatic Java remains the default; both controls retain their existing draft and native save path.
+- Moved folder creation into Advanced alongside JVM arguments and optional instance behavior. Kept the original direct form, import actions and responsive two-column layout.
+
+## October 19, 2026 — disable browser inspection in development too
+
+- Explicitly disabled native DevTools in the Tauri window configuration, including debug builds.
+- Replaced the root-only keyboard guard with startup-level browser-context-menu and inspector/source-shortcut suppression covering onboarding, portals and the entire document. Custom Social context menus still receive events; copy, paste, undo and unrelated Ctrl+Shift shortcuts are not suppressed. Hot reload cleans up the global listeners.
+
+## October 20, 2026 — original flat buttons restored
+
+- Parks rejected the entire raised-button experiment, including the initial inset lip, thicker surrounding border and darker contrast variants. Removed the added action stylesheet, import and depth token to restore the exact component styles from before this request.
+- Preserve the original flat buttons. Sidebar highlights and unrelated earlier work remain unchanged.
+
+## October 20, 2026 — interactive instance content toolbar
+
+**Explicitly approved by Parks:** “actually perfect” and “beautiful.” The approved example and reuse limits are recorded in [GOOD_DESIGNS.md](GOOD_DESIGNS.md#connected-instance-content-toolbar).
+
+- Replaced the boxed count with a quiet installed/enabled readout beneath the category title. Search and status filters display matching versus total counts from the existing list, including confirmed toggle changes.
+- Filter reveals a full-width drawer under the header. Neutral selection surfaces slide between Show and Sort by choices; Reset restores both defaults. The list lends height to the drawer, keeping search/pagination stationary and results visible below the tools. Compact widths use two rows. Escape restores focus, outside click closes and hidden controls are inert.
+- Add/Back retain one focusable control while its icon and header copy transition into the existing catalog. Version/loader identify the catalog context. Existing compatibility, loading, caching, installation and pagination paths remain in place. All decorative motion respects reduced motion, animations off and Ultra Performance. Original flat buttons and sidebars remain unchanged.
