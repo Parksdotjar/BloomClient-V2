@@ -32,7 +32,7 @@
 @keyframes locker-soft-pulse { 0%,100% { opacity: .45; transform: scale(.92); } 50% { opacity: 1; transform: scale(1); } }
 
 .locker-content { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 18px; align-items: stretch; }
-.locker-collection { min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); }
+.locker-collection { min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); container: locker-catalog / inline-size; }
 .locker-collection-heading { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 15px; }
 .locker-collection-heading h2 { margin: 0; font-size: 17px; }
 .locker-collection-heading > div { display: flex; align-items: center; gap: 7px; }
@@ -46,6 +46,8 @@
 }
 .locker-refresh:hover:not(:disabled) { color: var(--text); }
 .locker-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@container locker-catalog (max-width: 407px) { .locker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container locker-catalog (max-width: 267px) { .locker-grid { grid-template-columns: minmax(0, 1fr); } }
 .locker-cape {
   min-width: 0; overflow: hidden; padding: 0; border: 1px solid var(--line); border-radius: 12px;
   background: var(--panel-strong); color: var(--text); text-align: left; box-shadow: 0 17px 28px -25px var(--theme-shadow, #000);
@@ -105,7 +107,7 @@
 .cape-display-shadow { position: absolute; width: 68%; height: 14%; bottom: 1%; border-radius: 50%; background: var(--theme-shadow, #0009); filter: blur(12px); transform: rotate(-4deg); }
 .cape-display.card .cape-display-shadow { filter: blur(8px); }
 
-.locker-detail { min-height: 100%; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); text-align: center; }
+.locker-detail { position: sticky; top: 14px; align-self: start; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); text-align: center; }
 .locker-preview {
   min-height: 440px; flex: 1; display: grid; place-items: center; overflow: hidden; border-radius: 13px 13px 21px 21px;
   background: color-mix(in srgb, var(--panel-strong) 88%, var(--control));
@@ -135,13 +137,21 @@
 .locker-pagination button, .locker-pagination span { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 11px; background: var(--control); color: var(--text); }
 .locker-pagination span { width: 68px; color: var(--muted); font-size: 11px; font-weight: 800; }
 .locker-workspace button { cursor: pointer; }
-.locker-workspace button:disabled { cursor: default; opacity: .45; }
+.locker-workspace button:disabled { cursor: default; }
+/* Disabled styling must not reveal the action over a resting card's name. */
+.locker-workspace button:disabled:not(.locker-card-equip) { opacity: .45; }
+.locker-cape:is(:hover, :focus-within) .locker-card-equip:disabled { opacity: .45; }
 
 .locker-tab-shelf { position: relative; margin-top: -18px; padding: 38px 22px 20px; background: color-mix(in srgb, var(--page) 78%, var(--panel)); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 14px 14px; display: flex; justify-content: center; }
 .locker-tabs { display: grid; grid-template-columns: repeat(3, 1fr); width: min(470px, 100%); gap: 4px; padding: 4px; background: var(--page); border: 1px solid var(--line); border-radius: 13px; }
 .locker-tabs button { min-height: 38px; padding: 0 18px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 800; transition: color 180ms, background-color 180ms; }
 .locker-tabs button[aria-selected="true"] { color: var(--text); background: color-mix(in srgb, var(--accent) 24%, var(--panel)); }
 .locker-tabs button:hover { color: var(--text); }
+.locker-tabs.toolbar-segments { gap: 0; padding: 4px; background: var(--page); }
+.locker-tabs.toolbar-segments > button { min-height: 38px; padding: 0 18px; font-weight: 800; }
+.locker-tabs.toolbar-segments > i { top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / var(--segments)); border-radius: 9px; background: var(--dropdown-selected); box-shadow: var(--tab-slot-shadow); }
+.locker-tabs.toolbar-segments > button:hover { background: transparent; }
+:root[data-theme] .locker-tabs.toolbar-segments > button[aria-selected="true"] { background: transparent; box-shadow: none; }
 .locker-upload-skin { min-height: 226px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-strong); color: var(--accent-ink, var(--accent)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 17px; font: inherit; }
 .locker-upload-skin strong { color: var(--text); font-size: 12px; }
 .locker-skin-thumbnail { width: 132px; height: 176px; object-fit: contain; }
@@ -160,16 +170,18 @@
 
 @media (max-width: 1280px) {
   .locker-content { grid-template-columns: minmax(0, 1fr) 310px; }
-  .locker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .locker-preview { min-height: 400px; }
   .cape-display.detail { transform: scale(.9); }
 }
 @media (max-width: 980px) {
   .locker-content { grid-template-columns: 1fr; }
-  .locker-detail { grid-row: 1; }
+  .locker-detail { position: static; grid-row: 1; }
   .locker-preview { min-height: 340px; }
 }
-@media (prefers-reduced-motion: reduce) { .locker-state-mark.loading svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .locker-state-mark.loading svg { animation: none; }
+  .locker-cape-identity, .locker-card-equip { transition: none; }
+}
 :root[data-animations="off"] .locker-state-mark.loading svg,
 :root[data-performance="ultra"] .locker-state-mark.loading svg { animation: none; }
 :root[data-animations="off"] .locker-cape-identity,

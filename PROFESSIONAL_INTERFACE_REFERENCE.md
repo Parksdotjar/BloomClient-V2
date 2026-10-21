@@ -2,11 +2,13 @@
 
 These approved references document reusable design reasoning for future Bloom work. They are examples of quality and structure, never templates to reproduce one-for-one.
 
+Descriptions of a source screenshot's colors, surfaces or lack of motion describe that reference, not global Bloom requirements. Adapt through [DESIGN_RULES.md](DESIGN_RULES.md) and [THEME_ARCHITECTURE.md](THEME_ARCHITECTURE.md): current OLED/Light themes, the selected accent and explicitly approved interaction patterns take precedence. See [GOOD_DESIGNS.md](GOOD_DESIGNS.md) for approved Bloom implementations and their scope.
+
 ## Reference 1: Structured changelog
 
 ![Modrinth changelog reference](design-references/modrinth-changelog-example.png)
 
-This screenshot is an approved **quality reference**, not a layout to reproduce one-for-one. Future Bloom work should study why it feels deliberate and then translate those principles into Bloom's content, navigation model, blue accent, typography, and components.
+This screenshot is an approved **quality reference**, not a layout to reproduce one-for-one. Future Bloom work should study why it feels deliberate and then translate those principles into Bloom's content, navigation model, selected accent, typography, and components.
 
 ## Why this interface feels finished
 
@@ -146,7 +148,7 @@ A valid Bloom adaptation changes the content model and visual expression while k
 
 Good adaptation:
 
-- Bloom blue replaces the reference accent.
+- Bloom's selected `--accent` replaces the reference accent.
 - Bloom tokens determine surfaces, borders, type, and corner radii.
 - Categories reflect Bloom's actual release areas.
 - Timeline entries use Bloom versions and real dates.
@@ -264,7 +266,7 @@ Color communicates meaning:
 - the action uses a strong color because it performs the main operation;
 - neutral gray represents inactive or unresolved state.
 
-Bloom should use its own blue accent and documented semantic colors. Do not recolor an entire dashboard merely because the reference uses green. Multiple colors are appropriate only when users must distinguish real categories or states.
+Bloom should use its selected accent and documented semantic colors. Do not recolor an entire dashboard merely because the reference uses green. Multiple colors are appropriate only when users must distinguish real categories or states.
 
 ### Action emphasis
 

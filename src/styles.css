@@ -14,6 +14,16 @@
 * {
   box-sizing: border-box;
 }
+/* App-wide preference, including body-portaled menus. Keep each pane's overflow
+   behavior intact; only hide native scrollbar chrome, in both directions. */
+* {
+  scrollbar-width: none !important;
+}
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
 body {
   margin: 0;
   min-width: 860px;
@@ -2382,6 +2392,8 @@ body,
   border-left: 1px solid var(--line);
   padding-left: 22px;
 }
+.instance-launch-settings .memory-control { margin-bottom: 28px; }
+.instance-launch-settings .java-note { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .instance-advanced-disclosure {
   display: flex;
   justify-content: flex-end;
@@ -2892,11 +2904,6 @@ body,
 .instance-library-menu .instance-delete-action { margin-top: 5px; border-top: 1px solid var(--border); border-radius: 0 0 8px 8px; color: var(--theme-danger-ink, #e97979); }
 .instance-library-menu .instance-delete-action.confirm { border-top-color: color-mix(in srgb, var(--theme-danger-ink, #ed5a5a) 45%, var(--border)); background: color-mix(in srgb, var(--theme-danger-surface, #ed5353) 18%, var(--control)); color: var(--theme-danger-ink, #ff7777); }
 .instance-library-menu .instance-delete-action.confirm { font-weight: 850; }
-.animated-folder { position: relative; width: 19px; height: 19px; display: block; transform-origin: 45% 80%; transition: transform 360ms cubic-bezier(.2,.8,.2,1); }
-.animated-folder svg { position: absolute; inset: 1px; display: block; transition: opacity 260ms ease, transform 360ms cubic-bezier(.2,.8,.2,1); }
-.animated-folder .folder-closed { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
-.animated-folder .folder-open { opacity: 0; transform: translateY(2px) rotate(5deg) scale(.88); }
-@media (prefers-reduced-motion: reduce) { .animated-folder, .animated-folder svg { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .instance-library-card { transition: none; } }
 :root[data-animations="off"] .instance-library-card,
 :root[data-performance="ultra"] .instance-library-card { transition: none; }

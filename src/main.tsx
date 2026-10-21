@@ -1,5 +1,12 @@
+import "./services/desktop-interactions";
+import { WallpaperSourceContext } from "./components/WallpaperAccents";
 import { userError } from "./services/user-error";
+import { AppearancePresets } from "./components/AppearancePresets";
+import { ContentTransferContext, useContentTransfer, useContentTransferController } from "./components/ContentTransfer";
+
 import { QuickSwitcher, type SwitchTarget } from "./components/QuickSwitcher";
+import { ContentToolbar } from "./components/ContentToolbar";
+import { ToolbarDrawer, ToolbarIconSwap, ToolbarSegments, useToolbarDisclosure } from "./components/ConnectedToolbar";
 import { setScreenshotActivity, startScreenshotWarming } from "./services/screenshots";
 import { CustomAccentPicker, PRESET_ACCENTS } from "./components/CustomAccentPicker";
 import { AnimatedAccentEditor, useAnimatedAccent } from "./components/AnimatedAccentEditor";
@@ -10,6 +17,7 @@ import { ScreenshotShelf } from "./components/ScreenshotShelf";
 import {
   StrictMode,
   useEffect,
+  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -45,8 +53,6 @@ import {
   Feather,
   Download,
   ExternalLink,
-  Folder,
-  FolderOpen,
   History,
   House,
   FileDown,
@@ -86,6 +92,10 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import "./themes/light.css";
+import "./components/dropdowns.css";
+import "./components/interface-details.css";
+import { FolderOpen } from "lucide-react";
+import "./components/sidebar-navigation.css";
 import { monitorBackend } from "./services/backend";
 import { Locker } from "./components/Locker";
 import { UtilitiesPage } from "./components/UtilitiesPage";
@@ -125,7 +135,7 @@ function WindowCloseIcon() {
   return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>;
 }
 
-type SettingsState = AnimatedAccent & {
+export type SettingsState = AnimatedAccent & {
   theme: Theme;
   accent: string;
   animations: boolean;
@@ -209,13 +219,13 @@ const defaults: SettingsState = {
 const spotlightDefaultMigrationKey = "bloom-home-layout-spotlight-v1";
 const customBackgroundDefaultsMigrationKey = "bloom-custom-background-defaults-v1";
 const nav = [
-  [House, "Home"],
-  [Layers3, "Instances"],
-  [HangerIcon, "Locker"],
-  [MessageCircle, "Social"],
-  [ImagePlus, "Screenshots"],
-  [Wrench, "Utilities"],
-  [SettingsIcon, "Settings"],
+  [House, "Home", "home"],
+  [Layers3, "Instances", "instances"],
+  [HangerIcon, "Locker", "locker"],
+  [MessageCircle, "Social", "social"],
+  [ImagePlus, "Screenshots", "screenshots"],
+  [Wrench, "Utilities", "utilities"],
+  [SettingsIcon, "Settings", "settings"],
 ] as const;
 const settingTabs = [
   [SettingsIcon, "General"],
@@ -251,7 +261,7 @@ function EmptySlot({
     </div>
   );
 }
-function Toggle({
+export function Toggle({
   value,
   onChange,
   disabled = false,
@@ -262,6 +272,7 @@ function Toggle({
 }) {
   return (
     <button
+      type="button"
       className={"toggle " + (value ? "on" : "off")}
       onClick={() => onChange(!value)}
       aria-pressed={value}
@@ -404,7 +415,7 @@ function revealWindowMenu(menu: HTMLDivElement) {
   });
 }
 
-function Select({
+export function Select({
   value,
   options,
   onChange,
@@ -451,10 +462,12 @@ function Select({
   return (
     <div className={`select-wrap ${variant === "filter" ? `filter-select ${value !== "All" ? "filtered" : ""}` : ""}`}>
       <button
+        type="button"
         ref={triggerRef}
         className="select-trigger"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
+        data-menu-side={menuPosition.top < (triggerRef.current?.getBoundingClientRect().top ?? 0) ? "above" : "below"}
         aria-label={variant === "filter" ? `Filter instances: ${value}` : undefined}
         title={variant === "filter" ? `Filter: ${value}` : undefined}
       >
@@ -464,6 +477,7 @@ function Select({
         <div ref={menuRef} className="select-menu select-menu-portal" style={{ ...closedDropdownStyle, position: "fixed", top: menuPosition.top, left: menuPosition.left, right: "auto", width: menuPosition.width, maxHeight: menuPosition.maxHeight }}>
           {options.map((option) => (
             <button
+        type="button"
               style={{ opacity: 0 }}
               className={option === value ? "chosen" : ""}
               key={option}
@@ -480,89 +494,6 @@ function Select({
       )}
     </div>
   );
-}
-
-function ContentFilterMenu({
-  sort,
-  filter,
-  onSortChange,
-  onFilterChange,
-}: {
-  sort: string;
-  filter: string;
-  onSortChange: (value: string) => void;
-  onFilterChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 276, maxHeight: 330 });
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const filtered = sort !== "Name" || filter !== "All";
-  useEffect(() => {
-    if (!open) return;
-    const place = () => {
-      const triggerBounds = triggerRef.current?.getBoundingClientRect();
-      if (!triggerBounds) return;
-      const headerBounds = triggerRef.current?.closest(".manager-heading")?.getBoundingClientRect() ?? triggerBounds;
-      const width = 276;
-      const contentHeight = menuRef.current?.scrollHeight || 168;
-      setPosition(fitActionMenuBelow(headerBounds, width, contentHeight, triggerBounds.right - width));
-    };
-    const closeOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
-    };
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-  useEffect(() => { if (open && menuRef.current) revealDropdown(menuRef.current); }, [open]);
-  return <div className={`content-filter ${filtered ? "filtered" : ""}`}>
-    <button
-      ref={triggerRef}
-      type="button"
-      className="content-filter-trigger"
-      aria-label={`Filter content: sorted by ${sort}, showing ${filter.toLowerCase()}`}
-      aria-expanded={open}
-      aria-haspopup="dialog"
-      title="Sort and filter"
-      onClick={() => setOpen(value => !value)}
-    >
-      <ListFilter size={19} strokeWidth={2.2} />
-    </button>
-    {open && createPortal(
-      <div
-        ref={menuRef}
-        className="select-menu select-menu-portal content-filter-popover"
-        role="dialog"
-        aria-label="Sort and filter content"
-        style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }}
-      >
-        <div className="content-filter-section">
-          <span>Sort by</span>
-          <div className="content-filter-options two" role="group" aria-label="Sort by">
-            {["Name", "Size"].map(option => <button type="button" className={sort === option ? "chosen" : ""} aria-pressed={sort === option} key={option} onClick={() => onSortChange(option)}>{option}</button>)}
-          </div>
-        </div>
-        <div className="content-filter-section">
-          <span>Show</span>
-          <div className="content-filter-options three" role="group" aria-label="Show content">
-            {["All", "Enabled", "Disabled"].map(option => <button type="button" className={filter === option ? "chosen" : ""} aria-pressed={filter === option} key={option} onClick={() => onFilterChange(option)}>{option}</button>)}
-          </div>
-        </div>
-      </div>,
-      document.body,
-    )}
-  </div>;
 }
 
 function PaginationControls({
@@ -896,13 +827,13 @@ function SettingsPage({
   onRestartOnboarding,
 }: {
   settings: SettingsState;
-  setSettings: (s: SettingsState) => void;
+  setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   onSignOut: () => void;
   profile: MinecraftProfile | null;
   profileIcon: string | null;
   onProfileIconChange: (icon: string) => void;
   backgroundImage: string | null;
-  onBackgroundImageChange: (image: string) => void;
+  onBackgroundImageChange: (image: string | null) => void;
   initialTab?: string;
   navigationKey: number;
   currentVersion: string;
@@ -1074,6 +1005,7 @@ function SettingsPage({
               Customize how Bloom Client looks.
             </p>
             <div className="settings-card">
+              <AppearancePresets positionMenu={fitFloatingMenu} revealMenu={revealDropdown} settings={settings} backgroundImage={backgroundImage} onApply={(appearance, image) => { onBackgroundImageChange(image); setSettings(current => ({ ...current, ...appearance })); }} />
               <SettingRow
                 title="Theme"
                 description="Choose your preferred theme."
@@ -1092,7 +1024,7 @@ function SettingsPage({
                 title="Accent Color"
                 description="Choose the accent color for the client."
               >
-                <div className="accent-picks">
+                <div className="accent-picker-stack"><div className="accent-picks">
                   {PRESET_ACCENTS.map((color) => (
                     <button
                       type="button"
@@ -1105,6 +1037,8 @@ function SettingsPage({
                   ))}
                   <CustomAccentPicker selected={settings.accentMode === "solid" && !PRESET_ACCENTS.some(color => color === settings.accent.toLowerCase())} value={settings.accent} onApply={color => setSettings({ ...settings, accent: color, accentMode: "solid" })} />
                   <button type="button" className={`gradient-accent-trigger ${settings.accentMode === "animated" ? "picked" : ""}`} style={{ background: accentGradient(settings.accentStops) }} aria-label="Animated gradient accent" aria-pressed={settings.accentMode === "animated"} title="Animated gradient accent" onClick={() => update("accentMode", "animated")} />
+                </div>
+
                 </div>
               </SettingRow>
               {settings.accentMode === "animated" && <AnimatedAccentEditor
@@ -1662,21 +1596,44 @@ function NewInstancePage({
             </div>
           </label>
         </section>
-        <section className="instance-side">
-          <h2>Select Components</h2>
-          <p className="section-subtitle">
-            Choose what to include in your instance.
-          </p>
-          <div className="settings-card">
-            {components.map(([key, title, description]) => (
-              <SettingRow title={title} description={description} key={key}>
-                <Toggle
-                  value={draft[key] as boolean}
-                  onChange={(value) => update(key, value)}
-                />
-              </SettingRow>
-            ))}
+        <section className="instance-side instance-launch-settings">
+          <h2>Memory &amp; Java</h2>
+          <div className="memory-control">
+            <div>
+              <b>Memory Allocation</b>
+              <input
+                type="range"
+                aria-label="Memory allocation"
+                min="1024"
+                max="8192"
+                step="512"
+                value={draft.memory}
+                onChange={(event) =>
+                  update("memory", Number(event.target.value))
+                }
+                style={
+                  {
+                    "--memory-fill": `${((draft.memory - 1024) / 7168) * 100}%`,
+                  } as CSSProperties
+                }
+              />
+              <div className="memory-scale">
+                <span>1024 MB</span>
+                <span>4096 MB</span>
+                <span>8192 MB</span>
+              </div>
+            </div>
+            <output>{draft.memory} MB</output>
           </div>
+          <label className="instance-field">
+            <span>Java Version</span>
+            <Select
+              value={draft.java}
+              options={javaOptions}
+              onChange={(value) => update("java", value)}
+            />
+          </label>
+          <p className="java-note">Automatic selects the required Java version at launch.</p>
         </section>
       </div>
       <div className="instance-advanced-disclosure">
@@ -1694,46 +1651,19 @@ function NewInstancePage({
       {advancedOpen && (
         <div className="instance-advanced-panel" id="new-instance-advanced-options">
           <section className="instance-advanced-java">
-            <h2>Java & Performance</h2>
-            <label className="instance-field">
-              <span>Java Version</span>
-              <Select
-                value={draft.java}
-                options={javaOptions}
-                onChange={(value) => update("java", value)}
-              />
-            </label>
-            <p className="java-note">
-              Detected {javas.length} Java installation
-              {javas.length === 1 ? "" : "s"}. Automatic will choose the required
-              runtime during launch.
+            <h2>Instance Folders</h2>
+            <p className="section-subtitle">
+              Choose which folders to create.
             </p>
-            <h3>Memory Allocation</h3>
-            <div className="memory-control">
-              <div>
-                <b>Allocate Memory</b>
-                <input
-                  type="range"
-                  min="1024"
-                  max="8192"
-                  step="512"
-                  value={draft.memory}
-                  onChange={(event) =>
-                    update("memory", Number(event.target.value))
-                  }
-                  style={
-                    {
-                      "--memory-fill": `${((draft.memory - 1024) / 7168) * 100}%`,
-                    } as CSSProperties
-                  }
-                />
-                <div className="memory-scale">
-                  <span>1024 MB</span>
-                  <span>4096 MB</span>
-                  <span>8192 MB</span>
-                </div>
-              </div>
-              <output>{draft.memory} MB</output>
+            <div className="settings-card">
+              {components.map(([key, title, description]) => (
+                <SettingRow title={title} description={description} key={key}>
+                  <Toggle
+                    value={draft[key] as boolean}
+                    onChange={(value) => update(key, value)}
+                  />
+                </SettingRow>
+              ))}
             </div>
             <label className="instance-field instance-jvm-field">
               <span>JVM Arguments <small>Optional</small></span>
@@ -1865,10 +1795,15 @@ function ModrinthPackBrowser({ gameVersion, onClose, onImported }: { gameVersion
   const [selectedGameVersion, setSelectedGameVersion] = useState("");
   const [selectedReleaseId, setSelectedReleaseId] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
+  const packActionRef = useRef<HTMLButtonElement>(null);
   const searchSequence = useRef(0);
+  useEffect(() => { if (selectedPack) packActionRef.current?.focus(); }, [selectedPack?.projectId]);
   useEffect(() => {
     if (!panelRef.current) return;
-    waapi.animate(panelRef.current, { opacity: [0, 1], transform: ["translateY(28px) scale(.985)", "translateY(0) scale(1)"], duration: 360, ease: "cubic-bezier(.22,.72,.2,1)", persist: true });
+    const motion = document.documentElement.dataset.animations === "on" && document.documentElement.dataset.performance !== "ultra" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!motion) { panelRef.current.style.opacity = "1"; return; }
+    const animation = waapi.animate(panelRef.current, { opacity: [0, 1], transform: ["translateY(28px) scale(.985)", "translateY(0) scale(1)"], duration: 360, ease: "cubic-bezier(.22,.72,.2,1)", persist: true });
+    return () => { animation.cancel(); };
   }, []);
   useEffect(() => {
     const key = catalogCacheKey("modpacks", gameVersion, query, page);
@@ -1953,7 +1888,7 @@ function ModrinthPackBrowser({ gameVersion, onClose, onImported }: { gameVersion
   };
   return <div className="modrinth-pack-layer" role="dialog" aria-modal="true" aria-label="Add a Modrinth modpack">
     <div className="modrinth-pack-panel" ref={panelRef}>
-      <header><h2>Modpacks</h2><button key={selectedPack ? "back-to-packs" : "close-modpacks"} type="button" className="catalog-close" onClick={selectedPack ? returnToPacks : onClose} aria-label={selectedPack ? "Back to modpacks" : "Close Modpacks"}><CloseIcon size={18} /></button></header>
+      <header><h2 key={selectedPack ? "versions" : "browse"} className="toolbar-copy">{selectedPack ? "Choose version" : "Modpacks"}</h2><button ref={packActionRef} type="button" className="catalog-close" onClick={selectedPack ? returnToPacks : onClose} aria-label={selectedPack ? "Back to modpacks" : "Close Modpacks"}><ToolbarIconSwap active={Boolean(selectedPack)} resting={<CloseIcon size={18} />} engaged={<X size={18} />} /></button></header>
       {selectedPack ? <div className="modrinth-version-picker">
         <div className="modrinth-version-identity">
           <span className="content-icon">{selectedPack.iconUrl ? <img src={selectedPack.iconUrl} alt="" /> : <PackageOpen size={26} />}</span>
@@ -1993,10 +1928,12 @@ function InstanceContentActions({
   item,
   category,
   onDelete,
+  onCopy,
 }: {
   item: InstanceContentItem;
   category: Exclude<InstanceTab, "settings">;
   onDelete: () => Promise<void>;
+  onCopy: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 178, maxHeight: 330 });
@@ -2032,6 +1969,7 @@ function InstanceContentActions({
     <button ref={triggerRef} className="content-dots" aria-label={`Actions for ${item.name}`} aria-expanded={open} onClick={() => setOpen(value => !value)}><MoreHorizontal size={18} /></button>
     {open && createPortal(
       <div ref={menuRef} className="select-menu select-menu-portal content-actions-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }}>
+        <button style={{ opacity: 0 }} onClick={() => { setOpen(false); onCopy(); }}><Copy size={14} />Copy to instance…</button>
         <button style={{ opacity: 0 }} className="view-modrinth-action" onClick={() => { setOpen(false); void openUrl(`https://modrinth.com/${modrinthSection}?q=${encodeURIComponent(item.name)}`); }}><ExternalLink size={14} />View on Modrinth</button>
         <button style={{ opacity: 0 }} className="delete-content-action" onClick={() => { setOpen(false); void onDelete(); }}><Trash2 size={14} />Delete</button>
       </div>,
@@ -2050,6 +1988,7 @@ function ContentEmptyState({ title, description, actions }: { title: string; des
 }
 
 function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialCatalog = false, recentSearchesEnabled, onPlay, onShare, onDuplicate, onDelete, onChanged, onInstallContent, onMessage }: { onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; recentSearchesEnabled: boolean; onPlay: () => void; onShare: () => void; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
+  const contentTransfer = useContentTransfer();
   const [tab, setTab] = useState<InstanceTab>(initialTab);
   const [items, setItems] = useState<InstanceContentItem[]>(() => initialTab === "settings" ? [] : instanceContentMemoryCache.get(instanceContentCacheKey(instance.id, initialTab)) || []);
   const [contentReady, setContentReady] = useState(() => initialTab === "settings" || instanceContentMemoryCache.has(instanceContentCacheKey(instance.id, initialTab)));
@@ -2428,14 +2367,13 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       </section>
     ) : (
       <section className={`instance-manager ${browsingCatalog ? "catalog-manager" : ""}`}>
-        <div className="manager-heading">
-          <div className="manager-heading-identity">
-            <h2>{browsingCatalog ? (search ? "Search Results" : `${categoryLabel} Library`) : categoryLabel} {!browsingCatalog && <span>{items.length}</span>}</h2>
-          </div>
-          <div className="manager-tools">
-            {browsingCatalog ? <button className="catalog-close" onClick={closeCatalog} aria-label={`Back to installed ${categoryLabel.toLowerCase()}`}><X size={17} />Back</button> : <><ContentFilterMenu sort={sort} filter={filter} onSortChange={value => { setSort(value); setContentPage(1); }} onFilterChange={value => { setFilter(value); setContentPage(1); }} /><button className="add-content" onClick={openCatalog} title={`Browse compatible Modrinth ${categoryLabel.toLowerCase()}`}><CirclePlus size={17} />Add {categoryLabel}</button></>}
-          </div>
-        </div>
+        <ContentToolbar key={`${instance.id}:${tab}`} category={categoryLabel}
+          total={items.length} enabled={items.filter(item => item.enabled).length} visible={visibleItems.length}
+          ready={contentReady} searching={Boolean(search)} browsing={browsingCatalog}
+          version={instance.version} loader={instance.loader} sort={sort} filter={filter}
+          onSortChange={value => { setSort(value); setContentPage(1); }}
+          onFilterChange={value => { setFilter(value); setContentPage(1); }}
+          onAdd={openCatalog} onBack={closeCatalog} />
         <div className="instance-content-list-shell">
           <div ref={contentListRef} className="content-list" onScroll={event => revealMoreContent(event.currentTarget)}>
           {browsingCatalog ? (
@@ -2449,7 +2387,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
               actions={search ? <button className="content-empty-primary" onClick={() => updateContentSearch("")}><CloseIcon size={16} />Clear search</button> : undefined}
             />
           ) : !contentReady ? <CatalogLoadingState label={`Opening cached ${categoryLabel.toLowerCase()}`} /> : visibleItems.length ? renderedInstalledItems.map(item => <div className="content-item installed-content-item" key={item.id}>
-            <button type="button" className="content-detail-hitarea" disabled={tab !== "mods"} onClick={() => showInstalledModDetails(item)} aria-label={tab === "mods" ? `Open details for ${item.name}` : undefined}>
+            <button type="button" className="content-detail-hitarea" draggable={false} onDragStart={event => event.preventDefault()} onPointerDown={event => contentTransfer.start(event, { ...item, sourceId: instance.id, category: tab })} onClick={() => { if (tab === "mods") showInstalledModDetails(item); }} aria-label={tab === "mods" ? `Open details for ${item.name}` : `${item.name}; drag to another instance to copy`}>
             <span className="content-icon">{item.icon ? <img src={item.icon} alt="" loading="lazy" /> : tab === "shaderpacks" ? <Cuboid size={22} /> : <PackageOpen size={22} />}</span>
             <div className="content-name">
               <b>{item.name}</b>
@@ -2464,7 +2402,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
             </button>
             <div className="content-row-actions">
               <Toggle value={item.enabled} onChange={value => void toggleItem(item, value)} />
-              <InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} />
+              <InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} onCopy={() => contentTransfer.choose({ ...item, sourceId: instance.id, category: tab })} />
             </div>
           </div>) : items.length ? <ContentEmptyState
             title={`No matching ${categoryLabel.toLowerCase()}`}
@@ -2815,7 +2753,7 @@ function LogsPage({ entries, running, onClear }: { entries: LogEntry[]; running:
 }
 type CompletedDownload = { id: string; name: string; version: string; loader?: string; targetName?: string; kind?: DownloadTaskKind; iconUrl?: string; completedAt: number };
 
-function DownloadArtwork({ source }: { source: string }) {
+function DownloadArtwork({ source, progress }: { source: string; progress?: number }) {
   const [image, setImage] = useState(source);
   useEffect(() => {
     let current = true;
@@ -2826,7 +2764,8 @@ function DownloadArtwork({ source }: { source: string }) {
       .catch(() => {});
     return () => { current = false; };
   }, [source]);
-  return <img src={image} alt="" />;
+  const percent = progress === undefined ? 100 : Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0;
+  return <span className={`download-artwork ${progress === undefined ? "" : "download-artwork-progress"}`} aria-hidden="true"><img src={image} alt="" />{progress !== undefined && <img className="download-artwork-fill" src={image} alt="" style={{ clipPath: `inset(${100 - percent}% 0 0)` }} />}</span>;
 }
 
 const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
@@ -2890,7 +2829,7 @@ function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, on
   return <article className="instance-library-card" onClick={openCard} onDoubleClick={playFromDoubleClick}>
     <div className="library-card-identity"><div className="library-card-top"><span className="library-instance-icon">{instance.icon ? <img src={instance.icon} alt="" /> : <span className="library-instance-fallback" aria-hidden="true">?</span>}</span><LoaderLogo loader={instance.loader} /></div>
     <div className="library-card-copy"><h2>{instance.name}</h2><p>Minecraft {instance.version}</p><small title={instance.directory}>{instance.directory}</small></div></div>
-    <div className="library-card-actions"><button className="library-play" disabled={busy} onClick={(event) => { event.stopPropagation(); onPlay(instance); }}><Play size={15} fill="currentColor" />Play</button><button className="library-folder" onClick={(event) => { event.stopPropagation(); void invoke("open_instance_folder", { instanceId: instance.id }); }} aria-label={`Open ${instance.name} folder`}><span className="animated-folder"><Folder className="folder-closed" size={17} /><FolderOpen className="folder-open" size={17} /></span></button><button ref={triggerRef} className="library-more" onClick={(event) => { event.stopPropagation(); setMenuOpen(value => !value); }} aria-label={`Actions for ${instance.name}`} aria-expanded={menuOpen}><MoreHorizontal size={18} /></button></div>
+    <div className="library-card-actions"><button className="library-play" disabled={busy} onClick={(event) => { event.stopPropagation(); onPlay(instance); }}><Play size={15} fill="currentColor" />Play</button><button className="library-folder" onClick={(event) => { event.stopPropagation(); void invoke("open_instance_folder", { instanceId: instance.id }); }} aria-label={`Open ${instance.name} folder`}><FolderOpen size={17} /></button><button ref={triggerRef} className="library-more" onClick={(event) => { event.stopPropagation(); setMenuOpen(value => !value); }} aria-label={`Actions for ${instance.name}`} aria-expanded={menuOpen}><MoreHorizontal size={18} /></button></div>
     {menuOpen && createPortal(<div ref={menuRef} className="select-menu select-menu-portal instance-library-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }} onClick={(event) => event.stopPropagation()}>
       <button style={{ opacity: 0 }} onClick={() => navigate("view")}><Layers3 size={15} />View instance</button>
       <button style={{ opacity: 0 }} onClick={() => navigate("add-mods")}><Puzzle size={15} />Add mods</button>
@@ -2915,14 +2854,28 @@ function LoaderLogo({ loader }: { loader: string }) {
 }
 
 function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, onDelete, onPlay, onCreate }: { instances: InstanceDraft[]; busy: boolean; doubleClickToPlay: boolean; onOpen: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onShare: (instance: InstanceDraft) => void; onDelete: (instance: InstanceDraft) => Promise<void>; onPlay: (instance: InstanceDraft) => void; onCreate: () => void }) {
-  const actionsRef = useRef<HTMLDivElement>(null);
+  const filters = useToolbarDisclosure();
+  const filterId = useId();
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("All");
   const visible = instances.filter((instance) => instance.name.toLowerCase().includes(query.toLowerCase()) && (loader === "All" || instance.loader.toLowerCase() === loader.toLowerCase()));
   const loaders = ["All", ...Array.from(new Set(instances.map((instance) => instance.loader)))];
   return <div className="instances-page">
-    <header className="instances-page-heading"><h1>All Instances</h1></header>
-    <div ref={actionsRef} className="instances-library-actions"><button className="instances-create" onClick={onCreate}><CirclePlus size={17} />New instance</button><Select value={loader} options={loaders} onChange={setLoader} variant="filter" menuAnchorRef={actionsRef} /></div>
+    <div ref={filters.root} className="instances-connected-heading">
+      <header className="instances-page-heading"><h1>All Instances</h1></header>
+      <div className="connected-toolbar-shelf" data-open={filters.open}>
+      <div className="instances-library-actions toolbar-shelf-actions">
+        <button className="instances-create" onClick={onCreate}><CirclePlus size={17} />New instance</button>
+        <button ref={filters.trigger} type="button" className="content-filter-trigger" data-filtered={loader !== "All"}
+          aria-label={`Filter instances: ${loader}`} title="Filter instances" aria-expanded={filters.open} aria-controls={filterId}
+          onClick={() => filters.setOpen(value => !value)}><ListFilter size={19} /></button>
+      </div>
+      <ToolbarDrawer id={filterId} open={filters.open} className="instances-filter-drawer">
+        {loaders.length <= 4 ? <ToolbarSegments label="Loader" options={loaders} value={loader} onChange={setLoader} />
+          : <div className="toolbar-field"><span>Loader</span><Select value={loader} options={loaders} onChange={setLoader} /></div>}
+      </ToolbarDrawer>
+      </div>
+    </div>
     <div className="instances-grid">
       {visible.map(instance => <InstanceLibraryCard key={instance.id} instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onShare={onShare} onDelete={onDelete} onPlay={onPlay} />)}
       {!visible.length && <div className="instances-library-empty">{instances.length ? "No matching instances" : "No instances yet"}</div>}
@@ -2949,7 +2902,7 @@ function DownloadsPage({ download, instances, completed, missingMods, onClear, o
     </section>}
     <section className="download-section"><h2>Active</h2>
       {download.active || failed ? <div className={`download-task active-task ${failed ? "failed-task" : ""}`}>
-        <span className={`download-task-icon ${activeArtwork ? "has-artwork" : ""}`}>{activeArtwork ? <DownloadArtwork source={activeArtwork} /> : gameTask ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : download.taskKind === "mod" ? <Puzzle size={24} /> : download.taskKind === "resourcepack" ? <PackageOpen size={24} /> : <Cuboid size={24} />}</span>
+        <span className={`download-task-icon ${activeArtwork ? "has-artwork" : ""}`}>{activeArtwork ? <DownloadArtwork source={activeArtwork} progress={download.state === "complete" || download.state === "running" ? 100 : download.progress} /> : gameTask ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : download.taskKind === "mod" ? <Puzzle size={24} /> : download.taskKind === "resourcepack" ? <PackageOpen size={24} /> : <Cuboid size={24} />}</span>
         <div className="download-task-main"><div className="download-task-title"><div><b>{download.taskName || activeInstance?.name || "Minecraft"}</b><small>{download.taskKind && download.taskKind !== "game" ? `${download.taskVersion || (download.taskKind === "mod" ? "Fabric mod" : download.taskKind === "resourcepack" ? "Resource pack" : "Shader")} • Installing to ${activeInstance?.name || "instance"}` : activeInstance ? `${activeInstance.version} • ${activeInstance.loader}` : "Preparing instance"}</small></div><span>{Math.round(download.progress)}%</span></div><div className="download-linear"><i style={{ width: `${download.progress}%` }} /></div></div>
         <div className="download-metrics"><span>{failed ? "Task stopped" : download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Scanning files"}</span><small>{failed ? "See error" : download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : "Calculating speed"}</small></div>
         <div className="download-task-status"><b>{status}</b><small title={download.message}>{download.message || "Preparing files"}{download.message === "Loading assets" && <i className="loading-dots" />}</small></div>{!failed && <button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>}
@@ -2985,7 +2938,7 @@ function SpotlightInstanceSelect({
       if (!bounds) return;
       const width = Math.max(140, bounds.width - 10);
       const contentHeight = menuRef.current?.scrollHeight || instances.length * 50 + 10;
-      const top = bounds.bottom - 10;
+      const top = bounds.bottom - 15;
       const viewportPadding = 8;
       setPosition({
         top,
@@ -3148,6 +3101,8 @@ function App() {
   );
   const [profileIcon, setProfileIcon] = useState<string | null>(() => localStorage.getItem(PROFILE_ICON_STORAGE_KEY));
   const [customBackgroundImage, setCustomBackgroundImage] = useState<string | null>(null);
+  const backgroundImageRevision = useRef(0);
+  const replaceBackgroundImage = (image: string | null) => { backgroundImageRevision.current++; setCustomBackgroundImage(image); };
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [windowMenuOpen, setWindowMenuOpen] = useState<WindowMenuName | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true");
@@ -3197,11 +3152,12 @@ function App() {
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [profileMenuOpen, signInOpen]);
   useEffect(() => {
-    if (!settings.customBackground) return;
+
     let cancelled = false;
+    const revision = backgroundImageRevision.current;
     const timer = window.setTimeout(() => {
       void invoke<string | null>("load_custom_background")
-        .then(image => { if (!cancelled) setCustomBackgroundImage(image); })
+        .then(image => { if (!cancelled && revision === backgroundImageRevision.current) setCustomBackgroundImage(image); })
         .catch(() => {});
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
@@ -3735,12 +3691,6 @@ function App() {
   };
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape") setWindowMenuOpen(null);
-    if (
-      event.key === "F12" ||
-      (event.ctrlKey && event.shiftKey) ||
-      (event.ctrlKey && event.key.toLowerCase() === "u")
-    )
-      event.preventDefault();
   };
   const selectedInstance = instances.find(instance => instance.id === selectedInstanceId);
   const mostRecentInstance = instances[0];
@@ -3788,6 +3738,10 @@ function App() {
     setToast(userError(message));
     toolToastTimer.current = window.setTimeout(() => setToast(""), 4000);
   };
+  const contentTransfer = useContentTransferController(instances, (targetId, category, message) => {
+    instanceContentMemoryCache.delete(instanceContentCacheKey(targetId, category));
+    showToolMessage(message);
+  });
   const importModpack = async () => {
     if (download.active || gameRunning) return showToolMessage("Another download or game launch is already active.");
     try {
@@ -3818,6 +3772,7 @@ function App() {
     ...([ ["Home", "home"], ["Instances", "instances"], ["Locker", "locker"], ["Social", "social"], ["Screenshots", "screenshots"], ["Utilities", "utilities"], ["Downloads", "downloads"], ["Logs", "logs"], ["New instance", "new-instance"] ] as const).map(([label, destination]) => ({ id: `page:${destination}`, label, detail: "Page", kind: "page" as const, run: () => setPage(destination) })),
     ...["General", "Appearance", "Background", "Performance", "Cache", "Minecraft", "Cosmetics", "Launcher", "Privacy", "Updates", "My Profile", "Advanced"].map(label => ({ id: `setting:${label}`, label, detail: "Settings", keywords: ({ Appearance: "theme accent color animations", Background: "image wallpaper organic opacity", Performance: "memory ram java arguments", Minecraft: "version loader", "My Profile": "account login avatar", Cache: "storage disk" } as Record<string, string>)[label], kind: "setting" as const, run: () => openSettings(label) })),
   ];
+  const activeNavPage = page === "instance" || page === "new-instance" ? "instances" : page === "autotune" ? "utilities" : page;
   const liveBackgroundActive = settings.backgroundMode === "live";
   const customBackgroundActive = settings.customBackground && (liveBackgroundActive || Boolean(customBackgroundImage));
   const customSurfaceDarkness = Math.max(0, Math.min(100, settings.sidebarOpacity));
@@ -3847,6 +3802,7 @@ function App() {
     }} />;
   }
   return (
+    <ContentTransferContext.Provider value={contentTransfer.controls}>
     <div
       className="app-shell"
       style={customBackgroundStyle}
@@ -3928,26 +3884,15 @@ function App() {
         </div>
       </div>
       <aside className="sidebar" aria-label={sidebarCollapsed ? "Compact sidebar" : "Sidebar"}>
-        <nav>
-          {nav.map(([Icon, label], index) => (
+        <nav className="sidebar-navigation" aria-label="Main navigation">
+          {nav.map(([Icon, label, destination]) => (
             <button
-              className={
-                (page === "home" && index === 0) ||
-                (page === "instances" && label === "Instances") ||
-                (page === "settings" && label === "Settings") ||
-                (page === "screenshots" && label === "Screenshots") ||
-                (page === "utilities" && label === "Utilities") ||
-                (page === "social" && label === "Social") ||
-                (page === "locker" && label === "Locker")
-                  ? "active"
-                  : ""
-              }
+              className={activeNavPage === destination ? "active" : ""}
               key={label}
               aria-label={label}
+              aria-current={activeNavPage === destination ? "page" : undefined}
               title={sidebarCollapsed ? label : undefined}
-              onClick={() =>
-                label === "Screenshots" ? setPage("screenshots") : label === "Locker" ? setPage("locker") : label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "Utilities" ? setPage("utilities") : label === "Social" ? setPage("social") : setPage("home")
-              }
+              onClick={() => destination === "settings" ? openSettings() : setPage(destination)}
             >
               <Icon size={17} />
               <span className="sidebar-nav-label">{label}</span>
@@ -3963,10 +3908,12 @@ function App() {
         </div>
         <div className="instance-list">
           {instances.length ? (
-            instances.slice(0, 3).map((instance) => (
+            (contentTransfer.dragging ? instances : instances.slice(0, 3)).map((instance) => (
               <div
                 className={`sidebar-instance ${page === "instance" && selectedInstanceId === instance.id ? "active" : ""}`}
                 key={instance.id}
+                data-content-drop-id={instance.id}
+                data-content-drop-name={instance.name}
               >
                 <button className="sidebar-instance-open" title={sidebarCollapsed ? instance.name : undefined} onClick={(event) => handleInstanceClick(event, instance)} onDoubleClick={(event) => handleInstanceDoubleClick(event, instance)} aria-label={`Open ${instance.name}`}>
                   <span className="sidebar-instance-media" aria-hidden="true">{instance.icon ? <img className="sidebar-instance-icon" src={instance.icon} alt="" /> : <span className="sidebar-instance-fallback">?</span>}</span>
@@ -4072,7 +4019,7 @@ function App() {
         ) : page === "locker" ? (
           <Locker profile={profile} motion={settings.animations && !settings.ultraPerformance} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />
         ) : page === "settings" ? (
-          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} backgroundImage={customBackgroundImage} onBackgroundImageChange={setCustomBackgroundImage} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => void installUpdate()} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} />
+          <WallpaperSourceContext.Provider value={customBackgroundImage}><SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} backgroundImage={customBackgroundImage} onBackgroundImageChange={replaceBackgroundImage} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => void installUpdate()} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} /></WallpaperSourceContext.Provider>
         ) : page === "new-instance" ? (
           <NewInstancePage
             defaults={settings}
@@ -4216,6 +4163,8 @@ function App() {
       </section>}
       {toast && <div className={`launch-toast ${toastKind}`} role={toastKind === "error" ? "alert" : "status"} aria-live={toastKind === "error" ? "assertive" : "polite"}><span>{toast}</span></div>}
     </div>
+    {contentTransfer.overlay}
+    </ContentTransferContext.Provider>
   );
 }
 createRoot(document.getElementById("root")!).render(

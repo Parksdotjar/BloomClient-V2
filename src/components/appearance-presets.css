@@ -1,0 +1,20 @@
+.appearance-presets { min-width: 0; }
+.appearance-presets .appearance-preset-row { border-bottom: 1px solid var(--line); }
+.appearance-preset-menu .appearance-preset-new { display: flex; align-items: center; gap: 8px; padding: 11px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; border-radius: 5px 5px 0 0; }
+.appearance-preset-option { display: flex; align-items: center; min-width: 0; border-radius: 6px; }
+.appearance-preset-option.selected { background: var(--dropdown-selected); }
+.appearance-preset-option:hover, .appearance-preset-option:focus-within { background: var(--dropdown-hover); }
+.appearance-preset-option > button, .appearance-preset-option > button:hover { background: transparent; }
+.appearance-preset-menu .appearance-preset-pick { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 10px 8px; }
+.appearance-preset-pick > span:not(.appearance-preset-swatch) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.appearance-preset-swatch { width: 16px; height: 16px; flex: 0 0 16px; border-radius: 4px; }
+.appearance-preset-menu .appearance-preset-action { width: 25px; flex: 0 0 25px; padding: 8px 5px; display: grid; place-items: center; color: var(--muted); }
+.appearance-preset-menu .appearance-preset-action:hover { color: var(--theme-danger-ink, #ff9a9a); background: transparent; }
+.appearance-preset-menu button:focus-visible, .appearance-preset-editor :is(button, input):focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: -2px; }
+.appearance-preset-editor { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 12px 18px; background: var(--control); border-bottom: 1px solid var(--line); }
+.appearance-preset-editor input { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--control); color: var(--theme-ink, #f1f4f1); }
+.appearance-preset-editor > span { flex: 1; overflow-wrap: anywhere; font-size: 12px; }
+.appearance-preset-editor button, .appearance-preset-error button { display: inline-flex; align-items: center; justify-content: center; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--theme-ink, #f1f4f1); }
+.appearance-preset-editor .appearance-preset-save { background: var(--accent); color: var(--theme-on-accent, #080a0b); font-weight: 800; }
+.appearance-preset-error { padding: 12px 18px; font-size: 12px; color: var(--theme-danger-ink, #ff9a9a); overflow-wrap: anywhere; }
+.appearance-preset-announcement { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

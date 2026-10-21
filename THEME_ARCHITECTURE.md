@@ -9,6 +9,7 @@ Appearance offers OLED Black (the existing default) and Light through one ordina
 - Base, surface, inset, and raised tokens cover page backgrounds and depth levels.
 - Ink/muted ink cover black text and secondary copy. Accent text uses `--accent-ink`, a readable foreground derived from the chosen accent; accent fills keep the user's real color.
 - Success, danger, warning, info, and violet surface/ink pairs preserve semantic status and contrast.
+- `--theme-on-danger` stays white over solid red controls, including the Compare button's Cancel state. That state uses the danger ink as its solid fill, rather than the pale Light status surface.
 - Edge, wash, glass, and overlay tokens cover boundaries, hover treatments, transparency, and modal backdrops.
 - Slate shadow tokens use 9%/4.5% opacity instead of reusing opaque OLED black. Highlight edges remain separate from depth shadows. Shadow lengths/layout do not change between themes.
 

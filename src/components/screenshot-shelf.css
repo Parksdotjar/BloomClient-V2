@@ -2,22 +2,27 @@
 .screenshot-shelf button { cursor: pointer; }
 .shelf-heading-shell { margin-bottom: 18px; }
 .screenshot-shelf .shelf-heading { position: relative; z-index: 2; min-height: 92px; justify-content: center; padding: 20px 24px; border-radius: 14px 14px 22px 22px; box-shadow: 0 10px 13px -8px var(--theme-shadow, #000f), 0 23px 30px -17px var(--theme-shadow, #000d); }
-.screenshot-shelf .shelf-heading h1 { width: 100%; text-align: center; font-size: 36px; line-height: 1.15; }
+.screenshot-shelf .shelf-heading h1 { width: 100%; text-align: center; font-size: 30px; line-height: 1.15; }
 .shelf-toolbar { position: relative; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; margin-top: -18px; padding: 38px 22px 20px; background: color-mix(in srgb, var(--page) 78%, var(--panel)); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 14px 14px; }
 
 .shelf-toolbar > .select-wrap { width: min(280px, 100%); min-width: 0; }
 .shelf-toolbar > .select-wrap > button { min-height: 42px; font-size: 13px; }
 .screenshot-shelf .shelf-toolbar > button { width: 42px; height: 42px; flex-shrink: 0; padding: 0; }
 .shelf-toolbar > button, .shelf-grid footer button, .shelf-more, .shelf-preview button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--control); color: var(--text); font: inherit; font-size: 12px; }
-.shelf-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(240px,1fr)); gap: 18px; }
+.shelf-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%, 280px),1fr)); gap: 18px; }
 .shelf-grid article { overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
 .shelf-thumbnail { display: block; width: 100%; aspect-ratio: 16/9; padding: 0; border: 0; background: var(--theme-base, #050607); overflow: hidden; }
-.shelf-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.shelf-thumbnail img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .shelf-image-placeholder { min-height: 120px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 12px; }
-.shelf-caption { display: grid; gap: 6px; padding: 14px 16px; }
+.shelf-caption { display: grid; gap: 5px; min-width: 0; }
 .shelf-caption strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.shelf-caption span, .shelf-caption small { color: var(--muted); font-size: 11px; }
-.shelf-grid footer { display: flex; justify-content: space-between; gap: 8px; padding: 0 16px 16px; }
+.shelf-caption small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
+.shelf-grid footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; }
+.shelf-card-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.shelf-grid .shelf-card-actions button { width: 34px; height: 34px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); }
+.shelf-grid .shelf-card-actions button:hover:not(:disabled) { background: var(--dropdown-hover); color: var(--text); }
+.shelf-grid article:focus-within { border-color: var(--muted); }
+.screenshot-shelf .shelf-thumbnail:focus-visible { outline-offset: -3px; }
 .shelf-empty { min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
 .shelf-empty h2, .shelf-empty p { margin: 0; }
 .shelf-more { margin: 24px auto; }
@@ -30,15 +35,20 @@
 .screenshot-shelf button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .screenshot-shelf button:disabled { opacity: .5; cursor: wait; }
 
-.shelf-comparison-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 18px; }
-.shelf-comparison-toolbar > span { color: var(--muted); font-size: 11px; }
-.shelf-comparison-toolbar > div { display: flex; gap: 8px; flex-shrink: 0; }
-.shelf-comparison-toolbar button { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--control); color: var(--text); font: inherit; font-size: 12px; }
+.shelf-comparison-toolbar { display: flex; align-items: center; gap: 8px; }
+.shelf-comparison-toolbar button { min-width: 140px; min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--control); color: var(--text); font: inherit; font-size: 12px; }
+/* Label remounts must not retrigger hover while the pointer stays on the button. */
+.shelf-comparison-toolbar button > * { pointer-events: none; }
 .shelf-comparison-toolbar .shelf-compare-launch { background: var(--accent); color: var(--theme-on-accent, #101510); border-color: transparent; font-weight: 800; }
+.shelf-comparison-toolbar .shelf-compare-cancel { background: var(--theme-danger-ink, #ef5353); color: var(--theme-on-danger, #fff); border-color: transparent; font-weight: 800; }
 .shelf-grid .shelf-thumbnail { position: relative; }
 .shelf-grid article.comparison-selected { border-color: var(--accent); }
 .shelf-selection-mark { position: absolute; left: 12px; top: 12px; display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 24px; height: 24px; padding: 0 5px; border: 1px solid var(--theme-edge, #fff8); border-radius: 6px; background: var(--theme-glass, #101318d9); color: var(--theme-ink, #fff); font-size: 11px; font-weight: 800; }
 .shelf-selection-mark.selected { border-color: var(--accent); background: var(--accent); color: var(--theme-on-accent, #101510); }
 .screenshot-shelf .shelf-thumbnail:disabled { cursor: default; opacity: .65; }
 .shelf-comparison-toolbar button:disabled { cursor: default; }
+.shelf-heading-shell { position: relative; isolation: isolate; }
+.shelf-heading-shell .shelf-heading { z-index: 3; }
+.shelf-heading-shell .shelf-toolbar { z-index: 2; }
+.shelf-selection-status { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 1000px) { .shelf-comparison-toolbar { flex-wrap: wrap; } }

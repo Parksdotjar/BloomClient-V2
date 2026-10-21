@@ -1,6 +1,7 @@
 mod fabric_loader;
 mod launch_cache;
 mod screenshots;
+mod content_transfer;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex, OnceLock,
@@ -2043,6 +2044,16 @@ async fn load_custom_background() -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(load_custom_background_blocking)
         .await
         .map_err(|error| format!("The background image reader stopped unexpectedly: {error}"))?
+}
+
+#[tauri::command]
+fn clear_custom_background() -> Result<(), String> {
+    let path = custom_background_path()?;
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -5055,6 +5066,7 @@ pub fn run() {
             cosmetics::reconcile_cosmetics,
             save_custom_background,
             load_custom_background,
+            clear_custom_background,
             search_modrinth_content,
             get_modrinth_project_details,
             list_modrinth_modpack_releases,
@@ -5072,6 +5084,8 @@ pub fn run() {
             duplicate_instance,
             delete_instance,
             list_instance_content,
+            content_transfer::preview_content_transfer,
+            content_transfer::copy_instance_content,
             toggle_instance_content,
             delete_instance_content,
             set_instance_icon,

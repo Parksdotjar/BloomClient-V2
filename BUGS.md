@@ -55,8 +55,18 @@ This file is the durable, context-independent record of bugs found in Bloom Clie
 | BLOOM-041 | Fixed | Bloom Cosmetics | Enabled renderer was not repaired when its managed JAR was missing |
 | BLOOM-042 | Fixed | Locker | Official UUID skin was rejected and replaced by a gray mannequin |
 | BLOOM-043 | Fixed | Instance content | Footer fade exposed a hard seam and inset rectangular edge |
+| BLOOM-047 | Fixed | Locker | Hidden Equip buttons flashed over names; refresh reset wardrobe choices |
 
 ---
+
+## BLOOM-047 — Locker actions flashed over item names during loading
+
+- **Status:** Fixed
+- **Symptom:** Revisiting Cloaks briefly showed Equip/Unequip over each item name. Saving could reveal unrelated cards' actions. Cape/skin refresh also reset the selected item or arm model, and a shrinking catalog could leave an empty page.
+- **Root cause:** `.locker-workspace button:disabled` forced opacity to `.45` even for hidden actions. Cached cloak selection began empty; wardrobe reload always selected the active/current item and reset its arm model without validating pagination.
+- **Fix:** Disabled opacity is separate from action visibility; only hovered/focused cards reveal their action. Cached previews initialize from available data. Refresh preserves valid choices and confirmed state, clamps page bounds, and uses real request feedback. Card density follows available catalog width and the side preview no longer stretches with long grids.
+- **Verification:** `tests/locker-ui.mjs` reproduced the 45% opacity flash before the fix. Browser checks cover delayed account reads, saves, hover/keyboard focus, model/selection preservation, import/apply/equip sequencing, pagination shrink, missing current skin, Light/OLED, compact layout and all motion modes. Native requests use fixtures; no live account changes are made.
+- **Do not repeat:** A disabled state must not reveal a normally hidden control, and a refresh must not reset a still-valid user selection or draft.
 
 ## BLIM-001 — Vite/Tauri development port mismatch
 

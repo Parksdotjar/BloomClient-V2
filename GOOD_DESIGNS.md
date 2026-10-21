@@ -1,10 +1,73 @@
 # Bloom Client Approved Design Patterns
 
-This is the short list of designs the user has explicitly approved as especially successful. Treat these as visual references for future work—not as components to copy everywhere without considering context.
+This is the short list of designs Parks has explicitly approved as especially successful. Each entry distinguishes an approved Bloom implementation from an external quality reference. Reuse the relevant principle, not every detail everywhere.
 
-Before designing a related interface, review this file alongside `DESIGN_RULES.md` and `UI_CHANGE_HISTORY.md`.
+Read this alongside [DESIGN_RULES.md](DESIGN_RULES.md), which contains the current requirements, and [UI_CHANGE_HISTORY.md](UI_CHANGE_HISTORY.md), which preserves corrections and superseded attempts. A later explicit correction takes precedence over an earlier example.
 
-For approved breakdowns of a professional changelog/timeline and a structured dashboard workspace, read [`PROFESSIONAL_INTERFACE_REFERENCE.md`](PROFESSIONAL_INTERFACE_REFERENCE.md). Use their hierarchy and composition lessons without copying either source design.
+For approved professional changelog/timeline and dashboard references, see [PROFESSIONAL_INTERFACE_REFERENCE.md](PROFESSIONAL_INTERFACE_REFERENCE.md). Adapt their hierarchy and composition to Bloom's current themes and selected accent.
+
+## Single screenshot comparison action
+
+**Explicitly approved:** October 20, 2026. Parks said the page and the Compare/Cancel interaction look great. This approval is specific to screenshot comparison; the subsequently reported Locker bugs still required correction.
+
+The same fixed-width button starts selection, shows `Compare (0/2)` through `Compare (2/2)`, and reveals Cancel on hover or keyboard focus while fewer than two images are selected. At two it opens comparison. Its text/icon transition in place, the gallery owns selection and deselection, and there is no extra bottom tray, prompt or separate cancel button. Initial activation shows the count before a later hover reveals Cancel.
+
+![Approved Compare button showing Cancel on hover, with fixture data](design-references/screenshot-compare-approved-2026-10-20.png)
+
+## Connected instance content toolbar
+
+**Explicitly approved:** October 20, 2026. Parks called the completed toolbar “actually perfect” and “beautiful,” then requested that its lessons be retained in the design documentation.
+
+**Current example:** Mods, Resource Packs and Shaders in an opened instance. [Component](src/components/ContentToolbar.tsx), [styles](src/components/content-toolbar.css), [interaction checks](tests/content-toolbar-ui.mjs).
+
+![Approved instance content toolbar with its filter drawer open](design-references/content-toolbar-approved-2026-10-20.png)
+
+The screenshot records the approved composition with fixture data. Its red accent and example counts are not fixed product requirements.
+
+### What makes it work
+
+- The raised category header and recessed tools feel like parts of one workspace. Filter reveals a full-width attached drawer instead of spawning the old small popup.
+- The boxed `80` badge is replaced by a quiet second line such as `80 installed · 72 enabled`. Searching or filtering changes that line to matching versus total counts; catalog mode identifies the instance's Minecraft version and loader. Every number comes from real current state.
+- Motion explains the interaction: the drawer reveals, neutral selection surfaces slide between Show/Sort choices, and the header copy and Add/Back icon transition when entering or leaving the catalog. Filtering and navigation do not wait for animation to finish.
+- Add and Back remain the same mounted, focusable action. The workspace changes context without making the user relocate the way back.
+- Opening tools borrows height from the list viewport. Results remain below the drawer, while the bottom search dock and pagination stay anchored. Compact windows use two rows of tools.
+- Flat action buttons, restrained borders, existing typography and theme-aware depth give the interaction its character. There are no ornamental counters, glows, fading underlines or thick button rims.
+
+### Reuse this pattern for
+
+- A bounded set of tools belonging to the same content workspace, especially when showing the tools should leave the current results and search accessible.
+- A reversible context change where the same header and action can communicate both entry and return.
+- A count that becomes more useful when it describes the current view, rather than repeating a title in a badge.
+
+### Do not reuse it for
+
+- Every dropdown, sidebar selection or action button. This approval does not authorize a global navigation or button redesign.
+- Long menus or complex forms that need independent scrolling or a dedicated view.
+- A third, lighter panel beneath an existing dark control shelf. Parks rejected that adaptation on October 20: extend the existing shelf downward, reduce the gap under its controls and reveal contents within the same surface.
+- Oversized empty selection cards or a whole drawer sliding in from the left. Revealed tools emerge in place, with left-to-right timing between multiple elements. Parks's final screenshot correction removes its lower selection area completely: the existing Compare button owns the live `0/2`–`2/2` count, reveals Cancel on hover/focus at zero or one selection, and opens comparison at two. The earlier prompt, thumbnail tray and separate X button are superseded; connected interaction does not require adding a drawer.
+- Decorative movement, artificial loading delays or an entrance animation on the existing installed rows. “More involvement” means clear interaction feedback, not movement everywhere.
+
+**Requested reuse, October 20:** Parks asked for the other suitable main toolbars to share this connected feel while keeping normal buttons and the sidebar unchanged. Instances, screenshot comparison, Locker categories and Modpacks adapt the pattern. The original Mods toolbar and the final single-button comparison interaction are explicitly approved references; do not treat the initial three-surface adaptation or all other adaptations as approved.
+
+### Regression checklist
+
+- Show, Sort and Reset update actual results and reset pagination correctly; search and enable/disable changes update the readout from confirmed state.
+- Add/Back preserve real catalog compatibility checks, caching, loading, installation and return behavior. A blocked catalog action must not falsely transition the header.
+- Escape closes the drawer and restores trigger focus; outside clicks dismiss it; hidden controls cannot receive focus or clicks.
+- Drawer opening and count changes do not move the bottom search dock or pagination or cover the first result.
+- OLED, Light, custom accents/backgrounds and compact windows retain readable controls. Reduced Motion, Show Animations off and Ultra Performance remove decorative motion without removing functionality.
+
+## Focused choice dialog with consistent cards
+
+**Approved reference:** October 19, 2026. Parks supplied a hosting-plan dialog as a visual reference only; Bloom has no requested plans, billing, hosting, or subscription feature.
+
+- Clear modal silhouette over a subdued backdrop, with a separated header and compact step navigation.
+- Equal-width cards use consistent padding, aligned actions, strong titles, and quiet supporting details with small unboxed icons.
+- A selected choice receives one coherent tinted surface and restrained border. Adapt to Bloom's active theme and accent rather than copying the reference's multicolor plan buttons or promotional badges.
+- A full-width alternative below the main choices separates custom setup from common options without adding another competing card.
+- Use these patterns when a real task benefits from comparing a few choices or a short setup flow. Keep copy concise, avoid decorative fading underlines, and do not invent stages, plans, or features solely to reproduce the reference.
+
+**Scope correction:** Parks rejected the three-card New Instance implementation derived from this reference on October 19. The reference remains approved inspiration; that implementation does not. New Instance uses the direct setup form with visible Memory Allocation and Java selection, as recorded in DESIGN_RULES.md.
 
 ## Full-bleed artwork with hover-to-change
 

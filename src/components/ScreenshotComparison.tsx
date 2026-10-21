@@ -6,6 +6,7 @@ import "./screenshot-comparison.css";
 export type ComparisonShot = { instanceId: string; instanceName: string; name: string; modified: number; revision?: string };
 export function ScreenshotComparison({ shots, loadImage, initialImages, close, exportImage }: { shots: [ComparisonShot, ComparisonShot]; loadImage: (shot: ComparisonShot) => Promise<string>; initialImages?: [string, string]; close: () => void; exportImage: (render: () => Promise<string>) => Promise<void> }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const handle = useRef<HTMLButtonElement>(null);
   const canvas = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -15,9 +16,10 @@ export function ScreenshotComparison({ shots, loadImage, initialImages, close, e
   const [position, setPosition] = useState(50);
   const [swapped, setSwapped] = useState(false);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    // Keep the original trigger across StrictMode's effect replay.
+    if (!returnFocus.current) returnFocus.current = document.activeElement as HTMLElement | null;
     dialog.current?.showModal();
-    return () => { previous?.focus(); };
+    return () => { returnFocus.current?.focus(); };
   }, []);
   const [a, b] = shots;
   useEffect(() => {

@@ -3,7 +3,14 @@ import assert from "node:assert/strict";
 import postcss from "postcss";
 
 // Check all UI sheets, including portal-only components. Real artwork stays theme-independent.
-const files = ["src/styles.css", ...fs.readdirSync("src/components").filter(file => file.endsWith(".css") && file !== "organic-background.css").map(file => `src/components/${file}`)];
+function componentStyles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) return componentStyles(path);
+    return entry.isFile() && entry.name.endsWith(".css") && entry.name !== "organic-background.css" ? [path] : [];
+  });
+}
+const files = ["src/styles.css", ...componentStyles("src/components")];
 const palettes = ["light"].map(name => {
   const values = new Map();
   postcss.parse(fs.readFileSync(`src/themes/${name}.css`, "utf8")).walkDecls(decl => {
