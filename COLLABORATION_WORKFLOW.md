@@ -71,3 +71,11 @@ Both developers should give their coding assistant these constraints at the star
 - Keep real functionality wired end to end; do not add mock buttons or cosmetic state.
 - Run the repository checks and summarize exact files and behavior changed.
 - Never commit, merge, tag, release, alter secrets, or modify owner-only tooling unless Parks explicitly requests that exact action.
+
+## Release verification after v1.1.9
+
+- The October 20, 2026 owner-authorized release was prepared in the sibling `BloomClient-Release-1.1.9` checkout so the primary working tree and unfinished emote/backend work stayed intact. GitHub release: https://github.com/Parksdotjar/BloomClient-V2/releases/tag/v1.1.9 (commit `c4d8d0c6ad209c7aa991c8002ef6b369943034a3`).
+- Wait for the Windows signing workflow and required checks before publication. Verify the downloaded installer against the updater public key already embedded in the client; do not replace the key.
+- Inspect generated `latest.json` before publishing. The action produced GitHub asset API URLs in v1.1.9. Replace these with the public, tagged EXE download URL for both Windows platform entries, preserve the signatures, and replace placeholder notes with the actual release notes. Upload the corrected manifest while the release is still a draft.
+- After publication, fetch `/releases/latest/download/latest.json` without authentication and download its installer URL. Confirm version, notes, and installer hash match the signature-verified files. v1.1.9 passed these checks.
+- Bloom Admin Markdown uses `## New Features`, `## Improvements`, and `## Fixes`; title, version, date and release URL belong in the editor fields. A ready-to-import 1.1.9 example is in the sibling `BloomAdmin/examples/client-1.1.9.md`. Keep Discord-style headers in the GitHub release notes separately. Preparing this example does not publish it to the website.

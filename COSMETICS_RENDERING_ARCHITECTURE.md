@@ -1,6 +1,8 @@
 # Bloom cosmetics rendering architecture
 
-> Current v1.1.5 integration: only capes and the single-label nametag badge initialize. Hat/wing/bracelet sources remain dormant. Vanilla elytra is preserved. Renderer downloads are bounded and textures have memory accounting/disposal. Game-session credentials arrive through the child environment, not command arguments. See `CAPES_IMPLEMENTATION_STATUS.md` for remaining multiplayer acceptance work.
+The emote implementation is documented in [BLOOM_EMOTES.md](BLOOM_EMOTES.md), with runtime architecture, Blockbench authoring, and explicit acceptance status. Cosmetics 1.6.0 adds the hold-B wheel, an authored bundled emote catalog (empty until content is sent from Creator), PAL playback, and relay source. Production deployment and the remaining multiplayer/visual acceptance checks are separate from successful builds.
+
+> Cosmetics 1.6.0 initializes capes, the single-label nametag badge, and emotes. Hat/wing/bracelet sources remain dormant. Vanilla elytra is preserved. Renderer downloads are bounded and textures have memory accounting/disposal. Game-session credentials arrive through the child environment, not command arguments. See `CAPES_IMPLEMENTATION_STATUS.md` and `BLOOM_EMOTES.md` for remaining acceptance work.
 
 ## System flow
 

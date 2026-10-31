@@ -4,7 +4,7 @@ These rules are specific to Bloom Client's Locker and must be read before changi
 
 ## Keep the Locker structural, not decorative
 
-- Do not add decorative icons beside the centered `Locker` title. The header is intentionally just the title.
+- The main platform contains one centered Shop / Locker switch. A functional Redeem code action may sit at the header's right edge. Do not add decorative icons or a second title bar.
 - Do not add wardrobe rails, clothes-rack lines, hooks, hangers, or other literal closet decoration behind cape cards.
 - Do not add spotlight rings, halos, stages, pedestals, fake floors, or blurred floor shadows behind the player preview.
 - Do not fill intentional empty space with ornaments, watermarks, gradients, ambient glows, or extra copy.
@@ -12,18 +12,23 @@ These rules are specific to Bloom Client's Locker and must be read before changi
 
 ## What may change
 
-### Three-category Locker (October 2026)
+### Free Shop and owned Locker (October 2026)
 
-- Keep the existing centered title platform. A small darker shelf underlaps it and contains only Cloaks, Capes, Skins. Round the shelf's bottom corners; leave a real gap before the separate catalog box.
-- Cloaks means Bloom's custom catalog. Capes means official Minecraft-owned capes, read from the authenticated account, not guessed from a public UUID profile. This naming is a product decision, not a legal conclusion.
+- Shop and Locker are the only main tabs. Shop opens with one large featured cloak and a scrolling catalog of free items. Add to Locker saves ownership through the backend without equipping or switching views. In Locker opens the collected item for preview/equip.
+- Locker shows only collected or code-redeemed Bloom cloaks. Keep Cloaks / Capes / Skins as compact category controls inside its collection heading, including empty/loading states. This replaces the old full-width category shelf and avoids two stacked top bars. The sidebar and normal buttons retain their existing appearance.
+- Cloaks means Bloom's custom cosmetics. Capes means official Minecraft-owned capes, read from the authenticated account, not guessed from a public UUID profile. This naming is a product decision, not a legal conclusion.
+- Shop availability and account ownership are separate. Ending a drop removes it from Shop while existing owners retain it. Code-only cosmetics remain out of the public Shop. Archive is a stronger action that disables the cosmetic for everyone until restored.
+- Shop uses a responsive scrolling grid; owned Locker keeps its existing paginated collection and one account-aware preview. Do not render a WebGL player per Shop card or duplicate the full preview in every tile.
+- Feature selection and drop availability come from Bloom Admin. Claims require a signed-in Minecraft account, persist on the server, and become visually owned only after success. Cached/offline browsing must not pretend to save ownership. No prices, cart, payment flow, invented scarcity or fake products.
 - Skins starts with an Upload skin tile, then the current skin and account-local imports as angled mannequin thumbnails. No invented skin catalog. Keep one interactive preview to the side; thumbnails are cached static renders.
 - Import saves locally; Use skin explicitly uploads to Minecraft. Offer Classic/Slim arms before applying. Never report success before Minecraft accepts the change.
 - Official capes and Bloom cloaks are independent selections. Bloom's existing mod gives its cloak priority; state this when choosing an official cape rather than silently clearing either selection.
 
 - Improve hierarchy through proportion, alignment, spacing, typography, and the active theme's surface levels (OLED Black or Light).
 - Adjust cape-card size, grid density, preview scale, or panel proportions when the composition feels unbalanced.
-- Keep the player preview floating cleanly on its existing flat surface and keep the centered title unadorned.
+- Keep the player preview floating cleanly on its existing flat surface and the main navigation centered.
 - Reuse existing Bloom controls and interaction behavior; avoid adding non-functional visual objects.
+- Code redemption uses one attached input area under the main platform, with equal visible vertical margins around the field. No introductory tagline above the input. Keep sign-in guidance in the disabled input placeholder and preserve accessible labels. Successful redemption opens the claimed cloak in Locker; reuse the existing bottom notification.
 
 ## Loading and refresh stability
 

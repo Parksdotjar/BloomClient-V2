@@ -51,7 +51,7 @@ await page.addInitScript(() => {
 });
 await page.route("**/*", route => {
   const url = route.request().url();
-  return url.startsWith(process.env.BLOOM_TEST_URL || "http://127.0.0.1:1420") || url.startsWith("data:") ? route.continue() : route.abort();
+  return url.startsWith("http://127.0.0.1:1420") || url.startsWith("data:") ? route.continue() : route.abort();
 });
 const shotDir = process.env.TRANSFER_SCREENSHOTS;
 if (shotDir) await mkdir(shotDir, { recursive: true });

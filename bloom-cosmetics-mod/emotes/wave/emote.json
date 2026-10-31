@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "rigVersion": 1,
+  "id": "bloom:wave",
+  "animation": "wave",
+  "name": "Wave",
+  "author": "Bloom",
+  "playback": "once",
+  "order": 10
+}

@@ -9,7 +9,23 @@ base {
     archivesName = "bloom-cosmetics-${minecraftVersion}"
 }
 
+repositories {
+    maven { url = 'https://repo.redlance.org/public' }
+}
+
+def palVersion = modern ? "1.2.8+mc.${minecraftVersion}" : '1.1.10+mc.1.21.11'
+def apiVersion = ['1.21.11': '0.141.6+1.21.11', '26.1': '0.145.1+26.1',
+                  '26.2': '0.161.0+26.2', '26.3': '0.163.0+26.3'][minecraftVersion]
+
 dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    def modConfig = modern ? 'implementation' : 'modImplementation'
+    add(modConfig, "com.zigythebird.playeranim:PlayerAnimationLibFabric:${palVersion}")
+    include("com.zigythebird.playeranim:PlayerAnimationLibFabric:${palVersion}")
+    if (modern) include("com.zigythebird.playeranim:PlayerAnimationLibCore:${palVersion}")
+    add(modConfig, "net.fabricmc.fabric-api:fabric-api:${apiVersion}")
+    include("net.fabricmc.fabric-api:fabric-api:${apiVersion}")
     minecraft "com.mojang:minecraft:${minecraftVersion}"
     if (modern) implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     else {
@@ -18,12 +34,43 @@ dependencies {
     }
 }
 
+tasks.withType(Test).configureEach { useJUnitPlatform() }
+
+// Two isolated dev clients can exercise the real relay without launcher credentials.
+if (project.hasProperty('emoteTestPlayer')) {
+    def name = project.property('emoteTestPlayer').toString()
+    if (!(name ==~ /BloomTest[AB]/)) throw new GradleException('Use BloomTestA or BloomTestB')
+    def id = UUID.nameUUIDFromBytes("OfflinePlayer:${name}".getBytes('UTF-8'))
+    loom.runs.client {
+        runDir "run-${name}"
+        programArgs '--username', name, '--uuid', id.toString()
+        vmArg '-Dbloom.emotes.testEndpoint=http://127.0.0.1:19191'
+        vmArg "-Dbloom.emotes.testSession=bcs_${(name.endsWith('A') ? 'a' : 'b') * 43}"
+    }
+}
+
+def emoteResources = rootProject.layout.buildDirectory.dir('generated/emotes')
+if (rootProject.tasks.findByName('generateEmotes') == null) {
+    rootProject.tasks.register('generateEmotes', Exec) {
+        workingDir rootProject.projectDir.parentFile
+        commandLine 'node', 'scripts/emotes.mjs', 'build'
+        inputs.dir(rootProject.file('emotes'))
+        inputs.file(rootProject.file('../scripts/emotes.mjs'))
+        outputs.dir(emoteResources)
+    }
+}
+sourceSets.main.resources.srcDir(emoteResources)
+// Editor preview/export contract fixtures are test-only, never bundled as emotes.
+sourceSets.test.resources.srcDir(rootProject.file('../tests/fixtures/emote-playback'))
 processResources {
+    dependsOn(rootProject.tasks.named('generateEmotes'))
     inputs.property "version", project.version
     inputs.property 'minecraft', minecraftVersion
     inputs.property 'java', modern ? 25 : 21
+    def minimumLoader = minecraftVersion == '26.3' ? '0.19.5' : minecraftVersion == '26.2' ? '0.19.3' : '0.19.2'
+    inputs.property 'minimumLoader', minimumLoader
     filesMatching("fabric.mod.json") {
-        expand version: project.version, minecraft: minecraftVersion, java: modern ? 25 : 21
+        expand version: project.version, minecraft: minecraftVersion, java: modern ? 25 : 21, minimumLoader: minimumLoader
     }
 }
 
@@ -39,7 +86,65 @@ java {
 stonecutter {
     replacements.string {
         direction = modern
+        replace('InputUtil.isKeyPressed(MinecraftClient.getInstance().getWindow(),bound.getCode())', stonecutter.eval(minecraftVersion, '>=26.3') ? 'InputConstants.isKeyDown(bound.getValue())' : 'InputConstants.isKeyDown(Minecraft.getInstance().getWindow(),bound.getValue())')
         replace('net.minecraft.client.MinecraftClient', 'net.minecraft.client.Minecraft')
+        replace('net.minecraft.client.gui.screen.Screen', 'net.minecraft.client.gui.screens.Screen')
+        replace('net.minecraft.client.gui.DrawContext', 'net.minecraft.client.gui.GuiGraphicsExtractor')
+        replace('net.minecraft.client.gui.Click', 'net.minecraft.client.input.MouseButtonEvent')
+        replace('net.minecraft.client.input.KeyInput', 'net.minecraft.client.input.KeyEvent')
+        replace('net.minecraft.client.option.KeyBinding', 'net.minecraft.client.KeyMapping')
+        replace('net.minecraft.client.option.Perspective', 'net.minecraft.client.CameraType')
+        replace('net.minecraft.client.util.InputUtil', 'com.mojang.blaze3d.platform.InputConstants')
+        replace('InputUtil.GLFW_KEY_ENTER', 'InputConstants.KEY_RETURN')
+        replace('InputUtil.GLFW_KEY_PAGE_UP', 'InputConstants.KEY_PAGEUP')
+        replace('InputUtil.GLFW_KEY_PAGE_DOWN', 'InputConstants.KEY_PAGEDOWN')
+        replace('InputUtil.GLFW_KEY_', 'InputConstants.KEY_')
+        replace('net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper', 'net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper')
+        replace('KeyBindingHelper.registerKeyBinding', 'KeyMappingHelper.registerKeyMapping')
+        replace('KeyBindingHelper.getBoundKeyOf', 'KeyMappingHelper.getBoundKeyOf')
+        replace('bound.getCategory()', 'bound.getType()')
+        replace('bound.getCode()', 'bound.getValue()')
+        replace('InputUtil.Type.KEYSYM', stonecutter.eval(minecraftVersion, '>=26.3') ? 'InputConstants.Type.KEYBOARD' : 'InputConstants.Type.KEYSYM')
+        replace('client.mouse.getScaledX(', 'client.mouseHandler.getScaledXPos(')
+        replace('client.mouse.getScaledY(', 'client.mouseHandler.getScaledYPos(')
+        replace('KeyBinding.Category.create', 'KeyMapping.Category.register')
+        replace('KeyBinding', 'KeyMapping')
+        replace('Perspective', 'CameraType')
+        replace('DrawContext', 'GuiGraphicsExtractor')
+        replace('Click click', 'MouseButtonEvent click')
+        replace('KeyInput input', 'KeyEvent input')
+        replace('public void render(', 'public void extractRenderState(')
+        replace('.drawCenteredTextWithShadow(', '.centeredText(')
+        replace('textRenderer.getWidth(', 'font.width(')
+        replace('textRenderer', 'font')
+        replace('shouldPause()', 'isPauseScreen()')
+        replace('.wasPressed()', '.consumeClick()')
+        replace('.isPressed()', '.isDown()')
+        replace('.matchesKey(', '.matches(')
+        replace('.currentScreen', stonecutter.eval(minecraftVersion, '>=26.2') ? '.gui.screen()' : '.screen')
+        replace('.isWindowFocused()', '.isWindowActive()')
+        replace('.getPlayers()', '.players()')
+        replace('.hasVehicle()', '.isPassenger()')
+        replace('.isGliding()', '.isFallFlying()')
+        replace('.isOnGround()', '.onGround()')
+        replace('.handSwinging', stonecutter.eval(minecraftVersion, '>=26.3') ? '.isSwinging()' : '.swinging')
+        replace('.forwardKey', '.keyUp')
+        replace('.backKey', '.keyDown')
+        replace('.leftKey', '.keyLeft')
+        replace('.rightKey', '.keyRight')
+        replace('.jumpKey', '.keyJump')
+        replace('.attackKey', '.keyAttack')
+        replace('.useKey', '.keyUse')
+        replace('.getCurrentServerEntry()', '.getCurrentServer()')
+        replace('server.address', 'server.ip')
+        replace('.getRegistryKey().getValue()', '.dimension().identifier()')
+        replace('.getSession().getAccessToken()', '.getUser().getAccessToken()')
+        replace('.getPosY()', '.position.y')
+        replace('.getPosX()', '.position.x')
+        replace('.getPosZ()', '.position.z')
+        replace('.getRotX()', '.rotation.x')
+        replace('.getRotY()', '.rotation.y')
+        replace('.getRotZ()', '.rotation.z')
         replace('net.minecraft.client.network.AbstractClientPlayerEntity', 'net.minecraft.client.player.AbstractClientPlayer')
         replace('net.minecraft.client.texture.NativeImageBackedTexture', 'net.minecraft.client.renderer.texture.DynamicTexture')
         replace('net.minecraft.client.texture.NativeImage', 'com.mojang.blaze3d.platform.NativeImage')
@@ -75,5 +180,9 @@ stonecutter {
         replace('.getColorArgb(', '.getPixel(')
         replace('state.displayName', 'state.nameTag')
         replace('method="updateRenderState"', 'method="extractRenderState"')
+    }
+    replacements.string {
+        direction = stonecutter.eval(minecraftVersion, '>=26.2')
+        replace('.setScreen(', '.gui.setScreen(')
     }
 }

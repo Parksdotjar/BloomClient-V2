@@ -24,6 +24,7 @@ await page.addInitScript(() => {
     async invoke(command, args) {
       window.toolbarTest.calls.push({ command, args });
       if (command === "list_instances") return instances;
+      if (command === "list_instance_folders") return [];
       if (command === "list_screenshots") {
         if (window.toolbarTest.delayRefresh) await new Promise(resolve => { window.toolbarTest.releaseRefresh = resolve; });
         return { items: shots, warnings: [] };

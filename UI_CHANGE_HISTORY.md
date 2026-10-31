@@ -1,6 +1,29 @@
 # Bloom Client UI Decision and Fix History
 
+## October 2026 — Free Shop and owned Locker
+
+- Parks requested one main Shop / Locker switch, a large featured cape above a scrolling free catalog, and collecting capes before equipping them from Locker. The suggested inner category sidebar was optional; implementation uses compact Cloaks / Capes / Skins controls inside the collection heading to avoid two main top bars. Existing sidebar and flat action buttons remain unchanged.
+- This supersedes the earlier “Shop stays removed” rule and the darker full-width category shelf. No prices, purchases or cart were requested. The layout has not yet received visual approval.
+- Add to Locker performs an authenticated, idempotent server claim. It leaves the user in Shop and does not equip automatically. In Locker opens that collected cape for preview/equip. Official Minecraft capes, imported skins and one-use code redemption retain their own real workflows.
+- Admin adds Show in Shop and Feature in Shop. Ending a drop keeps existing owners’ capes; Archive disables a cape for everyone until restored. Existing equipped public capes migrate to ownership once. Code-only claims remain private and are never automatically granted.
+- Regression coverage exercises real isolated HTTP storage through both UIs: publish, feature, claim, duplicate/pending behavior, explicit equip, end drop, account isolation, search, categories, themes and compact layout. Existing Locker hover/loading/pagination checks remain. Backend/Admin deployment does not publish a client release.
+
+
+## October 21, 2026 — cape redemption spacing correction
+
+- Parks requested removing “A little something for your locker” and moving the input up to sit centrally between the Locker title platform and the darker category shelf.
+- Removed the introductory line, kept the accessible input name, and gave the field equal visible top/bottom spacing. The category shelf no longer overlaps the redeem area's bottom padding. Sign-in guidance stays in the disabled input placeholder.
+- This correction is specific to the redemption drawer; normal buttons and sidebar styles are unchanged.
+
 This is a historical record of requests, implementations, corrections and rejections. Entries are not strictly date-sorted. Earlier wording such as “now” or “current” describes the decision at that time; it does not override a later correction. [DESIGN_RULES.md](DESIGN_RULES.md) contains the reconciled current requirements, and [GOOD_DESIGNS.md](GOOD_DESIGNS.md) identifies explicitly approved references and implementations.
+
+## October 21, 2026 — Bloom Admin cape workspace
+
+- **Requested, not visually approved yet:** separate cape face and diagonal elytra artwork frames, up to 4K output, direct mouse pan/zoom and corner resizing without framing sliders, parameter adjustments, publishing, current catalog removal and live client updates.
+- Added the workspace to the separate `BloomAdmin` app using its existing theme, flat actions and owner session. Brightness/contrast/saturation sliders affect artwork; a single focused 3D preview switches between cape and wings. Added undo/redo, local draft recovery, PNG export and reversible archive/restore.
+- Existing published static artwork opens in the same frames and is preserved exactly for a metadata-only republish. Animated capes can be archived/restored, but are guarded against replacement by this static editor.
+- The backend adapter writes existing revisioned cosmetics storage. Equipped game clients already poll for revision/removal changes. Automatic launcher catalog polling and focus refresh were added to source; distribution still requires a separately authorized client release.
+- Checked 4K editor publish/reopen, authenticated access, origin rejection, stale/conflicting edits, archive/restore and recovery against an isolated real API. Detailed 4K PNG validation also exposed and fixed a regexp stack overflow. Live deployment retained all three existing cape revisions.
 
 ## October 20, 2026 — Locker loading and refresh fixes
 

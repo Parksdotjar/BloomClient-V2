@@ -3,6 +3,7 @@ import { WallpaperSourceContext } from "./components/WallpaperAccents";
 import { userError } from "./services/user-error";
 import { AppearancePresets } from "./components/AppearancePresets";
 import { ContentTransferContext, useContentTransfer, useContentTransferController } from "./components/ContentTransfer";
+import { InstanceFolders } from "./components/InstanceFolders";
 
 import { QuickSwitcher, type SwitchTarget } from "./components/QuickSwitcher";
 import { ContentToolbar } from "./components/ContentToolbar";
@@ -56,6 +57,7 @@ import {
   History,
   House,
   FileDown,
+  FolderPlus,
   Layers3,
   ListFilter,
   ImagePlus,
@@ -2772,7 +2774,7 @@ const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFix
 
 type InstanceLibraryDestination = "view" | "add-mods" | "settings";
 
-function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, onPlay, onShare, onDelete }: { instance: InstanceDraft; busy: boolean; doubleClickToPlay: boolean; onNavigate: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onPlay: (instance: InstanceDraft) => void; onShare: (instance: InstanceDraft) => void; onDelete: (instance: InstanceDraft) => Promise<void> }) {
+function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, onPlay, onShare, onDelete, onOrganize }: { instance: InstanceDraft; busy: boolean; doubleClickToPlay: boolean; onNavigate: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onPlay: (instance: InstanceDraft) => void; onShare: (instance: InstanceDraft) => void; onDelete: (instance: InstanceDraft) => Promise<void>; onOrganize?: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -2834,6 +2836,7 @@ function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, on
       <button style={{ opacity: 0 }} onClick={() => navigate("view")}><Layers3 size={15} />View instance</button>
       <button style={{ opacity: 0 }} onClick={() => navigate("add-mods")}><Puzzle size={15} />Add mods</button>
       <button style={{ opacity: 0 }} onClick={() => navigate("settings")}><SettingsIcon size={15} />Settings</button>
+      {onOrganize && <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onOrganize(); }}><FolderPlus size={15} />Move to folder</button>}
       <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onShare(instance); }}><Share2 size={15} />Share instance</button>
       <button style={{ opacity: 0 }} className={`instance-delete-action ${confirmDelete ? "confirm" : ""}`} disabled={deleting || busy} onClick={() => void remove()}><Trash2 size={15} />{deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete instance"}</button>
     </div>, document.body)}
@@ -2858,7 +2861,7 @@ function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, on
   const filterId = useId();
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("All");
-  const visible = instances.filter((instance) => instance.name.toLowerCase().includes(query.toLowerCase()) && (loader === "All" || instance.loader.toLowerCase() === loader.toLowerCase()));
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const loaders = ["All", ...Array.from(new Set(instances.map((instance) => instance.loader)))];
   return <div className="instances-page">
     <div ref={filters.root} className="instances-connected-heading">
@@ -2866,6 +2869,7 @@ function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, on
       <div className="connected-toolbar-shelf" data-open={filters.open}>
       <div className="instances-library-actions toolbar-shelf-actions">
         <button className="instances-create" onClick={onCreate}><CirclePlus size={17} />New instance</button>
+        <button className="instances-create-folder" onClick={() => setCreatingFolder(true)}><FolderPlus size={17} />New folder</button>
         <button ref={filters.trigger} type="button" className="content-filter-trigger" data-filtered={loader !== "All"}
           aria-label={`Filter instances: ${loader}`} title="Filter instances" aria-expanded={filters.open} aria-controls={filterId}
           onClick={() => filters.setOpen(value => !value)}><ListFilter size={19} /></button>
@@ -2876,10 +2880,8 @@ function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, on
       </ToolbarDrawer>
       </div>
     </div>
-    <div className="instances-grid">
-      {visible.map(instance => <InstanceLibraryCard key={instance.id} instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onShare={onShare} onDelete={onDelete} onPlay={onPlay} />)}
-      {!visible.length && <div className="instances-library-empty">{instances.length ? "No matching instances" : "No instances yet"}</div>}
-    </div>
+    <InstanceFolders instances={instances} query={query} loader={loader} createOpen={creatingFolder} onCloseCreate={() => setCreatingFolder(false)}
+      renderInstance={(instance, organize) => <InstanceLibraryCard instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onShare={onShare} onDelete={onDelete} onPlay={onPlay} onOrganize={organize} />} />
     <div className={`content-search instances-search-dock ${query ? "has-query" : ""}`} role="search" aria-label="Search instance library">
       <span className="content-search-mark" aria-hidden="true"><Search size={27} /></span>
       <input aria-label="Search your instances" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your instances…" />

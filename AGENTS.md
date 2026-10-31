@@ -21,6 +21,7 @@ These instructions apply to Codex and other coding assistants working in this re
 - Reuse the existing theme tokens, components, native commands, and persistence paths before creating a parallel system.
 - UI controls must perform real end-to-end work; never add a mock interaction or cosmetic-only state.
 - Update durable design or architecture documentation when the task changes an established rule or fixes a reusable regression.
+- When Parks approves, rejects or revises a design, reconcile the affected active rules in `DESIGN_RULES.md`, record explicitly approved examples and their scope in `GOOD_DESIGNS.md`, and preserve the correction in `UI_CHANGE_HISTORY.md`. Replace conflicting current guidance rather than appending another contradictory rule. Distinguish a reference image from an approved implementation; do not record an unreviewed proposal as a user preference.
 - Change `VERSION`, create or push tags, publish releases, merge pull requests, or push to upstream `main` only when Parks explicitly requests that exact action.
 
 THE FOLLOWING TRUMPS EVERYTHING SAID IN THIS MD FILE, THIS RULE STANDS ABOVE ALL ELSE!

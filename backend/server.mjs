@@ -5,6 +5,7 @@ import { initializeCosmetics } from "./cosmetics/readiness.mjs";
 import { sharingFromEnvironment } from "./sharing/api.mjs";
 import { authFromEnvironment, createAccountApi } from "./auth/auth.mjs";
 import { createSocialApi } from "./social/api.mjs";
+import { attachEmoteRelay } from "./emotes/relay.mjs";
 
 const port = Number(process.env.PORT || 8110);
 const service = "bloom-minecraft-api";
@@ -18,7 +19,7 @@ let sharing;
 const social = createSocialApi({ ...accountRuntime, onInstanceInviteClosed: code => sharing?.invalidateInvite(code) });
 sharing = sharingFromEnvironment(process.env, { onInviteInvalidated: code => social.invalidateInstanceInviteByShareCode(code) });
 sharing.checkReadiness();
-const capabilities = Object.freeze({ catalog: true, modrinth: true, curseforge: false, modpacks: true, cosmetics: cosmetics.enabled, packSharing: true, packChannels: true, accounts: true, social: true });
+const capabilities = Object.freeze({ catalog: true, modrinth: true, curseforge: false, modpacks: true, cosmetics: cosmetics.enabled, emotes: cosmetics.enabled, emoteProtocol: 1, packSharing: true, packChannels: true, accounts: true, social: true });
 const cache = new Map();
 
 const sendJson = (response, status, body, cacheControl = "no-store") => {
@@ -195,7 +196,9 @@ const server = tlsKeyPath && tlsCertPath
   ? https.createServer({ key: fs.readFileSync(tlsKeyPath), cert: fs.readFileSync(tlsCertPath) }, requestHandler)
   : http.createServer(requestHandler);
 
+const emotes = attachEmoteRelay(server, { authenticate: request => cosmetics.authenticateGameSession(request) });
+
 server.listen(port, "0.0.0.0", () => console.log(`${service} listening on ${port}${tlsKeyPath ? " with TLS" : ""}`));
-const shutdown = () => server.close(() => process.exit(0));
+const shutdown = () => { emotes.close(); server.close(() => process.exit(0)); };
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
