@@ -69,7 +69,17 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
       elytraWidth:r.elytra_width || null, elytraHeight:r.elytra_height || null,
       animation:r.animation ? {...r.animation,revision:r.id,atlasUrl:await store.lease(r.atlas_path)} : null };
   };
-  return { enabled, async checkReadiness() { if (enabled) await store.checkReadiness(); }, async handle(request,response,pathname,url) {
+  return { enabled,
+    async authenticateGameSession(request) {
+      if (!enabled) throw new ApiError(503,'cosmetics_not_configured');
+      const token = bearer(request);
+      if (!/^bcs_[\w-]{43}$/.test(token)) throw new ApiError(401,'invalid_game_session');
+      const sessionKey = hash(token), session = await store.session(sessionKey);
+      const expiresAt = Date.parse(session?.expires_at);
+      if (!session || !Number.isFinite(expiresAt) || expiresAt <= now()) throw new ApiError(401,'game_session_expired');
+      return { uuid:session.uuid, expiresAt, sessionKey };
+    },
+    async checkReadiness() { if (enabled) await store.checkReadiness(); }, async handle(request,response,pathname,url) {
     if (!/^\/v1\/(capes(?:\/|$)|cosmetics(?:\/|$)|admin\/(?:capes|studio)(?:\/|$))/.test(pathname)) return false;
     try {
       if (!enabled) throw new ApiError(503,'cosmetics_not_configured');
@@ -94,6 +104,26 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
       } else if (pathname === '/v1/capes' && method === 'GET') {
         const capes = await store.catalog();
         json(response,200,{items:await Promise.all(capes.map(describe))});
+      } else if (pathname === '/v1/capes/locker' && method === 'GET') {
+        const player = await identity(request);
+        if(!store.locker)throw new ApiError(503,'locker_unavailable');
+        const capes = await store.locker(player);
+        json(response,200,{items:await Promise.all(capes.map(describe))});
+      } else if (pathname === '/v1/capes/shop' && method === 'GET') {
+        if(!store.shop)throw new ApiError(503,'shop_unavailable');
+        const player=request.headers.authorization ? await identity(request) : null;
+        const capes=await store.shop(player),featured=await store.featuredCape();
+        json(response,200,{items:await Promise.all(capes.map(async cape=>({...await describe(cape),owned:!!cape.owned}))),featuredId:capes.some(c=>c.id===featured)?featured:null});
+      } else if (pathname === '/v1/capes/claim' && method === 'POST') {
+        const player=await identity(request);limit(`claim:${player}`,30);
+        if(!store.claimCape)throw new ApiError(503,'shop_unavailable');
+        const body=await readBody(request,1024);
+        json(response,200,await store.claimCape(player,assetId(body?.capeId)));
+      } else if (pathname === '/v1/capes/redeem' && method === 'POST') {
+        const player = await identity(request); limit(`redeem:${player}`,10);
+        if(!store.redeemCode)throw new ApiError(503,'redemption_unavailable');
+        const body=await readBody(request,1024);
+        json(response,200,await store.redeemCode(player,body?.code));
       } else if (pathname === '/v1/capes/equipped' && method === 'GET') {
         const ids = [...new Set((url.searchParams.get('uuids') || '').split(',').map(uuid))];
         requireValue(ids.length > 0 && ids.length <= 100,'invalid_batch');
@@ -102,12 +132,16 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
         const assets = new Map();
         for (const p of players) if (p.cape_id && !assets.has(p.cape_id)) {
           const cape = await store.cape(p.cape_id);
-          assets.set(p.cape_id,cape?.published ? await describe(cape) : null);
+          assets.set(p.cape_id,cape?.published ? cape : null);
         }
-        json(response,200,{items:ids.map(id=>{
-          const p = players.find(p=>p.uuid===id), cape = p && assets.get(p.cape_id);
-          return {uuid:id,...(cape || {capeId:null}),badgeVisible:active.has(id) && p?.badge_visible !== false};
-        })});
+        const items=[],descriptions=new Map();
+        for(const id of ids) {
+          const p=players.find(p=>p.uuid===id),cape=p && assets.get(p.cape_id);
+          const allowed=cape && (!store.canUseCape || await store.canUseCape(id,cape.id));
+          if(allowed && !descriptions.has(cape.id))descriptions.set(cape.id,await describe(cape));
+          items.push({uuid:id,...(allowed?descriptions.get(cape.id):{capeId:null}),badgeVisible:active.has(id) && p?.badge_visible!==false});
+        }
+        json(response,200,{items});
       } else if (pathname === '/v1/capes/equipped' && method === 'PUT') {
         const player = await identity(request), body = await readBody(request);
         const id = body.capeId === null ? null : assetId(body.capeId);
@@ -159,6 +193,7 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
       } else if (/^\/v1\/capes\/[^/]+\/texture$/.test(pathname) && method === 'GET') {
         const cape = await store.cape(assetId(pathname.split('/')[3]));
         if (!cape?.published) throw new ApiError(404,'cape_unavailable');
+        if((store.requiresCode?.(cape.id) || store.shopSettings?.(cape.id).shopListed===false) && !await store.canUseCape(await identity(request),cape.id))throw new ApiError(404,'cape_unavailable');
         const info = await describe(cape); json(response,200,{url:info.textureUrl,revision:info.textureRevision,sha256:info.textureSha256});
       } else throw new ApiError(404,'not_found');
     } catch (error) { json(response,error instanceof ApiError ? error.status : 503,{error:error instanceof ApiError ? error.message : 'cosmetics_unavailable'}); }

@@ -93,6 +93,11 @@ for (const storage of ['memory','sqlite']) test(`${storage}: publish, free equip
   assert.equal((await assigned()).body.items[0].capeId,capeId);
   assert.equal((await assigned()).body.items[0].badgeVisible,false);
   const session=(await request('/v1/cosmetics/sessions','POST',{},'other')).body;
+  const socketRequest={headers:{authorization:`Bearer ${session.token}`}};
+  const socketIdentity=await api.authenticateGameSession(socketRequest);
+  assert.equal(socketIdentity.uuid,other);
+  assert.equal(socketIdentity.expiresAt,Date.parse(session.expiresAt));
+  await assert.rejects(()=>api.authenticateGameSession({headers:{authorization:'Bearer other'}}));
   assert.equal((await request('/v1/cosmetics/sessions/current','PUT',{},session.token)).status,200);
   assert.equal((await assigned()).body.items[0].badgeVisible,true);
   await request('/v1/cosmetics/badge','PUT',{visible:false},'other');assert.equal((await assigned()).body.items[0].badgeVisible,false);
@@ -110,5 +115,6 @@ for (const storage of ['memory','sqlite']) test(`${storage}: publish, free equip
   assert.equal((await request('/v1/capes/equipped','PUT',{capeId:null},'other')).status,200);
   assert.equal((await request('/v1/capes/equipped?uuids=bad')).status,400);
   time+=13*60*60*1000;
+  await assert.rejects(()=>api.authenticateGameSession(socketRequest));
   assert.equal((await request('/v1/cosmetics/sessions/current','PUT',{},session.token)).status,401);
 });

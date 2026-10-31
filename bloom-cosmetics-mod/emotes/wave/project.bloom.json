@@ -1,0 +1,440 @@
+{
+  "author": "Bloom",
+  "duration": 3,
+  "format": "bloom-animation",
+  "id": "wave",
+  "layers": [
+    {
+      "bone": "right_arm",
+      "channel": "rotation",
+      "enabled": true,
+      "frames": [
+        {
+          "id": "abb4b8ea-e675-4749-93ad-d4533b10f39b",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "afb11f3a-c256-4f9c-b9aa-c231d9948f3d",
+          "time": 0.15,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "8e211ee6-61e0-4d68-aa42-1bda360ea1b7",
+          "time": 0.75,
+          "value": [
+            1.3325,
+            -7.9541,
+            -18.9909
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "fd321db5-8334-4d05-8f5a-37e83b138045",
+          "time": 1.15,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "b7759d2b-1aee-40d9-b310-1d6718fcdb59",
+          "time": 1.6,
+          "value": [
+            1.3325,
+            -7.9541,
+            -18.9909
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "b3c62135-8567-44a7-8ec0-a79f334383ac",
+          "time": 2,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "f1f1db9e-c5fd-42ba-90b2-7e05031245bd",
+          "time": 2.45,
+          "value": [
+            1.3325,
+            -7.9541,
+            -18.9909
+          ]
+        }
+      ],
+      "id": "644126bf-9b65-4823-9a1b-c84d3256b30d",
+      "name": "Rotation 2"
+    },
+    {
+      "bone": "right_arm",
+      "channel": "rotation",
+      "enabled": true,
+      "frames": [
+        {
+          "id": "6c3c709e-bc3e-4986-ba3a-e6eff4d234e0",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "67be80a5-b51d-4a32-93fd-e705f5f1cbda",
+          "time": 0.5,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "1a31d8d2-24ce-4f12-a1d0-f1e0b69d40d2",
+          "time": 0.95,
+          "value": [
+            -1.3048,
+            6.7865,
+            16.2701
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "79ef9ebd-a4fc-483a-975b-c2a4c4b53b3d",
+          "time": 1.35,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "e1a5cd21-7b1b-4189-bc03-ba939e6b7cd3",
+          "time": 1.8,
+          "value": [
+            -1.3048,
+            6.7865,
+            16.2701
+          ]
+        },
+        {
+          "ease": [
+            0.42,
+            0,
+            0.58,
+            1
+          ],
+          "id": "aeb2f5cf-f1a7-4a64-89da-e0d796ffc7e0",
+          "time": 2.2,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "ease": [
+            0.356,
+            0.017,
+            0.381,
+            0.966
+          ],
+          "id": "f7ec1368-38ff-4ae3-af57-4ae8f8185288",
+          "time": 2.65,
+          "value": [
+            -1.3048,
+            6.7865,
+            16.2701
+          ]
+        }
+      ],
+      "id": "21173ddb-ac76-4a66-b80c-fb0c5638aedd",
+      "name": "Rotation 3"
+    }
+  ],
+  "mode": "once",
+  "name": "Wave",
+  "slim": true,
+  "tracks": {
+    "body": {
+      "position": [
+        {
+          "id": "c1fc3f07-f3ea-4682-ad25-e759e5b9288b",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "rotation": [
+        {
+          "id": "bd478a42-b07f-417c-9fb5-fa37357443df",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "head": {
+      "position": [
+        {
+          "id": "df5a82a4-fa79-43eb-9600-e4ad667969b1",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "rotation": [
+        {
+          "id": "25df14f2-dc17-4b7f-bb7b-485d402b8b22",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "left_arm": {
+      "position": [
+        {
+          "id": "ce1631d5-4191-4a3e-8867-eaf4879a010c",
+          "time": 0,
+          "value": [
+            0,
+            -0.3007,
+            0
+          ]
+        }
+      ],
+      "rotation": [
+        {
+          "id": "29dca1cf-40b1-4c01-980c-3184ebe14486",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "left_leg": {
+      "position": [
+        {
+          "id": "0aa2d34c-4f0a-4d79-948c-a9ea62e86ff6",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "rotation": [
+        {
+          "id": "1e0ed6a3-0ff2-4a4d-9523-42b56cd6a82c",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "right_arm": {
+      "position": [
+        {
+          "id": "9559f72f-78e1-48ca-8f93-6ae03e8643ab",
+          "time": 0,
+          "value": [
+            -0.216,
+            -0.687,
+            0.0075
+          ]
+        },
+        {
+          "id": "776d3d0c-d7a0-42fd-b14e-b37583978542",
+          "time": 3,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "rotation": [
+        {
+          "ease": [
+            0.25,
+            0.1,
+            0.25,
+            1
+          ],
+          "id": "6988470c-9cf7-47a4-8bb7-96e8be8150b0",
+          "time": 0,
+          "value": [
+            -0.6255,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "1e5b4956-bdd6-40b8-9bd7-043e5f5bef2e",
+          "time": 0.5,
+          "value": [
+            156.7628,
+            0,
+            0
+          ]
+        },
+        {
+          "ease": [
+            0.847,
+            0,
+            1,
+            0.992
+          ],
+          "id": "bbf6367f-ac7b-47f7-866e-e85af3d28192",
+          "time": 2.25,
+          "value": [
+            156.7628,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "0eef2c90-50b7-48d5-86bf-608094c913b1",
+          "time": 2.85,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "right_leg": {
+      "position": [
+        {
+          "id": "94afd86c-6c55-4068-8d9b-872434b9bcab",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "rotation": [
+        {
+          "id": "b585eb5c-76aa-412c-92e9-083be781b185",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "torso": {
+      "position": [
+        {
+          "id": "742461e8-4fe4-49ff-8bf1-4fd71aac2991",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "rotation": [
+        {
+          "id": "e2f6f3ff-4234-466e-b657-db0b8e96b000",
+          "time": 0,
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  },
+  "version": 2
+}

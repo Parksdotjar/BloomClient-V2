@@ -67,7 +67,8 @@ export function validatePng(bytes, maxBytes = 8 * 1024 * 1024) {
 }
 
 export function decodeAsset(value, maxBytes) {
-  requireValue(typeof value === 'string' && value.length <= Math.ceil(maxBytes / 3) * 4 && /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value), 'invalid_base64');
+  // A repeated capture group over a 4K PNG can exhaust V8's regexp stack.
+  requireValue(typeof value === 'string' && value.length % 4 === 0 && value.length <= Math.ceil(maxBytes / 3) * 4 && /^[A-Za-z0-9+/]*={0,2}$/.test(value), 'invalid_base64');
   return Buffer.from(value, 'base64');
 }
 export function validateCape(input) {

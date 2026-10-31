@@ -38,7 +38,9 @@ await page.addInitScript(() => {
     async invoke(command, args) {
       control.calls.push({ command, args });
       if (command === "cosmetics_request") {
-        if (args.path === "/v1/capes") { await gate("catalog"); return { items: structuredClone(cloaks) }; }
+        if (args.path === "/v1/capes/shop") return { items: structuredClone(cloaks).map(cape => ({...cape, owned:true})), featuredId:cloaks[0]?.id };
+        if (args.path === "/v1/capes/redeem") { await gate("redeem"); cloaks.push({id: "claimed", name: "Claimed fixture", textureUrl: capeTexture, textureRevision: "1"}); return {id: "claimed", name: "Claimed fixture", alreadyClaimed: false}; }
+        if (["/v1/capes", "/v1/capes/locker"].includes(args.path)) { await gate("catalog"); return { items: structuredClone(cloaks) }; }
         if (args.path === "/v1/cosmetics/me") { await gate("me"); return { ...control.me }; }
         if (args.path === "/v1/capes/equipped") { await gate("equip"); control.me.capeId = args.body.capeId; return null; }
       }
@@ -60,7 +62,7 @@ await page.addInitScript(() => {
 const output = process.env.LOCKER_SCREENSHOTS;
 if (output) await mkdir(output, { recursive: true });
 const shot = async name => { if (output) await page.locator(".locker-workspace").screenshot({ path: `${output}/${name}.png` }); };
-const nav = name => page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name, exact: true }).click();
+const nav = async name => { await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name, exact: true }).click(); if(name === "Locker") await page.getByRole("tab", {name:"Locker",exact:true}).click(); };
 const tab = name => page.getByRole("tab", { name, exact: true }).click();
 const hold = kind => page.evaluate(kind => { window.lockerTest.holds[kind] = true; }, kind);
 const waiting = kind => page.waitForFunction(kind => window.lockerTest.pending[kind]?.length, kind);
@@ -87,7 +89,7 @@ try {
   assert.equal(await page.locator(".locker-cape").nth(1).locator(".locker-card-equip").evaluate(el => getComputedStyle(el).opacity), "0");
   assert.equal(await firstCard.getByLabel("Equipped", { exact: true }).count(), 0, "Equip state waits for native success");
   await release("equip"); await firstCard.getByLabel("Equipped", { exact: true }).waitFor({ state: "attached" });
-  await page.locator(".locker-platform").click(); await settle();
+  await page.locator(".locker-platform").click({position:{x:10,y:10}}); await settle();
   await hold("me"); await page.getByRole("button", { name: "Refresh cloaks" }).click(); await waiting("me");
   await hiddenActions();
   assert.equal(await firstCard.getByLabel("Equipped", { exact: true }).count(), 1, "Refresh retains confirmed equipped state");
@@ -149,6 +151,28 @@ try {
     await tab(category); await settle();
     assert.ok(await page.locator(".locker-workspace").evaluate(el => el.scrollWidth <= el.clientWidth), `${category} fits the compact viewport`);
   }
+  await tab("Cloaks"); await settle();
+  // Claiming during an equip refresh must settle, reveal its page, and retain confirmed equipment.
+  await page.evaluate(() => { for (let i=3;i<12;i++) window.lockerTest.cloaks.push({...window.lockerTest.cloaks[0],id:`extra-${i}`,name:`Extra ${i}`}); });
+  await page.getByRole("button", { name: "Refresh cloaks" }).click(); await settle();
+  await hold("equip"); await page.locator(".locker-detail .locker-equip").click(); await waiting("equip");
+  await page.getByRole("button", {name:"Redeem code",exact:true}).click();
+  await page.getByRole("textbox", {name:"Enter cape code"}).fill("fixture");
+  await page.getByRole("button", {name:"Claim cape",exact:true}).click();
+  await page.getByRole("button", {name:"Preview Claimed fixture",exact:true}).waitFor();
+  assert.equal(await page.locator(".locker-pagination span").textContent(),"2 / 2");
+  await release("equip");
+  await page.waitForFunction(()=>!document.querySelector(".locker-detail .locker-equip").disabled);
+  assert.equal(await page.locator(".locker-detail-copy h2").textContent(),"Claimed fixture");
+  await page.evaluate(()=>{window.lockerTest.cloaks.length=3;});
+  await page.getByRole("button", { name: "Refresh cloaks" }).click(); await settle();
+  await page.evaluate(() => { window.lockerTest.cloaks[0].name = "Published cape update"; window.dispatchEvent(new Event("focus")); });
+  await page.getByRole("button", { name: "Preview Published cape update", exact: true }).waitFor();
+  await settle();
+  await page.clock.install();
+  await page.evaluate(() => { window.lockerTest.cloaks[0].name = "Polling cape update"; });
+  await page.clock.runFor(15100);
+  await page.getByRole("button", { name: "Preview Polling cape update", exact: true }).waitFor();
   assert.deepEqual(errors, []);
   console.log("Passed: cached cloak load and saving without action flashes; hover/keyboard reveals; truthful equip/apply; cape/skin refresh selection, arm model and pagination; themes, compact layouts and reduced motion. Native calls simulated.");
 } catch (error) { await shot("failure"); throw error; }

@@ -2,6 +2,7 @@ mod fabric_loader;
 mod launch_cache;
 mod screenshots;
 mod content_transfer;
+mod instance_folders;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex, OnceLock,
@@ -5081,6 +5082,8 @@ pub fn run() {
             get_minecraft_releases,
             save_instance,
             list_instances,
+            instance_folders::list_instance_folders,
+            instance_folders::change_instance_folder,
             duplicate_instance,
             delete_instance,
             list_instance_content,

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "rigVersion": 1,
+  "id": "bloom:star_jump",
+  "animation": "star_jump",
+  "name": "Star Jump",
+  "author": "Bloom",
+  "playback": "once",
+  "order": 20
+}

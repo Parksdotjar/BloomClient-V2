@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { invoke } from "../services/invoke";
 import { Check, ChevronLeft, ChevronRight, Plus, RotateCw } from "lucide-react";
 import { CapeDisplay } from "./CapeDisplay";
@@ -8,11 +8,11 @@ import { SkinThumbnail } from "./SkinThumbnail";
 type Skin = { id: string; name: string; texture: string; variant: "classic" | "slim" };
 type Cape = { id: string; name: string; texture: string; active: boolean };
 type Wardrobe = { capes: Cape[]; currentSkin: Skin | null; skins: Skin[] };
-type Props = { accountId: string; tab: "capes" | "skins"; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void };
+type Props = { heading?: ReactNode; accountId: string; tab: "capes" | "skins"; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void };
 const wardrobeMemoryCache = new Map<string, Wardrobe>();
 window.addEventListener("bloom-clear-transient-caches", () => wardrobeMemoryCache.clear());
 
-export function MinecraftWardrobe({ accountId, tab, motion, onNotify }: Props) {
+export function MinecraftWardrobe({ accountId, tab, motion, onNotify, heading }: Props) {
   const cachedWardrobe = wardrobeMemoryCache.get(accountId) || null;
   const [data, setData] = useState<Wardrobe | null>(cachedWardrobe);
   const [error, setError] = useState("");
@@ -97,7 +97,7 @@ export function MinecraftWardrobe({ accountId, tab, motion, onNotify }: Props) {
   const entries: (Skin | Cape | null)[] = tab === "skins" ? [null, ...skins] : capes;
   return <div className="locker-content">
     <div className="locker-collection">
-      <div className="locker-collection-heading"><h2>{tab === "skins" ? "Skins" : "Capes"}</h2><div><span>{list.length}</span><button className="locker-refresh" title="Reload from Minecraft" aria-label="Reload wardrobe from Minecraft" disabled={busy || refreshing} onClick={() => void reload(undefined, true)}><RotateCw size={16} className={refreshing ? "spin" : ""} /></button></div></div>
+      <div className="locker-collection-heading">{heading || <h2>{tab === "skins" ? "Skins" : "Capes"}</h2>}<div><span>{list.length}</span><button className="locker-refresh" title="Reload from Minecraft" aria-label="Reload wardrobe from Minecraft" disabled={busy || refreshing} onClick={() => void reload(undefined, true)}><RotateCw size={16} className={refreshing ? "spin" : ""} /></button></div></div>
       {loading ? <div className="locker-inline-state" role="status">Loading your Minecraft wardrobe…</div> : error ? <div className="locker-inline-state" role="alert">{error}<button className="locker-state-action" onClick={() => void reload()}>Try again</button></div> : <>
         <div className="locker-grid">{entries.slice((page - 1) * 9, page * 9).map(item => item === null ? <button key="upload" className="locker-upload-skin" onClick={upload} disabled={busy}><Plus size={30} strokeWidth={2.5} /><strong>Upload skin</strong></button> : <article key={item.id} className={`locker-cape ${selected === item.id ? "selected" : ""}`}>
           <button className="locker-art" aria-label={`Preview ${item.name}`} aria-pressed={selected === item.id} onClick={() => pick(item)}>{"variant" in item ? <SkinThumbnail texture={item.texture} variant={item.variant} /> : <CapeDisplay texture={item.texture} motion={false} />}</button>
