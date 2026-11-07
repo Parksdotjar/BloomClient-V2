@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 /** Shared, low-overhead infrastructure for every live Bloom cosmetic type. */
 final class BloomCosmeticsRuntime {
     static final String API_BASE = "https://api.north.bloomclient.org/minecraft";
-    static final String USER_AGENT = "Bloom-Cosmetics/1.5.0";
+    static final String USER_AGENT = "Bloom-Cosmetics/1.6.1";
     static final long ACTIVE_PLAYER_WINDOW_MS = 20_000L;
     static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(4))

@@ -1,5 +1,25 @@
 # Bloom cosmetics rendering architecture
 
+## Cape download recovery — November 6, 2026
+
+Cosmetics 1.6.1 bounds both response size and total response duration, including
+the body. `CapeHttp` cancels timed-out transfers/subscriptions and does not follow
+redirects around the existing asset URL allowlist. Cape/elytra/atlas checksums,
+PNG dimensions, texture memory budgets and server ownership checks still apply.
+
+`CapeLoadCache` installs an in-flight entry before starting the download and
+removes exactly that entry on failure. This allows retry even when URL validation
+or a download fails synchronously; removing a key inside `computeIfAbsent` could
+previously leave a failed future cached permanently. Loaded textures remain shared
+and unused completed textures are disposed normally.
+
+Lookup, parsing and texture failures produce at most one warning per minute.
+Warnings contain no player identifiers, asset URLs, tokens or response bodies.
+Eight regression tests cover immediate/asynchronous failure, duplicate requests,
+disposal, stalled response bodies, streaming size limits and redirects. They run
+with the existing tests on all four supported Minecraft targets. Local HTTP tests
+are not proof of a particular player's live ownership or in-game appearance.
+
 The emote implementation is documented in [BLOOM_EMOTES.md](BLOOM_EMOTES.md), with runtime architecture, Blockbench authoring, and explicit acceptance status. Cosmetics 1.6.0 adds the hold-B wheel, an authored bundled emote catalog (empty until content is sent from Creator), PAL playback, and relay source. Production deployment and the remaining multiplayer/visual acceptance checks are separate from successful builds.
 
 > Cosmetics 1.6.0 initializes capes, the single-label nametag badge, and emotes. Hat/wing/bracelet sources remain dormant. Vanilla elytra is preserved. Renderer downloads are bounded and textures have memory accounting/disposal. Game-session credentials arrive through the child environment, not command arguments. See `CAPES_IMPLEMENTATION_STATUS.md` and `BLOOM_EMOTES.md` for remaining acceptance work.

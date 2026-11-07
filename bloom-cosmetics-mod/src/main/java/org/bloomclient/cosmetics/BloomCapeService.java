@@ -12,7 +12,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URLEncoder;
 import java.net.URI;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,7 +22,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -36,10 +34,11 @@ public final class BloomCapeService {
 
     private final ConcurrentHashMap<UUID, Long> observedPlayers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, CapeAssignment> assignments = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, CompletableFuture<LoadedCape>> capeLoads = new ConcurrentHashMap<>();
+    private final CapeLoadCache<LoadedCape> capeLoads = new CapeLoadCache<>();
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean refreshing = new AtomicBoolean();
     private final AtomicLong allocated = new AtomicLong();
+    private final AtomicLong nextWarning = new AtomicLong();
     private volatile long nextRefresh;
     private int failures;
 
@@ -84,11 +83,7 @@ public final class BloomCapeService {
             assignments.keySet().retainAll(players);
             BloomPresence.retain(players);
             var used = assignments.values().stream().map(value -> value.assetKey).collect(java.util.stream.Collectors.toSet());
-            capeLoads.forEach((key, future) -> {
-                if (!used.contains(key) && future.isDone() && capeLoads.remove(key, future)) {
-                    future.thenAccept(LoadedCape::close);
-                }
-            });
+            capeLoads.retain(used, LoadedCape::close);
             if (players.isEmpty()) {
                 refreshing.set(false);
                 return;
@@ -96,10 +91,10 @@ public final class BloomCapeService {
             var request = BloomCosmeticsRuntime.get(
                 BloomCosmeticsRuntime.equippedUrl("capes", players), "application/json", 5);
             final List<UUID> requestedPlayers = players;
-            BloomCosmeticsRuntime.HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+            CapeHttp.get(request, 1024 * 1024)
                 .thenAccept(response -> {
-                    if (response.statusCode() == 200 && response.body().length() <= 1024 * 1024) {
-                        applyAssignments(requestedPlayers, response.body()); failures=0; nextRefresh=System.currentTimeMillis()+5_000;
+                    if (response.statusCode() == 200 && response.body().length <= 1024 * 1024) {
+                        applyAssignments(requestedPlayers, new String(response.body(), StandardCharsets.UTF_8)); failures=0; nextRefresh=System.currentTimeMillis()+5_000;
                     } else backoff();
                 })
                 .exceptionally(error -> { backoff(); return null; })
@@ -111,7 +106,15 @@ public final class BloomCapeService {
         refreshing.set(false);
     }
 
-    private void backoff() { failures=Math.min(5,failures+1); nextRefresh=System.currentTimeMillis()+Math.min(60_000,2_000L<<failures); }
+    private void backoff() { warnFailure(); failures=Math.min(5,failures+1); nextRefresh=System.currentTimeMillis()+Math.min(60_000,2_000L<<failures); }
+
+    private void warnFailure() {
+        long now = System.currentTimeMillis(), next = nextWarning.get();
+        if (now >= next && nextWarning.compareAndSet(next, now + 60_000)) {
+            // Never log signed URLs, response bodies, player UUIDs or session tokens.
+            LOGGER.warn("Bloom cape lookup or texture download failed; retrying automatically. Check the cosmetics service connection if the cape stays missing.");
+        }
+    }
 
     private void applyAssignments(List<UUID> requestedPlayers, String body) {
         try {
@@ -149,10 +152,11 @@ public final class BloomCapeService {
                 loadCape(next).thenAccept(cape -> {
                     CapeAssignment latest = assignments.get(uuid);
                     if (latest != null && latest.assetKey.equals(assetKey)) latest.cape = cape;
-                }).exceptionally(error -> null);
+                }).exceptionally(error -> { warnFailure(); return null; });
             }
         } catch (Exception ignored) {
             // Ignore malformed remote data and keep the last known safe state.
+            warnFailure();
         }
     }
 
@@ -174,10 +178,7 @@ public final class BloomCapeService {
     }
 
     private CompletableFuture<LoadedCape> loadCape(RemoteCape cape) {
-        return capeLoads.computeIfAbsent(cape.assetKey(), unused -> requestCape(cape)
-            .whenComplete((loaded, error) -> {
-                if (error != null) capeLoads.remove(cape.assetKey());
-            }));
+        return capeLoads.get(cape.assetKey(), () -> requestCape(cape));
     }
 
     private CompletableFuture<LoadedCape> requestCape(RemoteCape cape) {
@@ -196,45 +197,40 @@ public final class BloomCapeService {
     private CompletableFuture<LoadedTexture> requestElytra(RemoteCape cape) {
         if (!safeAssetUrl(cape.elytraUrl)) return CompletableFuture.failedFuture(new IllegalStateException("Untrusted elytra asset URL"));
         var request = BloomCosmeticsRuntime.get(cape.elytraUrl, "image/png", 8);
-        return BloomCosmeticsRuntime.HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
-            .thenCompose(response -> decodeElytraResponse(cape, response.statusCode(), readBounded(response.body(), MAX_STATIC_BYTES)));
+        return CapeHttp.get(request, MAX_STATIC_BYTES)
+            .thenCompose(response -> decodeElytraResponse(cape, response.statusCode(), response.body()));
     }
 
     private CompletableFuture<LoadedCape> requestAnimatedCape(RemoteCape cape, RemoteAnimation animation) {
         if (!safeAssetUrl(animation.atlasUrl)) return CompletableFuture.failedFuture(new IllegalStateException("Untrusted cape asset URL"));
         var request = BloomCosmeticsRuntime.get(animation.atlasUrl, "image/png", 12);
-        return BloomCosmeticsRuntime.HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
-            .thenCompose(response -> decodeAnimationResponse(cape, animation, response.statusCode(), readBounded(response.body(), MAX_ATLAS_BYTES)));
+        return CapeHttp.get(request, MAX_ATLAS_BYTES)
+            .thenCompose(response -> decodeAnimationResponse(cape, animation, response.statusCode(), response.body()));
     }
 
     private CompletableFuture<LoadedCape> requestStaticCape(RemoteCape cape) {
         if (cape.textureUrl != null && !cape.textureUrl.isBlank()) {
             if (!safeAssetUrl(cape.textureUrl)) return CompletableFuture.failedFuture(new IllegalStateException("Untrusted cape asset URL"));
             var request = BloomCosmeticsRuntime.get(cape.textureUrl, "image/png", 8);
-            return BloomCosmeticsRuntime.HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
-                .thenCompose(response -> decodeStaticResponse(cape, response.statusCode(), readBounded(response.body(), MAX_STATIC_BYTES)));
+            return CapeHttp.get(request, MAX_STATIC_BYTES)
+                .thenCompose(response -> decodeStaticResponse(cape, response.statusCode(), response.body()));
         }
         String leaseUrl = BloomCosmeticsRuntime.API_BASE + "/v1/capes/"
             + URLEncoder.encode(cape.capeId, StandardCharsets.UTF_8) + "/texture";
         var leaseRequest = BloomCosmeticsRuntime.get(leaseUrl, "application/json", 5);
-        return BloomCosmeticsRuntime.HTTP.sendAsync(leaseRequest, HttpResponse.BodyHandlers.ofString())
+        return CapeHttp.get(leaseRequest, 16 * 1024)
             .thenCompose(leaseResponse -> {
                 if (leaseResponse.statusCode() != 200) return CompletableFuture.failedFuture(new IllegalStateException("Cape lease unavailable"));
-                JsonObject lease = JsonParser.parseString(leaseResponse.body()).getAsJsonObject();
+                JsonObject lease = JsonParser.parseString(new String(leaseResponse.body(), StandardCharsets.UTF_8)).getAsJsonObject();
                 if (!cape.revision.equals(lease.get("revision").getAsString())) {
                     return CompletableFuture.failedFuture(new IllegalStateException("Cape revision changed"));
                 }
                 String url=lease.get("url").getAsString();
                 if (!safeAssetUrl(url)) return CompletableFuture.failedFuture(new IllegalStateException("Untrusted cape asset URL"));
                 var textureRequest = BloomCosmeticsRuntime.get(url, "image/png", 8);
-                return BloomCosmeticsRuntime.HTTP.sendAsync(textureRequest, HttpResponse.BodyHandlers.ofInputStream());
+                return CapeHttp.get(textureRequest, MAX_STATIC_BYTES);
             })
-            .thenCompose(response -> decodeStaticResponse(cape, response.statusCode(), readBounded(response.body(), MAX_STATIC_BYTES)));
-    }
-
-    private static byte[] readBounded(InputStream input, int limit) {
-        try (input) { byte[] bytes=input.readNBytes(limit+1); if(bytes.length>limit) throw new IllegalStateException("Cape exceeds download limit"); return bytes; }
-        catch (Exception error) { throw new java.util.concurrent.CompletionException(error); }
+            .thenCompose(response -> decodeStaticResponse(cape, response.statusCode(), response.body()));
     }
 
     private static boolean safePng(byte[] bytes, int maxWidth, int maxHeight) {
