@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import { release } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,5 +32,7 @@ else if (action === "check") {
 } else {
   // A local acceptance build. The shipping config and Windows updater artifacts remain enabled.
   // This helper does not provision credentials or publish; shipping signatures remain a separate release step.
-  run("npm", ["run", "tauri:build", "--", "--config", '{"bundle":{"createUpdaterArtifacts":false}}']);
+  // Compiler caches may contain old mounted-image intermediates. Always package fresh outputs.
+  rmSync(resolve(root, "src-tauri", "target", "release", "bundle"), { recursive: true, force: true });
+  run("npm", ["run", "tauri:build", "--", "--verbose", "--config", '{"bundle":{"createUpdaterArtifacts":false}}']);
 }
