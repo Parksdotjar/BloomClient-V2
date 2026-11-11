@@ -108,6 +108,33 @@ jobs:
           "$app/Contents/MacOS/sakura" --capabilities
           codesign --verify --deep --strict "$app"
           codesign --verify --strict "$app/Contents/MacOS/sakura"
+      - name: Launch the packaged Mac app
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p startup-check
+          python3 - <<'PY'
+          import pathlib, subprocess, time
+          app = pathlib.Path('src-tauri/target/release/bundle/macos/Bloom Client.app').resolve()
+          with open('startup-check/console.txt', 'w') as log:
+              process = subprocess.Popen([str(app / 'Contents/MacOS/bloomclient')], stdout=log, stderr=log)
+              try:
+                  time.sleep(20)
+                  subprocess.run(['screencapture', '-x', 'startup-check/window.png'], check=False)
+                  if process.poll() is not None:
+                      raise RuntimeError(f'Bloom exited during startup: {process.returncode}')
+                  subprocess.run(['sample', str(process.pid), '1', '-file', 'startup-check/threads.txt'], timeout=15, check=False)
+              finally:
+                  if process.poll() is None:
+                      process.terminate()
+                      try: process.wait(timeout=5)
+                      except subprocess.TimeoutExpired: process.kill()
+          PY
+      - uses: actions/upload-artifact@v6
+        if: always() && runner.os == 'macOS'
+        with:
+          name: mac-startup-check
+          path: startup-check/
+          retention-days: 7
       - uses: actions/upload-artifact@v6
         if: runner.os == 'macOS'
         with:
