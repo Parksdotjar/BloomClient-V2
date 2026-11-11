@@ -94,3 +94,8 @@ Use a new output filename. Verify artifacts against the existing updater trust k
 - No Mac compilation, DMG installation, Keychain persistence, native WKWebView test, Mac gameplay, notarization or updater installation is claimed. No commits, pushes, tags, application version changes or publication occurred.
 
 References: [Tauri platform configuration](https://v2.tauri.app/develop/configuration-files/), [sidecars](https://v2.tauri.app/develop/sidecar/), [Mac signing](https://v2.tauri.app/distribute/sign/macos/), [updater artifacts](https://v2.tauri.app/plugin/updater/), [GitHub runner architectures](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+
+## First cloud run and portability correction
+
+The owner-authorized test branch is `codex/macos-test-build`. Run 42948904620 compiled successfully on both Windows and Apple Silicon; Windows passed all checks. Mac passed 68 native tests but exposed a modpack path validation mismatch: Unix accepted Windows drive syntax. The validator now normalizes both separator styles and rejects drive/stream syntax on every OS; regression coverage includes drive-relative, UNC and backslash traversal paths. The failed run did not produce a DMG. CI now separates its build steps and caches Rust outputs on failures for subsequent diagnostic runs. The Windows production release workflow remains unchanged.

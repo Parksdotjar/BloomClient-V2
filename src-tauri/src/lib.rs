@@ -3211,8 +3211,11 @@ fn cancel_autotune_benchmark(state: tauri::State<'_, LauncherState>) -> Result<(
 
 fn safe_pack_path(raw: &str) -> Result<std::path::PathBuf, String> {
     use std::path::Component;
-    let path = std::path::Path::new(raw);
-    if path.is_absolute()
+    // Modpacks move between operating systems. Interpret both separator styles
+    // and reject Windows drive/stream syntax even when running on Unix.
+    let normalized = raw.replace('\\', "/");
+    let path = std::path::Path::new(&normalized);
+    if raw.contains(':') || raw.chars().any(char::is_control) || path.is_absolute()
         || path.components().any(|component| {
             matches!(
                 component,
@@ -5309,6 +5312,12 @@ mod tests {
         assert!(safe_pack_path("mods/example.jar").is_ok());
         assert!(safe_pack_path("../outside.jar").is_err());
         assert!(safe_pack_path("C:\\outside.jar").is_err());
+        assert!(safe_pack_path("C:/outside.jar").is_err());
+        assert!(safe_pack_path("C:outside.jar").is_err());
+        assert!(safe_pack_path("..\\outside.jar").is_err());
+        assert!(safe_pack_path("\\\\server\\share\\outside.jar").is_err());
+        assert!(safe_pack_path("mods/example.jar:stream").is_err());
+        assert_eq!(safe_pack_path("mods\\example.jar").unwrap(), std::path::Path::new("mods/example.jar"));
         assert!(safe_pack_path("/outside.jar").is_err());
     }
 
