@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "rigVersion": 1,
+  "id": "bloom:comet_run",
+  "animation": "comet_run",
+  "name": "Comet Run",
+  "author": "Bloom",
+  "playback": "loop",
+  "order": 40,
+  "traversal": true
+}

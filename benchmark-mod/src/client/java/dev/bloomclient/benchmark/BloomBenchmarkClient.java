@@ -4,8 +4,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import net.fabricmc.api.ClientModInitializer;
@@ -50,6 +51,10 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
     private boolean announced;
     private boolean complete;
     private boolean managedRun;
+    private boolean interrupted;
+    private long lastStatusAt;
+    private String lastStatusState = "";
+    private String runId = "";
 
     @Override
     public void onInitializeClient() {
@@ -76,6 +81,9 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
     private void start(boolean managed) {
         if (active) return;
         managedRun = managed;
+        interrupted = false;
+        try { runId = Files.readString(GAME_DIR.resolve("bloom-benchmark-run-id.txt")).trim(); }
+        catch (IOException ignored) { runId = java.util.UUID.randomUUID().toString(); }
         active = true;
         complete = false;
         openingWorld = false;
@@ -96,6 +104,11 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
 
     private void onTick(Minecraft minecraft) {
         if (!active || complete) return;
+        if (benchmarkStartedAt != 0 && (!minecraft.isWindowActive() || minecraft.isPaused() || minecraft.gui.screen() != null)) {
+            interrupted = true;
+            finish(System.nanoTime() - benchmarkStartedAt);
+            return;
+        }
         if (minecraft.level == null) {
             if (!openingWorld) {
                 openingWorld = true;
@@ -139,6 +152,7 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
 
     private void sampleFrame() {
         if (!active || complete || worldReadyAt == 0) return;
+
         long now = System.nanoTime();
         long elapsed = now - worldReadyAt;
         if (elapsed < WARMUP_NANOS) {
@@ -156,7 +170,7 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
         }
         double deltaMs = (now - previousFrame) / 1_000_000.0;
         previousFrame = now;
-        if (deltaMs > 0.0 && deltaMs < 1000.0) frameTimesMs.add(deltaMs);
+        if (deltaMs > 0.0) frameTimesMs.add(deltaMs); // Long stalls are real samples, not outliers to hide.
         long used = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
         memoryTotal += used;
         memorySamples++;
@@ -170,26 +184,27 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
     private void finish(long measuredNanos) {
         complete = true;
         active = false;
-        List<Double> sorted = new ArrayList<>(frameTimesMs);
-        sorted.sort(Comparator.naturalOrder());
+        if (frameTimesMs.isEmpty() || interrupted) {
+            writeStatus("error", 0, "The test was interrupted. Keep Minecraft focused with menus closed and run it again.");
+            if (managedRun) Minecraft.getInstance().execute(Minecraft.getInstance()::stop);
+            return;
+        }
         double seconds = measuredNanos / 1_000_000_000.0;
-        double averageFps = frameTimesMs.size() / seconds;
-        int worstCount = Math.max(1, (int) Math.ceil(sorted.size() * 0.01));
-        double worstAverage = sorted.subList(Math.max(0, sorted.size() - worstCount), sorted.size())
-            .stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double onePercentLow = worstAverage == 0.0 ? 0.0 : 1000.0 / worstAverage;
-        double averageFrameTime = frameTimesMs.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        double p95FrameTime = sorted.get(Math.min(sorted.size() - 1, (int) Math.floor(sorted.size() * 0.95)));
+        FrameStatistics statistics = FrameStatistics.calculate(frameTimesMs, seconds);
+        double averageFps = statistics.averageFps();
+        double onePercentLow = statistics.onePercentLow();
+        double averageFrameTime = statistics.averageMs();
+        double p95FrameTime = statistics.p95Ms();
         long averageMemory = memorySamples == 0 ? 0 : memoryTotal / memorySamples;
         Minecraft minecraft = Minecraft.getInstance();
         int width = minecraft.getWindow().getWidth();
         int height = minecraft.getWindow().getHeight();
         String json = String.format(Locale.ROOT,
-            "{\"version\":1,\"minecraftVersion\":\"26.2\",\"seed\":%d,\"durationSeconds\":%.3f,\"averageFps\":%.3f,\"onePercentLow\":%.3f,\"averageFrameTimeMs\":%.3f,\"p95FrameTimeMs\":%.3f,\"averageMemoryBytes\":%d,\"peakMemoryBytes\":%d,\"frames\":%d,\"width\":%d,\"height\":%d,\"completedAt\":%d}",
-            WORLD_SEED, seconds, averageFps, onePercentLow, averageFrameTime, p95FrameTime, averageMemory, peakMemory,
+            "{\"version\":2,\"minecraftVersion\":\"26.3\",\"runId\":\"%s\",\"interrupted\":false,\"seed\":%d,\"durationSeconds\":%.3f,\"averageFps\":%.3f,\"onePercentLow\":%.3f,\"averageFrameTimeMs\":%.3f,\"p95FrameTimeMs\":%.3f,\"averageMemoryBytes\":%d,\"peakMemoryBytes\":%d,\"frames\":%d,\"width\":%d,\"height\":%d,\"completedAt\":%d}",
+            runId, WORLD_SEED, seconds, averageFps, onePercentLow, averageFrameTime, p95FrameTime, averageMemory, peakMemory,
             frameTimesMs.size(), width, height, System.currentTimeMillis());
         try {
-            Files.writeString(RESULT_FILE, json, StandardCharsets.UTF_8);
+            writeJson(RESULT_FILE, json);
         } catch (IOException error) {
             writeStatus("error", 0, "Could not save benchmark results: " + error.getMessage());
             return;
@@ -226,11 +241,22 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
         minecraft.disconnect(results, false);
     }
 
-    private static void writeStatus(String state, int progress, String message) {
+    private static void writeJson(Path path, String json) throws IOException {
+        Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
+        Files.writeString(temporary, json, StandardCharsets.UTF_8);
+        try { Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
+        catch (AtomicMoveNotSupportedException ignored) { Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING); }
+    }
+
+    private void writeStatus(String state, int progress, String message) {
+        long now = System.nanoTime();
+        if (state.equals(lastStatusState) && now - lastStatusAt < 500_000_000L) return;
+        lastStatusAt = now;
+        lastStatusState = state;
         String safe = message.replace("\\", "\\\\").replace("\"", "\\\"");
-        String json = String.format("{\"state\":\"%s\",\"progress\":%d,\"message\":\"%s\"}", state, progress, safe);
+        String json = String.format("{\"state\":\"%s\",\"progress\":%d,\"message\":\"%s\",\"runId\":\"%s\"}", state, progress, safe, runId);
         try {
-            Files.writeString(STATUS_FILE, json, StandardCharsets.UTF_8);
+            writeJson(STATUS_FILE, json);
         } catch (IOException ignored) {
         }
     }

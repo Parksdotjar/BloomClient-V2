@@ -1,0 +1,42 @@
+/* Match the existing menu surface without overriding individual menu themes. */
+:root {
+  --dropdown-surface: var(--control);
+  --dropdown-selected: color-mix(in srgb, var(--theme-ink, #f1f4f1) 8%, transparent);
+  --dropdown-hover: color-mix(in srgb, var(--theme-ink, #f1f4f1) 12%, transparent);
+}
+:root[data-theme="oled"] { --dropdown-surface: #060808; }
+
+/* One neutral option treatment for settings, instance selectors and filters. */
+.select-menu button.chosen {
+  background: var(--dropdown-selected);
+  color: var(--theme-ink, #f1f4f1);
+}
+.select-menu:not(.appearance-preset-menu) button:not(:disabled):hover,
+.select-menu:not(.appearance-preset-menu) button:not(:disabled):focus-visible,
+.window-menu-dropdown button:not(:disabled):hover,
+.window-menu-dropdown button:not(:disabled):focus-visible {
+  background: var(--dropdown-hover);
+}
+.spotlight-select-menu button.chosen small { color: var(--muted); }
+
+/* Paint behind the trigger, inside its footprint: the rounded corners reveal
+   the same surface as the portaled menu without covering the button hitbox. */
+.select-wrap:not(.filter-select) { isolation: isolate; }
+.select-wrap:not(.filter-select):has(> .select-trigger[aria-expanded="true"])::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  left: 5px;
+  right: 5px;
+  bottom: 0;
+  height: 10px;
+  background: var(--dropdown-surface);
+  border-inline: 1px solid var(--line);
+}
+.select-wrap[data-menu-side="above"]::before,
+.select-wrap:has(> .select-trigger[data-menu-side="above"])::before {
+  top: 0;
+  bottom: auto;
+}
+.spotlight-select-menu { padding-top: 19px; }

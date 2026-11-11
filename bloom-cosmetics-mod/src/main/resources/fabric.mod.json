@@ -4,7 +4,7 @@
   "version": "${version}",
   "name": "Bloom Cosmetics",
   "icon": "assets/bloom_cosmetics/icon.png",
-  "description": "Displays free Bloom capes and a single integrated Bloom nametag badge. Client-side, for Fabric Minecraft ${minecraft}.",
+  "description": "Bloom capes, nametag badges, and multiplayer emotes. Press B for the emote wheel. Client-side, for Fabric Minecraft ${minecraft}.",
   "authors": ["Bloom Client"],
   "contact": {
     "homepage": "https://bloomclient.org",
@@ -22,7 +22,9 @@
     }
   ],
   "depends": {
-    "fabricloader": ">=0.19.2",
+    "fabricloader": ">=${minimumLoader}",
+    "player_animation_library": "*",
+    "fabric-api": "*",
     "minecraft": "${minecraft}",
     "java": ">=${java}"
   }

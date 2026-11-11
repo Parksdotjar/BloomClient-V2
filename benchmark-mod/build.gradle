@@ -26,6 +26,8 @@ loom {
 }
 
 dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.12.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
@@ -81,4 +83,21 @@ publishing {
 		// The repositories here will be used for publishing your artifact, not for
 		// retrieving dependencies.
 	}
+}
+
+// Run the sampler regression tests without launching Minecraft.
+test { useJUnitPlatform() }
+
+tasks.register("stageBenchmark", Copy) {
+    dependsOn tasks.named("build")
+    from(tasks.named("jar").flatMap { it.archiveFile })
+    into("../src-tauri/resources")
+    rename { "bloom-autotune-benchmark-26.3.jar" }
+}
+
+if (project.hasProperty("benchmarkSmoke")) {
+    loom.runs.client {
+        runDir "build/smoke-1280"
+        programArgs '--width', '1280', '--height', '720'
+    }
 }

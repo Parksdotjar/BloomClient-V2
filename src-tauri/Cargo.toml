@@ -24,7 +24,9 @@ tokio = { version = "1", features = ["time"] }
 zip = "2"
 sha2 = "0.10"
 mc-launcher-core = "0.1.1"
-keyring = { version = "3.6.3", features = ["windows-native"] }
+keyring = { version = "3.6.3" }
+tar = "0.4.46"
+flate2 = "1"
 base64 = "0.22"
 arboard = { version = "3.6.1", default-features = false, features = ["image-data"] }
 rfd = "0.15"
@@ -39,3 +41,7 @@ tauri-plugin-process = "2"
 
 [target.'cfg(windows)'.dependencies]
 junction = "1"
+keyring = { version = "3.6.3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.3", features = ["apple-native"] }

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "rigVersion": 1,
+  "id": "bloom:smooth_shuffle",
+  "animation": "smooth_shuffle",
+  "name": "Smooth Shuffle",
+  "author": "Bloom",
+  "playback": "loop",
+  "order": 30
+}

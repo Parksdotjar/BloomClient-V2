@@ -73,11 +73,14 @@ impl Receipt {
         })
     }
     pub(super) fn valid(&self) -> bool {
-        self.version == 1
+        self.valid_files()
             && now() >= self.created
             && now() - self.created < 86400
-            && !self.files.is_empty()
-            && self.files.iter().all(Stamp::unchanged)
+    }
+    /// Immutable, pinned artifacts can reuse their verified receipt until an
+    /// input changes. Ordinary Java installation receipts retain their TTL.
+    pub(super) fn valid_files(&self) -> bool {
+        self.version == 1 && !self.files.is_empty() && self.files.iter().all(Stamp::unchanged)
     }
 }
 pub(super) fn tree(path: &Path, output: &mut Vec<PathBuf>) -> std::io::Result<()> {
@@ -189,9 +192,11 @@ mod tests {
         let mut r = Receipt::capture("test".into(), vec![path.clone()]).unwrap();
         r.created = now() - 86401;
         assert!(!r.valid());
+        assert!(r.valid_files());
         r.created = now();
         r.version = 0;
         assert!(!r.valid());
+        assert!(!r.valid_files());
         std::fs::remove_file(path).unwrap();
     }
 }

@@ -1,0 +1,81 @@
+name: Desktop platforms
+
+on:
+  push:
+    branches: [codex/macos-test-build]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-platforms-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows regression
+            os: windows-latest
+          - name: Apple Silicon
+            os: macos-15
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: node --test tests/platform-build.test.mjs tests/updater-manifests.test.mjs
+      - run: node --experimental-strip-types --test tests/autotune.test.ts
+      - name: Check Windows frontend and native implementation
+        if: runner.os == 'Windows'
+        run: |
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build:tauri
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo check --locked --manifest-path src-tauri/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check native Apple Silicon implementation
+        if: runner.os == 'macOS'
+        run: npm run mac:check
+      - name: Test benchmark instrumentation on Windows
+        if: runner.os == 'Windows'
+        run: benchmark-mod/gradlew.bat -p benchmark-mod test --no-daemon
+      - name: Test benchmark instrumentation on Mac
+        if: runner.os == 'macOS'
+        run: sh benchmark-mod/gradlew -p benchmark-mod test --no-daemon
+      - name: Build Mac acceptance installer
+        if: runner.os == 'macOS'
+        run: npm run mac:build
+      - name: Check packaged Mac binaries
+        if: runner.os == 'macOS'
+        run: |
+          app="src-tauri/target/release/bundle/macos/Bloom Client.app"
+          test -d "$app"
+          lipo -verify_arch arm64 "$app/Contents/MacOS/bloomclient"
+          lipo -verify_arch arm64 "$app/Contents/MacOS/sakura"
+          "$app/Contents/MacOS/sakura" --capabilities
+          codesign --verify --strict "$app/Contents/MacOS/bloomclient"
+          codesign --verify --strict "$app/Contents/MacOS/sakura"
+      - uses: actions/upload-artifact@v6
+        if: runner.os == 'macOS'
+        with:
+          name: bloom-macos-apple-silicon-acceptance
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14

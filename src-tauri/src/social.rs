@@ -408,7 +408,7 @@ fn get_secret(name: &str) -> Option<String> {
 fn set_secret(name: &str, value: &str) -> Result<(), String> {
     credential(name)?
         .set_password(value)
-        .map_err(|error| format!("Windows could not save Bloom Social securely: {error}"))
+        .map_err(|error| format!("The system credential store could not save Bloom Social securely: {error}"))
 }
 fn delete_secret(name: &str) -> Result<(), String> {
     match credential(name)?.delete_credential() {
@@ -1070,7 +1070,7 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
         activate_profile(&profile, false)?;
         let (curve, signing) = identity_keys()?;
         let response = http_client()?.post(format!("{SOCIAL_API}/native/exchange")).json(&serde_json::json!({
-            "code": code, "verifier": verifier, "deviceId": device_id()?, "deviceName": "Bloom Client on Windows",
+            "code": code, "verifier": verifier, "deviceId": device_id()?, "deviceName": crate::platform::DEVICE_NAME,
             "curve25519Key": curve, "ed25519Key": signing,
         })).send().map_err(|error| format!("Bloom could not finish sign-in: {error}"))?;
         if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {

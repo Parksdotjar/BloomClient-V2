@@ -1,0 +1,18 @@
+.cape-redemption { position: relative; margin-top: -20px; padding-top: 20px; background: var(--panel); border: 1px solid var(--border); border-top: 0; border-radius: 0 0 14px 14px; }
+.cape-redeem-trigger { position: absolute; right: 22px; top: -46px; z-index: 4; min-width: 136px; height: 40px; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--control); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; }
+.cape-redeem-trigger:hover:not(:disabled) { background: var(--dropdown-hover); }
+.cape-redeem-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cape-redeem-drawer .toolbar-drawer-body { justify-content: center; padding: 20px 24px; }
+.cape-redemption + .locker-tab-shelf { margin-top: 0; padding-top: 20px; }
+.cape-redeem-drawer form { width: min(100%, 540px); }
+.cape-redeem-field { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 7px 6px 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--control); color: var(--muted); }
+.cape-redeem-field:focus-within { border-color: color-mix(in srgb,var(--accent) 65%,var(--line)); }
+.cape-redeem-field input { flex: 1; min-width: 0; padding: 0; border: 0; outline: none; box-shadow: none; background: transparent; color: var(--text); font: inherit; font-size: 14px; letter-spacing: .04em; }
+.cape-redeem-field button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-contrast, #111); }
+.cape-redeem-field button:disabled { opacity: .4; }
+.cape-redeem-error { margin: 9px 0 0; color: var(--danger, var(--text)); font-size: 12px; }
+.cape-redeem-spinner { animation: cape-code-spin 900ms linear infinite; }
+@keyframes cape-code-spin { to { transform: rotate(360deg); } }
+@media (max-width: 700px) { .cape-redeem-trigger { min-width: 42px; right: 14px; padding: 0 10px; } .cape-redeem-trigger span { display: none; } }
+:root:not([data-animations="on"]) .cape-redeem-spinner, :root[data-performance="ultra"] .cape-redeem-spinner { animation: none; }
+@media (prefers-reduced-motion: reduce) { .cape-redeem-spinner { animation: none; } }

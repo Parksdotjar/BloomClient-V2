@@ -1,0 +1,5 @@
+/target/
+/local-server/
+*.log
+__pycache__/
+

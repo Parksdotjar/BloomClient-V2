@@ -109,6 +109,7 @@ fn save_active_settings(settings: &GlobalFileSyncSettings) -> Result<(), String>
 fn instance_map() -> Result<HashMap<String, InstanceConfig>, String> {
     Ok(list_instances_blocking()?
         .into_iter()
+        .filter(|instance| instance.engine == crate::sakura::Engine::Java)
         .map(|instance| (instance.id.clone(), instance))
         .collect())
 }
@@ -610,6 +611,7 @@ fn apply_sync_blocking(settings: GlobalFileSyncSettings) -> Result<GlobalFileSyn
 }
 
 pub(super) fn apply_active_setup_to_instance(config: &InstanceConfig) -> Result<(), String> {
+    if config.engine == crate::sakura::Engine::Sakura { return Ok(()); }
     let Some(settings) = load_active_settings()? else {
         return Ok(());
     };
@@ -694,6 +696,8 @@ mod tests {
         InstanceConfig {
             id: id.to_string(),
             name: id.to_string(),
+            engine: crate::sakura::Engine::Java,
+            sakura: None,
             icon: None,
             loader: "Fabric".to_string(),
             loader_version: None,

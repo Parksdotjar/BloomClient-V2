@@ -1,0 +1,65 @@
+/* Main navigation and Settings share one raised selected surface, including under background glass. */
+:is(.sidebar-navigation, .settings-tabs) {
+  --nav-idle-ink: color-mix(in srgb, var(--theme-ink, #f1f4f1) 50%, var(--muted));
+  --nav-selected-ink: var(--theme-ink, #f1f4f1);
+  --nav-idle-fill: transparent;
+  --nav-selected-top: color-mix(in srgb, var(--panel-strong) 60%, var(--theme-raised, #343a3d));
+  --nav-selected-bottom: color-mix(in srgb, var(--panel-strong) 90%, var(--theme-raised, #343a3d));
+  --nav-selected-opacity: 100%;
+}
+
+:root[data-theme="light"] :is(.sidebar-navigation, .settings-tabs) {
+  --nav-idle-ink: var(--muted);
+  --nav-selected-top: var(--panel);
+  --nav-selected-bottom: color-mix(in srgb, var(--panel) 80%, var(--panel-strong));
+}
+
+.app-shell[data-custom-background="on"] :is(.sidebar-navigation, .settings-tabs) {
+  --nav-idle-ink: color-mix(in srgb, var(--custom-sidebar-text) 84%, var(--theme-base, #000));
+  --nav-selected-ink: color-mix(in srgb, var(--custom-sidebar-text) 45%, var(--theme-ink, #f1f4f1));
+  --nav-idle-fill: color-mix(in srgb, var(--theme-base, #050607) calc(var(--custom-sidebar-control-opacity) * .3), transparent);
+  --nav-selected-opacity: max(86%, var(--custom-sidebar-control-opacity));
+}
+
+/* These local overrides protect route state from the shared !important glass rules. */
+:is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button {
+  border: 0 !important;
+  border-radius: 10px;
+  background: var(--nav-idle-fill) !important;
+  color: var(--nav-idle-ink) !important;
+  box-shadow: none !important;
+  transition: color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+:is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button > :is(svg, span) {
+  color: inherit;
+}
+
+:is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button:not(.active):not(.selected):is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--panel-strong) 72%, transparent) !important;
+  color: var(--nav-selected-ink) !important;
+}
+
+:is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button:is(.active, .selected) {
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--nav-selected-top) var(--nav-selected-opacity), transparent),
+    color-mix(in srgb, var(--nav-selected-bottom) var(--nav-selected-opacity), transparent)) !important;
+  color: var(--nav-selected-ink) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-ink, #f1f4f1) 8%, transparent),
+    inset 0 1px 0 var(--theme-highlight, #ffffff08),
+    0 3px 8px var(--theme-shadow-soft, #0004) !important;
+}
+
+:is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-ink, var(--accent)) 45%, transparent);
+  outline-offset: 2px;
+}
+
+:root[data-animations="off"] :is(.sidebar-navigation, .settings-tabs) > button,
+:root[data-performance="ultra"] :is(.sidebar-navigation, .settings-tabs) > button {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button { transition: none; }
+}

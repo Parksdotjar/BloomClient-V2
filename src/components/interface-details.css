@@ -1,0 +1,23 @@
+/* A recessed selection, shared by button tabs and the existing sliding track. */
+:root {
+  --tab-slot: color-mix(in srgb, var(--panel-strong) 75%, var(--theme-base, #000));
+  --tab-slot-shadow: inset 0 2px 5px var(--theme-shadow, #0008), inset 0 1px 0 var(--theme-highlight, #ffffff14), 0 1px 0 var(--theme-highlight, #ffffff14);
+}
+:root[data-theme] :is(.locker-tabs, .pack-sharing-tabs) button[aria-selected="true"],
+:root[data-theme] .instance-settings-tab.active,
+:root[data-theme] .instance-segment-indicator {
+  background: var(--tab-slot);
+  box-shadow: var(--tab-slot-shadow);
+  color: var(--text);
+  border-color: transparent;
+}
+
+.download-artwork { position: relative; display: block; width: 100%; height: 100%; }
+.download-artwork-progress > img:first-child { filter: brightness(.28); }
+.download-artwork > .download-artwork-fill { position: absolute; inset: 0; transition: clip-path 260ms ease-out; }
+
+:root:not([data-animations="on"]) .download-artwork-fill,
+:root[data-performance="ultra"] .download-artwork-fill { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .download-artwork-fill { transition: none; }
+}

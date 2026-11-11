@@ -2,3 +2,5 @@
 build/
 run/
 versions/*/build/
+versions/*/run-BloomTest*/
+emotes/.creator-*/

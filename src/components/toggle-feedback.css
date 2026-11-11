@@ -1,0 +1,24 @@
+/* Keep position independent of the brief squash: scaling a translateX transform
+   would also scale its travel and push the thumb beyond the track. */
+:is(.toggle, .utility-toggle)[aria-pressed] > span,
+:is(.toggle.on, .utility-toggle.on)[aria-pressed] > span {
+  transform: none !important;
+  translate: 0 0;
+  transform-origin: center;
+  transition: translate 220ms cubic-bezier(.22, .72, .2, 1);
+}
+.toggle.on[aria-pressed] > span { translate: 20px 0; }
+.utility-toggle.on[aria-pressed] > span { translate: 19px 0; }
+
+/* CSS also removes squash immediately if a preference changes mid-animation. */
+:root[data-animations="off"] :is(.toggle, .utility-toggle) > span,
+:root[data-performance="ultra"] :is(.toggle, .utility-toggle) > span {
+  transition: none;
+  scale: 1 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.toggle, .utility-toggle) > span {
+    transition: none !important;
+    scale: 1 !important;
+  }
+}

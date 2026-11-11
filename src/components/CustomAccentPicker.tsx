@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject, type PointerEvent as ReactPointerEvent } from "react";
+import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check } from "lucide-react";
+import { WallpaperAccents, WallpaperSourceContext } from "./WallpaperAccents";
 export const PRESET_ACCENTS = ["#8ee365", "#5d9dff", "#a56bff", "#e957ad", "#f4a340", "#f05454"] as const;
 
 type HsvColor = { hue: number; saturation: number; value: number };
@@ -42,7 +43,9 @@ function hexToHsv(input: string): HsvColor {
   };
 }
 
-export function CustomAccentPicker({ value, onApply, label = "Custom accent color", description = "Build your own Bloom accent.", showValue = false, selected, trigger }: { value: string; onApply: (color: string) => void; label?: string; description?: string; showValue?: boolean; selected?: boolean; trigger?: (props: { ref: RefObject<HTMLButtonElement | null>; onClick: () => void; expanded: boolean }) => ReactNode }) {
+export function CustomAccentPicker({ value, onApply, label = "Custom accent color", description = "Build your own Bloom accent.", showValue = false, selected, trigger, wallpaperSource }: { wallpaperSource?: string | null; value: string; onApply: (color: string) => void; label?: string; description?: string; showValue?: boolean; selected?: boolean; trigger?: (props: { ref: RefObject<HTMLButtonElement | null>; onClick: () => void; expanded: boolean }) => ReactNode }) {
+  const sharedWallpaper = useContext(WallpaperSourceContext);
+  const paletteSource = wallpaperSource === undefined ? sharedWallpaper : wallpaperSource;
   const [open, setOpen] = useState(false);
   const [color, setColor] = useState<HsvColor>(() => hexToHsv(value));
   const [hexDraft, setHexDraft] = useState(value.toUpperCase());
@@ -102,6 +105,8 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(placePicker);
+    const observer = new ResizeObserver(placePicker);
+    if (pickerRef.current) observer.observe(pickerRef.current);
     const closeOutside = (event: PointerEvent) => {
       const target = event.target as Node;
       if (!triggerRef.current?.contains(target) && !pickerRef.current?.contains(target)) closePicker();
@@ -113,6 +118,7 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
     document.addEventListener("keydown", closeOnEscape);
     return () => {
       window.cancelAnimationFrame(frame);
+      observer.disconnect();
       window.removeEventListener("resize", placePicker);
       window.removeEventListener("scroll", placePicker, true);
       document.removeEventListener("pointerdown", closeOutside);
@@ -203,6 +209,7 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
           <button type="button" className="accent-picker-cancel" onClick={closePicker}>Cancel</button>
           <button type="button" className="accent-picker-apply" disabled={!hexValid} onClick={() => { onApply(currentHex); closePicker(); }}><Check size={15} />Apply color</button>
         </div>
+        {paletteSource !== undefined && <WallpaperAccents source={paletteSource} value={value} onApply={color => { onApply(color); closePicker(); }} />}
       </div>,
       document.body,
     )}

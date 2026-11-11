@@ -36,6 +36,7 @@
   --theme-success-surface: #e4f3e9;
   --theme-danger-ink: #a3293a;
   --theme-danger-surface: #fbe9ec;
+  --theme-on-danger: #ffffff;
   --theme-warning-ink: #835013;
   --theme-warning-surface: #fff2d7;
   --theme-info-ink: #245c9d;

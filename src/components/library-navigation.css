@@ -19,4 +19,10 @@
 .instances-page > .instances-grid { flex: 1; min-height: 0; overflow: auto; align-content: start; padding: 22px 14px 60px; }
 .instances-library-empty { grid-column: 1 / -1; padding: 48px 24px; text-align: center; color: var(--muted); }
 .instances-page .instances-search-dock { flex: 0 0 auto; width: min(900px, calc(100% - 56px)); margin: -35px auto 0; }
+.instances-connected-heading { position: relative; flex: 0 0 auto; isolation: isolate; }
+.instances-connected-heading .instances-page-heading { position: relative; }
+.instances-connected-heading .instances-library-actions { position: relative; z-index: 2; }
+.instances-connected-heading .content-filter-trigger[aria-expanded="true"] { background: var(--dropdown-selected); color: var(--text); }
+.instances-connected-heading .content-filter-trigger[data-filtered="true"] { color: var(--accent-ink, var(--accent)); }
+.instances-filter-drawer .toolbar-field { max-width: 560px; width: 100%; margin: auto; }
 @media (max-width: 1000px) { .instances-page .instances-search-dock { width: calc(100% - 24px); } }

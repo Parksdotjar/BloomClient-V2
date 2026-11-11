@@ -1,5 +1,19 @@
+import { AutoTuneWorkflow } from "./components/AutoTune";
+import "./services/desktop-interactions";
+import { SoundSettings } from "./components/SoundSettings";
+import { configureInteractionSounds, defaultInteractionSounds, normalizeInteractionSounds, playInteractionSound, stopInteractionSounds, type InteractionSoundSettings } from "./services/interaction-sounds";
+import { installInteractionSoundFeedback } from "./services/interaction-sound-events";
+import { requestToggleSound, useToggleFeedback } from "./services/toggle-feedback";
+import { WallpaperSourceContext } from "./components/WallpaperAccents";
 import { userError } from "./services/user-error";
+import { AppearancePresets } from "./components/AppearancePresets";
+import { ContentTransferContext, useContentTransfer, useContentTransferController } from "./components/ContentTransfer";
+import { InstanceFolders } from "./components/InstanceFolders";
+import { SakuraSettingsFields, defaultSakuraSettings, type SakuraSettings } from "./components/SakuraSettings";
+
 import { QuickSwitcher, type SwitchTarget } from "./components/QuickSwitcher";
+import { ContentToolbar } from "./components/ContentToolbar";
+import { ToolbarDrawer, ToolbarIconSwap, ToolbarSegments, useToolbarDisclosure } from "./components/ConnectedToolbar";
 import { setScreenshotActivity, startScreenshotWarming } from "./services/screenshots";
 import { CustomAccentPicker, PRESET_ACCENTS } from "./components/CustomAccentPicker";
 import { AnimatedAccentEditor, useAnimatedAccent } from "./components/AnimatedAccentEditor";
@@ -10,6 +24,7 @@ import { ScreenshotShelf } from "./components/ScreenshotShelf";
 import {
   StrictMode,
   useEffect,
+  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -41,15 +56,16 @@ import {
   Cpu,
   Cuboid,
   Copy,
+  Pencil,
   Database,
   Feather,
+  Flower2,
   Download,
   ExternalLink,
-  Folder,
-  FolderOpen,
   History,
   House,
   FileDown,
+  FolderPlus,
   Layers3,
   ListFilter,
   ImagePlus,
@@ -85,7 +101,15 @@ import {
   X as CloseIcon,
 } from "lucide-react";
 import "./styles.css";
+import "./components/toggle-feedback.css";
+import "./components/instance-controls.css";
+import { InstanceName } from "./components/InstanceName";
+import { FloatingInstancePlayer } from "./components/FloatingInstancePlayer";
 import "./themes/light.css";
+import "./components/dropdowns.css";
+import "./components/interface-details.css";
+import { FolderOpen } from "lucide-react";
+import "./components/sidebar-navigation.css";
 import { monitorBackend } from "./services/backend";
 import { Locker } from "./components/Locker";
 import { UtilitiesPage } from "./components/UtilitiesPage";
@@ -125,11 +149,12 @@ function WindowCloseIcon() {
   return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>;
 }
 
-type SettingsState = AnimatedAccent & {
+export type SettingsState = AnimatedAccent & {
   theme: Theme;
   accent: string;
   animations: boolean;
   buttonPressDuration: number;
+  interactionSounds: InteractionSoundSettings;
   customBackground: boolean;
   backgroundMode: "image" | "live";
   liveBackground: (typeof LIVE_BACKGROUNDS)[number]["id"];
@@ -171,6 +196,7 @@ const defaults: SettingsState = {
   accent: "#a56bff",
   animations: true,
   buttonPressDuration: 750,
+  interactionSounds: defaultInteractionSounds,
   customBackground: false,
   backgroundMode: "image",
   liveBackground: "aurora",
@@ -209,13 +235,13 @@ const defaults: SettingsState = {
 const spotlightDefaultMigrationKey = "bloom-home-layout-spotlight-v1";
 const customBackgroundDefaultsMigrationKey = "bloom-custom-background-defaults-v1";
 const nav = [
-  [House, "Home"],
-  [Layers3, "Instances"],
-  [HangerIcon, "Locker"],
-  [MessageCircle, "Social"],
-  [ImagePlus, "Screenshots"],
-  [Wrench, "Utilities"],
-  [SettingsIcon, "Settings"],
+  [House, "Home", "home"],
+  [Layers3, "Instances", "instances"],
+  [HangerIcon, "Locker", "locker"],
+  [MessageCircle, "Social", "social"],
+  [ImagePlus, "Screenshots", "screenshots"],
+  [Wrench, "Utilities", "utilities"],
+  [SettingsIcon, "Settings", "settings"],
 ] as const;
 const settingTabs = [
   [SettingsIcon, "General"],
@@ -251,20 +277,27 @@ function EmptySlot({
     </div>
   );
 }
-function Toggle({
+export function Toggle({
   value,
   onChange,
   disabled = false,
+  label,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
+  label?: string;
 }) {
+  const feedbackRef = useToggleFeedback(value);
   return (
     <button
+      ref={feedbackRef}
+      type="button"
       className={"toggle " + (value ? "on" : "off")}
-      onClick={() => onChange(!value)}
+      data-sound-stateful="true"
+      onClick={event => { requestToggleSound(event.currentTarget, !value); onChange(!value); }}
       aria-pressed={value}
+      aria-label={label}
       disabled={disabled}
     >
       <span />
@@ -404,7 +437,7 @@ function revealWindowMenu(menu: HTMLDivElement) {
   });
 }
 
-function Select({
+export function Select({
   value,
   options,
   onChange,
@@ -451,10 +484,12 @@ function Select({
   return (
     <div className={`select-wrap ${variant === "filter" ? `filter-select ${value !== "All" ? "filtered" : ""}` : ""}`}>
       <button
+        type="button"
         ref={triggerRef}
         className="select-trigger"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
+        data-menu-side={menuPosition.top < (triggerRef.current?.getBoundingClientRect().top ?? 0) ? "above" : "below"}
         aria-label={variant === "filter" ? `Filter instances: ${value}` : undefined}
         title={variant === "filter" ? `Filter: ${value}` : undefined}
       >
@@ -464,6 +499,7 @@ function Select({
         <div ref={menuRef} className="select-menu select-menu-portal" style={{ ...closedDropdownStyle, position: "fixed", top: menuPosition.top, left: menuPosition.left, right: "auto", width: menuPosition.width, maxHeight: menuPosition.maxHeight }}>
           {options.map((option) => (
             <button
+        type="button"
               style={{ opacity: 0 }}
               className={option === value ? "chosen" : ""}
               key={option}
@@ -480,89 +516,6 @@ function Select({
       )}
     </div>
   );
-}
-
-function ContentFilterMenu({
-  sort,
-  filter,
-  onSortChange,
-  onFilterChange,
-}: {
-  sort: string;
-  filter: string;
-  onSortChange: (value: string) => void;
-  onFilterChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 276, maxHeight: 330 });
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const filtered = sort !== "Name" || filter !== "All";
-  useEffect(() => {
-    if (!open) return;
-    const place = () => {
-      const triggerBounds = triggerRef.current?.getBoundingClientRect();
-      if (!triggerBounds) return;
-      const headerBounds = triggerRef.current?.closest(".manager-heading")?.getBoundingClientRect() ?? triggerBounds;
-      const width = 276;
-      const contentHeight = menuRef.current?.scrollHeight || 168;
-      setPosition(fitActionMenuBelow(headerBounds, width, contentHeight, triggerBounds.right - width));
-    };
-    const closeOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
-    };
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-  useEffect(() => { if (open && menuRef.current) revealDropdown(menuRef.current); }, [open]);
-  return <div className={`content-filter ${filtered ? "filtered" : ""}`}>
-    <button
-      ref={triggerRef}
-      type="button"
-      className="content-filter-trigger"
-      aria-label={`Filter content: sorted by ${sort}, showing ${filter.toLowerCase()}`}
-      aria-expanded={open}
-      aria-haspopup="dialog"
-      title="Sort and filter"
-      onClick={() => setOpen(value => !value)}
-    >
-      <ListFilter size={19} strokeWidth={2.2} />
-    </button>
-    {open && createPortal(
-      <div
-        ref={menuRef}
-        className="select-menu select-menu-portal content-filter-popover"
-        role="dialog"
-        aria-label="Sort and filter content"
-        style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }}
-      >
-        <div className="content-filter-section">
-          <span>Sort by</span>
-          <div className="content-filter-options two" role="group" aria-label="Sort by">
-            {["Name", "Size"].map(option => <button type="button" className={sort === option ? "chosen" : ""} aria-pressed={sort === option} key={option} onClick={() => onSortChange(option)}>{option}</button>)}
-          </div>
-        </div>
-        <div className="content-filter-section">
-          <span>Show</span>
-          <div className="content-filter-options three" role="group" aria-label="Show content">
-            {["All", "Enabled", "Disabled"].map(option => <button type="button" className={filter === option ? "chosen" : ""} aria-pressed={filter === option} key={option} onClick={() => onFilterChange(option)}>{option}</button>)}
-          </div>
-        </div>
-      </div>,
-      document.body,
-    )}
-  </div>;
 }
 
 function PaginationControls({
@@ -896,13 +849,13 @@ function SettingsPage({
   onRestartOnboarding,
 }: {
   settings: SettingsState;
-  setSettings: (s: SettingsState) => void;
+  setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   onSignOut: () => void;
   profile: MinecraftProfile | null;
   profileIcon: string | null;
   onProfileIconChange: (icon: string) => void;
   backgroundImage: string | null;
-  onBackgroundImageChange: (image: string) => void;
+  onBackgroundImageChange: (image: string | null) => void;
   initialTab?: string;
   navigationKey: number;
   currentVersion: string;
@@ -1067,6 +1020,10 @@ function SettingsPage({
                 />
               </SettingRow>
             </div>
+            <SoundSettings value={settings.interactionSounds} onChange={value => {
+              configureInteractionSounds(value, settings.ultraPerformance);
+              update("interactionSounds", value);
+            }} paused={settings.ultraPerformance} ToggleControl={Toggle} />
           </div>
           <div className="settings-section" {...section("Appearance")}>
             <h2>Appearance</h2>
@@ -1074,6 +1031,7 @@ function SettingsPage({
               Customize how Bloom Client looks.
             </p>
             <div className="settings-card">
+              <AppearancePresets positionMenu={fitFloatingMenu} revealMenu={revealDropdown} settings={settings} backgroundImage={backgroundImage} onApply={(appearance, image) => { onBackgroundImageChange(image); setSettings(current => ({ ...current, ...appearance })); }} />
               <SettingRow
                 title="Theme"
                 description="Choose your preferred theme."
@@ -1092,7 +1050,7 @@ function SettingsPage({
                 title="Accent Color"
                 description="Choose the accent color for the client."
               >
-                <div className="accent-picks">
+                <div className="accent-picker-stack"><div className="accent-picks">
                   {PRESET_ACCENTS.map((color) => (
                     <button
                       type="button"
@@ -1105,6 +1063,8 @@ function SettingsPage({
                   ))}
                   <CustomAccentPicker selected={settings.accentMode === "solid" && !PRESET_ACCENTS.some(color => color === settings.accent.toLowerCase())} value={settings.accent} onApply={color => setSettings({ ...settings, accent: color, accentMode: "solid" })} />
                   <button type="button" className={`gradient-accent-trigger ${settings.accentMode === "animated" ? "picked" : ""}`} style={{ background: accentGradient(settings.accentStops) }} aria-label="Animated gradient accent" aria-pressed={settings.accentMode === "animated"} title="Animated gradient accent" onClick={() => update("accentMode", "animated")} />
+                </div>
+
                 </div>
               </SettingRow>
               {settings.accentMode === "animated" && <AnimatedAccentEditor
@@ -1219,7 +1179,7 @@ function SettingsPage({
               </SettingRow>
               <SettingRow
                 title="Bloom-managed Java"
-                description="Private runtimes downloaded by Bloom. They do not change Windows or your PATH."
+                description="Private runtimes downloaded by Bloom. They do not change your system Java or your PATH."
               >
                 <ManagedJavaControl />
               </SettingRow>
@@ -1474,6 +1434,8 @@ function SettingsPage({
 type InstanceDraft = {
   id: string;
   name: string;
+  engine?: "java" | "sakura";
+  sakura?: SakuraSettings | null;
   icon?: string | null;
   loader: string;
   loaderVersion?: string | null;
@@ -1491,6 +1453,7 @@ type InstanceDraft = {
   shortcut: boolean;
 };
 type PackChannelRole = "owner" | "editor" | "member";
+const instanceEngineLabel = (instance: Pick<InstanceDraft, "engine" | "loader">) => instance.engine === "sakura" ? "Sakura Alpha" : instance.loader;
 type PackChannelMembership = { instanceId: string; role: PackChannelRole };
 type JavaInstallation = {
   path: string;
@@ -1511,6 +1474,8 @@ function NewInstancePage({
   const [draft, setDraft] = useState<InstanceDraft>({
     id: "",
     name: "",
+    engine: "java",
+    sakura: null,
     loader: instanceDefaults.defaultLoader,
     version: instanceDefaults.defaultVersion,
     directory: instanceDefaults.gameDirectory,
@@ -1531,6 +1496,10 @@ function NewInstancePage({
   const [importing, setImporting] = useState(false);
   const [modrinthOpen, setModrinthOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [sakuraAvailability, setSakuraAvailability] = useState<{ available: boolean; message: string } | null>(null);
+  const javaEngineSettings = useRef({ loader: draft.loader, loaderVersion: draft.loaderVersion, version: draft.version });
+  const native = draft.engine === "sakura";
+  useEffect(() => { void invoke<{ available: boolean; message: string }>("get_sakura_availability").then(setSakuraAvailability).catch(() => setSakuraAvailability({ available: false, message: "Sakura is unavailable in this build." })); }, []);
   useEffect(() => {
     void Promise.all([
       invoke<Release[]>("get_minecraft_releases"),
@@ -1541,7 +1510,7 @@ function NewInstancePage({
         setJavas(javaList);
         setDraft((current) => ({
           ...current,
-          version: current.version === "Latest release" ? releaseList[0]?.id || current.version : current.version,
+          version: current.engine === "sakura" ? "26.1" : current.version === "Latest release" ? releaseList[0]?.id || current.version : current.version,
         }));
       })
       .catch((error) => setMessage(String(error)));
@@ -1557,7 +1526,7 @@ function NewInstancePage({
       });
       setDraft(saved);
       setMessage(
-        `${saved.loader} instance created and ready to install.`,
+        `${saved.engine === "sakura" ? "Sakura" : saved.loader} instance created and ready to play.`,
       );
       onCreated("home");
     } catch (error) {
@@ -1613,8 +1582,10 @@ function NewInstancePage({
       <div className="instance-heading">
         <div><h1>New Instance</h1><p>Create a new Minecraft instance to start playing.</p></div>
         <div className="new-instance-import-actions">
+          {!native && <>
           <button className="import-pack-action secondary-import" disabled={importing} onClick={() => void importPack()}><PackageOpen size={17} /><span>{importing ? "Opening…" : "Import"}</span></button>
           <button className="import-pack-action" disabled={importing} onClick={() => setModrinthOpen(true)}><CirclePlus size={17} /><span>Add from Modrinth</span></button>
+          </>}
         </div>
       </div>
       <div className="instance-layout instance-layout-essential">
@@ -1629,6 +1600,16 @@ function NewInstancePage({
             />
           </label>
           <label className="instance-field">
+            <span>Engine</span>
+            <Select value={native ? "Sakura (Alpha)" : "Minecraft Java"} options={sakuraAvailability?.available ? ["Minecraft Java", "Sakura (Alpha)"] : ["Minecraft Java"]} onChange={value => {
+              const nextNative = value === "Sakura (Alpha)";
+              if (nextNative && !native) javaEngineSettings.current = { loader: draft.loader, loaderVersion: draft.loaderVersion, version: draft.version };
+              setAdvancedOpen(false);
+              setDraft(current => ({ ...current, engine: nextNative ? "sakura" : "java", sakura: current.sakura || { ...defaultSakuraSettings }, loader: nextNative ? "Vanilla" : javaEngineSettings.current.loader, loaderVersion: nextNative ? null : javaEngineSettings.current.loaderVersion, version: nextNative ? "26.1" : javaEngineSettings.current.version === "Latest release" ? releases[0]?.id || instanceDefaults.defaultVersion : javaEngineSettings.current.version }));
+            }} />
+          </label>
+          {native ? <p className="java-note">Minecraft 26.1 servers · Native Alpha. Early terrain, movement, and block interaction support.</p> : !sakuraAvailability?.available && <p className="java-note">{sakuraAvailability?.message || "Checking Sakura availability…"}</p>}
+          {!native && <><label className="instance-field">
             <span>Loader</span>
             <Select value={draft.loader} options={["Vanilla", "Fabric"]} onChange={(value) => update("loader", value)} />
           </label>
@@ -1643,7 +1624,7 @@ function NewInstancePage({
               }
               onChange={(value) => update("version", value)}
             />
-          </label>
+          </label></>}
           <label className="instance-field">
             <span>Game Directory</span>
             <div className="directory-input">
@@ -1662,24 +1643,49 @@ function NewInstancePage({
             </div>
           </label>
         </section>
-        <section className="instance-side">
-          <h2>Select Components</h2>
-          <p className="section-subtitle">
-            Choose what to include in your instance.
-          </p>
-          <div className="settings-card">
-            {components.map(([key, title, description]) => (
-              <SettingRow title={title} description={description} key={key}>
-                <Toggle
-                  value={draft[key] as boolean}
-                  onChange={(value) => update(key, value)}
-                />
-              </SettingRow>
-            ))}
+        <section className="instance-side instance-launch-settings">
+          {native ? <><h2>Sakura</h2><SakuraSettingsFields value={draft.sakura || defaultSakuraSettings} onChange={value => update("sakura", value)} SelectControl={Select} /><p className="java-note">Official textures are downloaded once. Your saved Minecraft account signs in securely when you play.</p></> : <>
+          <h2>Memory &amp; Java</h2>
+          <div className="memory-control">
+            <div>
+              <b>Memory Allocation</b>
+              <input
+                type="range"
+                aria-label="Memory allocation"
+                min="1024"
+                max="8192"
+                step="512"
+                value={draft.memory}
+                onChange={(event) =>
+                  update("memory", Number(event.target.value))
+                }
+                style={
+                  {
+                    "--memory-fill": `${((draft.memory - 1024) / 7168) * 100}%`,
+                  } as CSSProperties
+                }
+              />
+              <div className="memory-scale">
+                <span>1024 MB</span>
+                <span>4096 MB</span>
+                <span>8192 MB</span>
+              </div>
+            </div>
+            <output>{draft.memory} MB</output>
           </div>
+          <label className="instance-field">
+            <span>Java Version</span>
+            <Select
+              value={draft.java}
+              options={javaOptions}
+              onChange={(value) => update("java", value)}
+            />
+          </label>
+          <p className="java-note">Automatic selects the required Java version at launch.</p>
+          </>}
         </section>
       </div>
-      <div className="instance-advanced-disclosure">
+      {!native && <div className="instance-advanced-disclosure">
         <button
           className={`instance-advanced-toggle ${advancedOpen ? "open" : ""}`}
           type="button"
@@ -1690,50 +1696,23 @@ function NewInstancePage({
           <span>{advancedOpen ? "Hide advanced options" : "Show advanced options"}</span>
           <ChevronDown size={17} />
         </button>
-      </div>
-      {advancedOpen && (
+      </div>}
+      {!native && advancedOpen && (
         <div className="instance-advanced-panel" id="new-instance-advanced-options">
           <section className="instance-advanced-java">
-            <h2>Java & Performance</h2>
-            <label className="instance-field">
-              <span>Java Version</span>
-              <Select
-                value={draft.java}
-                options={javaOptions}
-                onChange={(value) => update("java", value)}
-              />
-            </label>
-            <p className="java-note">
-              Detected {javas.length} Java installation
-              {javas.length === 1 ? "" : "s"}. Automatic will choose the required
-              runtime during launch.
+            <h2>Instance Folders</h2>
+            <p className="section-subtitle">
+              Choose which folders to create.
             </p>
-            <h3>Memory Allocation</h3>
-            <div className="memory-control">
-              <div>
-                <b>Allocate Memory</b>
-                <input
-                  type="range"
-                  min="1024"
-                  max="8192"
-                  step="512"
-                  value={draft.memory}
-                  onChange={(event) =>
-                    update("memory", Number(event.target.value))
-                  }
-                  style={
-                    {
-                      "--memory-fill": `${((draft.memory - 1024) / 7168) * 100}%`,
-                    } as CSSProperties
-                  }
-                />
-                <div className="memory-scale">
-                  <span>1024 MB</span>
-                  <span>4096 MB</span>
-                  <span>8192 MB</span>
-                </div>
-              </div>
-              <output>{draft.memory} MB</output>
+            <div className="settings-card">
+              {components.map(([key, title, description]) => (
+                <SettingRow title={title} description={description} key={key}>
+                  <Toggle
+                    value={draft[key] as boolean}
+                    onChange={(value) => update(key, value)}
+                  />
+                </SettingRow>
+              ))}
             </div>
             <label className="instance-field instance-jvm-field">
               <span>JVM Arguments <small>Optional</small></span>
@@ -1788,7 +1767,7 @@ function NewInstancePage({
           <button className="secondary-action" onClick={onCancel}>
             Cancel
           </button>
-          <button className="create-instance-action" onClick={create}>
+          <button className="create-instance-action" onClick={create} disabled={!draft.name.trim() || (native && (!sakuraAvailability?.available || !draft.sakura?.server.trim()))}>
             Create Instance
           </button>
         </div>
@@ -1799,6 +1778,26 @@ function NewInstancePage({
   );
 }
 type InstanceContentItem = { id: string; name: string; version: string; fileName: string; size: number; enabled: boolean; icon?: string | null };
+
+function SakuraInstancePage({ instance, busy, onPlay, onChanged, onMessage }: { instance: InstanceDraft; busy: boolean; onPlay: () => void; onChanged: (instance: InstanceDraft) => void; onMessage: (message: string, kind?: "notification" | "error") => void }) {
+  const [name, setName] = useState(instance.name);
+  const [settings, setSettings] = useState(instance.sakura || defaultSakuraSettings);
+  const [saving, setSaving] = useState(false);
+  const dirty = name !== instance.name || JSON.stringify(settings) !== JSON.stringify(instance.sakura);
+  const save = async () => {
+    setSaving(true);
+    try { const saved = await invoke<InstanceDraft>("update_sakura_settings", { instanceId: instance.id, name, settings }); onChanged(saved); onMessage("Sakura settings saved."); }
+    catch (error) { onMessage(String(error), "error"); }
+    finally { setSaving(false); }
+  };
+  return <div className="instance-workspace">
+    <section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><div><h1>{instance.name}</h1><p>Minecraft 26.1 • Sakura Alpha</p><small>{instance.sakura?.server}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy || saving || dirty} onClick={onPlay}><Play size={17} fill="currentColor" />Play</button><button className="instance-more" aria-label="Open Sakura instance folder" onClick={() => void invoke("open_instance_folder", { instanceId: instance.id }).catch(error => onMessage(String(error), "error"))}><FolderOpen size={20} /></button></div></div></section>
+    <section className="instance-manager settings-manager instance-preferences"><header className="instance-preferences-heading"><h2>Native settings</h2><button className="instance-preferences-save" disabled={busy || saving || !dirty || !name.trim() || !settings.server.trim()} onClick={() => void save()}>{saving ? "Saving…" : "Save changes"}</button></header>
+      <fieldset className="instance-preferences-fields" disabled={busy || saving}><label className="instance-field"><span>Instance name</span><input value={name} onChange={event => setName(event.target.value)} /></label><SakuraSettingsFields value={settings} onChange={setSettings} SelectControl={Select} /></fieldset>
+      <p className="java-note">Early Alpha for vanilla 26.1 servers. Java mods, shaders, and Bloom cosmetics are not available in Sakura yet.</p>
+    </section>
+  </div>;
+}
 type CatalogItem = { provider: string; projectId: string; slug: string; title: string; summary: string; iconUrl?: string | null; iconSourceUrl?: string | null; author: string; downloads: number; loader: string; gameVersion: string; versionId: string; versionNumber: string; fileName: string; fileSize: number };
 type CatalogSearchResult = { items: CatalogItem[]; offset: number; limit: number; total: number };
 const instanceContentMemoryCache = new Map<string, InstanceContentItem[]>();
@@ -1865,10 +1864,15 @@ function ModrinthPackBrowser({ gameVersion, onClose, onImported }: { gameVersion
   const [selectedGameVersion, setSelectedGameVersion] = useState("");
   const [selectedReleaseId, setSelectedReleaseId] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
+  const packActionRef = useRef<HTMLButtonElement>(null);
   const searchSequence = useRef(0);
+  useEffect(() => { if (selectedPack) packActionRef.current?.focus(); }, [selectedPack?.projectId]);
   useEffect(() => {
     if (!panelRef.current) return;
-    waapi.animate(panelRef.current, { opacity: [0, 1], transform: ["translateY(28px) scale(.985)", "translateY(0) scale(1)"], duration: 360, ease: "cubic-bezier(.22,.72,.2,1)", persist: true });
+    const motion = document.documentElement.dataset.animations === "on" && document.documentElement.dataset.performance !== "ultra" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!motion) { panelRef.current.style.opacity = "1"; return; }
+    const animation = waapi.animate(panelRef.current, { opacity: [0, 1], transform: ["translateY(28px) scale(.985)", "translateY(0) scale(1)"], duration: 360, ease: "cubic-bezier(.22,.72,.2,1)", persist: true });
+    return () => { animation.cancel(); };
   }, []);
   useEffect(() => {
     const key = catalogCacheKey("modpacks", gameVersion, query, page);
@@ -1953,7 +1957,7 @@ function ModrinthPackBrowser({ gameVersion, onClose, onImported }: { gameVersion
   };
   return <div className="modrinth-pack-layer" role="dialog" aria-modal="true" aria-label="Add a Modrinth modpack">
     <div className="modrinth-pack-panel" ref={panelRef}>
-      <header><h2>Modpacks</h2><button key={selectedPack ? "back-to-packs" : "close-modpacks"} type="button" className="catalog-close" onClick={selectedPack ? returnToPacks : onClose} aria-label={selectedPack ? "Back to modpacks" : "Close Modpacks"}><CloseIcon size={18} /></button></header>
+      <header><h2 key={selectedPack ? "versions" : "browse"} className="toolbar-copy">{selectedPack ? "Choose version" : "Modpacks"}</h2><button ref={packActionRef} type="button" className="catalog-close" onClick={selectedPack ? returnToPacks : onClose} aria-label={selectedPack ? "Back to modpacks" : "Close Modpacks"}><ToolbarIconSwap active={Boolean(selectedPack)} resting={<CloseIcon size={18} />} engaged={<X size={18} />} /></button></header>
       {selectedPack ? <div className="modrinth-version-picker">
         <div className="modrinth-version-identity">
           <span className="content-icon">{selectedPack.iconUrl ? <img src={selectedPack.iconUrl} alt="" /> : <PackageOpen size={26} />}</span>
@@ -1993,10 +1997,12 @@ function InstanceContentActions({
   item,
   category,
   onDelete,
+  onCopy,
 }: {
   item: InstanceContentItem;
   category: Exclude<InstanceTab, "settings">;
   onDelete: () => Promise<void>;
+  onCopy: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 178, maxHeight: 330 });
@@ -2032,6 +2038,7 @@ function InstanceContentActions({
     <button ref={triggerRef} className="content-dots" aria-label={`Actions for ${item.name}`} aria-expanded={open} onClick={() => setOpen(value => !value)}><MoreHorizontal size={18} /></button>
     {open && createPortal(
       <div ref={menuRef} className="select-menu select-menu-portal content-actions-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }}>
+        <button style={{ opacity: 0 }} onClick={() => { setOpen(false); onCopy(); }}><Copy size={14} />Copy to instance…</button>
         <button style={{ opacity: 0 }} className="view-modrinth-action" onClick={() => { setOpen(false); void openUrl(`https://modrinth.com/${modrinthSection}?q=${encodeURIComponent(item.name)}`); }}><ExternalLink size={14} />View on Modrinth</button>
         <button style={{ opacity: 0 }} className="delete-content-action" onClick={() => { setOpen(false); void onDelete(); }}><Trash2 size={14} />Delete</button>
       </div>,
@@ -2049,7 +2056,8 @@ function ContentEmptyState({ title, description, actions }: { title: string; des
   </div>;
 }
 
-function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialCatalog = false, recentSearchesEnabled, onPlay, onShare, onDuplicate, onDelete, onChanged, onInstallContent, onMessage }: { onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; recentSearchesEnabled: boolean; onPlay: () => void; onShare: () => void; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
+function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialCatalog = false, recentSearchesEnabled, onPopOut, floating, onPlay, onRename, onExport, onShare, onDuplicate, onDelete, onChanged, onInstallContent, onMessage }: { onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; recentSearchesEnabled: boolean; onPopOut: () => void; floating: boolean; onPlay: () => void; onRename: (name: string) => Promise<void>; onExport: () => Promise<void>; onShare: () => void; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
+  const contentTransfer = useContentTransfer();
   const [tab, setTab] = useState<InstanceTab>(initialTab);
   const [items, setItems] = useState<InstanceContentItem[]>(() => initialTab === "settings" ? [] : instanceContentMemoryCache.get(instanceContentCacheKey(instance.id, initialTab)) || []);
   const [contentReady, setContentReady] = useState(() => initialTab === "settings" || instanceContentMemoryCache.has(instanceContentCacheKey(instance.id, initialTab)));
@@ -2067,7 +2075,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   const [draggingContent, setDraggingContent] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [instanceMenuPosition, setInstanceMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 320, maxHeight: 420 });
-  const [instanceMenuBusy, setInstanceMenuBusy] = useState<"duplicate" | "delete" | null>(null);
+  const [instanceMenuBusy, setInstanceMenuBusy] = useState<"duplicate" | "delete" | "export" | null>(null);
   const [confirmInstanceDelete, setConfirmInstanceDelete] = useState(false);
 
   const [modDrawer, setModDrawer] = useState<ModDrawerSelection | null>(null);
@@ -2077,6 +2085,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   const [savingSettings, setSavingSettings] = useState(false);
   const [advancedJvmOpen, setAdvancedJvmOpen] = useState(false);
   const [name, setName] = useState(instance.name);
+  useEffect(() => setName(instance.name), [instance.name]);
   const [memory, setMemory] = useState(instance.memory);
   const [jvmArguments, setJvmArguments] = useState(instance.jvmArguments);
   const instanceSegmentIndicator = useRef<HTMLSpanElement>(null);
@@ -2157,11 +2166,13 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       const target = event.target as Node;
       if (!instanceMenuTriggerRef.current?.contains(target) && !instanceMenuRef.current?.contains(target)) setMenuOpen(false);
     };
+    const key = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setMenuOpen(false); instanceMenuTriggerRef.current?.focus(); } };
+    document.addEventListener("keydown", key);
     place();
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
     document.addEventListener("pointerdown", dismiss);
-    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", dismiss); };
+    return () => { document.removeEventListener("keydown", key); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", dismiss); };
   }, [menuOpen]);
   useEffect(() => { if (menuOpen && instanceMenuRef.current) revealDropdown(instanceMenuRef.current); }, [menuOpen]);
   useEffect(() => { if (!menuOpen) setConfirmInstanceDelete(false); }, [menuOpen]);
@@ -2378,8 +2389,9 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   };
   return <div className="instance-workspace">
     {draggingContent && <div className="content-drop-overlay" role="status" aria-label={`Drop files into ${categoryLabel}`}><FileDown className="content-drop-symbol" size={58} strokeWidth={1.75} aria-hidden="true" /></div>}
-    <section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} strokeWidth={2.4} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1>{instance.name}</h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy} onClick={onPlay}><Play size={17} fill="currentColor" />Play</button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
+    <section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} strokeWidth={2.4} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1 aria-label={instance.name}><InstanceName name={instance.name} onRename={onRename} disabled={savingSettings} /></h1><p>{instance.version} • {instanceEngineLabel(instance)}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy} onClick={onPlay}><Play size={17} fill="currentColor" />Play</button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
       <div className="instance-menu-identity"><span>{instance.icon ? <img src={instance.icon} alt="" /> : <b aria-hidden="true">?</b>}</span><div><strong title={instance.name}>{instance.name}</strong><small>{instance.version} <i>•</i> {instance.loader}</small></div></div>
+      <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onPopOut(); }}><ExternalLink size={18} /><span><b>{floating ? "Put away floating controls" : "Pop out Play controls"}</b></span></button>
       <span className="instance-menu-label">INSTANCE FILES</span>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id }); }}><FolderOpen size={18} /><span><b>Open folder</b></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id, category: "mods" }); }}><PackageOpen size={18} /><span><b>Open mods folder</b></span></button>
@@ -2387,6 +2399,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       <button className="instance-menu-action described" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onShare(); }}><Share2 size={18} /><span><b>Share instance</b><small>Invite Bloom friends to a copy or synced pack.</small></span></button>
       <button className="instance-menu-action described" style={{ opacity: 0 }} disabled={instanceMenuBusy !== null || busy} onClick={() => { setInstanceMenuBusy("duplicate"); void onDuplicate().finally(() => { setInstanceMenuBusy(null); setMenuOpen(false); }); }}><Copy size={18} /><span><b>{instanceMenuBusy === "duplicate" ? "Duplicating…" : "Duplicate instance"}</b><small>Copy this setup and its local files.</small></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setTab("settings"); setMenuOpen(false); }}><SettingsIcon size={18} /><span><b>Instance settings</b></span></button>
+      <button className="instance-menu-action" style={{ opacity: 0 }} disabled={busy || instanceMenuBusy !== null} onClick={() => { setInstanceMenuBusy("export"); void onExport().catch(() => {}).finally(() => { setInstanceMenuBusy(null); setMenuOpen(false); }); }}><Download size={18} /><span><b>{instanceMenuBusy === "export" ? "Exporting…" : "Export ZIP"}</b></span></button>
       <span className="instance-menu-divider danger" />
       <button className={`instance-menu-action instance-menu-delete ${confirmInstanceDelete ? "confirm" : ""}`} style={{ opacity: 0 }} disabled={instanceMenuBusy !== null || busy} onClick={() => { if (!confirmInstanceDelete) { setConfirmInstanceDelete(true); return; } setInstanceMenuBusy("delete"); void onDelete().finally(() => { setInstanceMenuBusy(null); setMenuOpen(false); }); }}><Trash2 size={18} /><span><b>{instanceMenuBusy === "delete" ? "Deleting…" : confirmInstanceDelete ? "Delete instance and files?" : "Delete instance"}</b><small>{confirmInstanceDelete ? "Click again to permanently confirm." : "Permanently remove this instance."}</small></span></button>
     </div>, document.body)}</div></div></div>
@@ -2410,7 +2423,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
             <input id="instance-display-name" value={name} onChange={event => setName(event.target.value)} />
           </div>
           <div className="instance-preference-row">
-            <div className="instance-preference-label">Memory<InfoTip label="Minecraft memory">The maximum RAM Minecraft can use for this instance. Larger modpacks may need more. Leave enough RAM for Windows and your other apps; allocating more does not always improve performance.</InfoTip></div>
+            <div className="instance-preference-label">Memory<InfoTip label="Minecraft memory">The maximum RAM Minecraft can use for this instance. Larger modpacks may need more. Leave enough RAM for your system and other apps; allocating more does not always improve performance.</InfoTip></div>
             <PercentSlider value={memory} onChange={setMemory} label="Minecraft memory" min={1024} max={16384} step={512} unit=" MB" />
           </div>
           <div className="instance-preference-row">
@@ -2428,14 +2441,13 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       </section>
     ) : (
       <section className={`instance-manager ${browsingCatalog ? "catalog-manager" : ""}`}>
-        <div className="manager-heading">
-          <div className="manager-heading-identity">
-            <h2>{browsingCatalog ? (search ? "Search Results" : `${categoryLabel} Library`) : categoryLabel} {!browsingCatalog && <span>{items.length}</span>}</h2>
-          </div>
-          <div className="manager-tools">
-            {browsingCatalog ? <button className="catalog-close" onClick={closeCatalog} aria-label={`Back to installed ${categoryLabel.toLowerCase()}`}><X size={17} />Back</button> : <><ContentFilterMenu sort={sort} filter={filter} onSortChange={value => { setSort(value); setContentPage(1); }} onFilterChange={value => { setFilter(value); setContentPage(1); }} /><button className="add-content" onClick={openCatalog} title={`Browse compatible Modrinth ${categoryLabel.toLowerCase()}`}><CirclePlus size={17} />Add {categoryLabel}</button></>}
-          </div>
-        </div>
+        <ContentToolbar key={`${instance.id}:${tab}`} category={categoryLabel}
+          total={items.length} enabled={items.filter(item => item.enabled).length} visible={visibleItems.length}
+          ready={contentReady} searching={Boolean(search)} browsing={browsingCatalog}
+          version={instance.version} loader={instance.loader} sort={sort} filter={filter}
+          onSortChange={value => { setSort(value); setContentPage(1); }}
+          onFilterChange={value => { setFilter(value); setContentPage(1); }}
+          onAdd={openCatalog} onBack={closeCatalog} />
         <div className="instance-content-list-shell">
           <div ref={contentListRef} className="content-list" onScroll={event => revealMoreContent(event.currentTarget)}>
           {browsingCatalog ? (
@@ -2449,7 +2461,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
               actions={search ? <button className="content-empty-primary" onClick={() => updateContentSearch("")}><CloseIcon size={16} />Clear search</button> : undefined}
             />
           ) : !contentReady ? <CatalogLoadingState label={`Opening cached ${categoryLabel.toLowerCase()}`} /> : visibleItems.length ? renderedInstalledItems.map(item => <div className="content-item installed-content-item" key={item.id}>
-            <button type="button" className="content-detail-hitarea" disabled={tab !== "mods"} onClick={() => showInstalledModDetails(item)} aria-label={tab === "mods" ? `Open details for ${item.name}` : undefined}>
+            <button type="button" className="content-detail-hitarea" draggable={false} onDragStart={event => event.preventDefault()} onPointerDown={event => contentTransfer.start(event, { ...item, sourceId: instance.id, category: tab })} onClick={() => { if (tab === "mods") showInstalledModDetails(item); }} aria-label={tab === "mods" ? `Open details for ${item.name}` : `${item.name}; drag to another instance to copy`}>
             <span className="content-icon">{item.icon ? <img src={item.icon} alt="" loading="lazy" /> : tab === "shaderpacks" ? <Cuboid size={22} /> : <PackageOpen size={22} />}</span>
             <div className="content-name">
               <b>{item.name}</b>
@@ -2464,7 +2476,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
             </button>
             <div className="content-row-actions">
               <Toggle value={item.enabled} onChange={value => void toggleItem(item, value)} />
-              <InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} />
+              <InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} onCopy={() => contentTransfer.choose({ ...item, sourceId: instance.id, category: tab })} />
             </div>
           </div>) : items.length ? <ContentEmptyState
             title={`No matching ${categoryLabel.toLowerCase()}`}
@@ -2635,149 +2647,8 @@ function AutoTuneBenchmark() {
   return <section className="autotune-benchmark-live"><div className="benchmark-live-heading"><div><em>Phase 2 • Measured locally</em><h2>Bloom graphics benchmark</h2><p>A consistent 30-second rendered workload measures frame throughput and frame-time stability on this device.</p></div><span className="phase-two-badge">02</span></div>{stage === "idle" && <div className="benchmark-start"><BarChart3 size={28} /><div><b>Ready to establish a performance baseline</b><span>Close heavy applications and keep Bloom visible during the test for the cleanest result.</span></div><button onClick={() => setStage("consent")}>Start benchmark</button></div>}{stage === "consent" && <div className="benchmark-consent"><Activity size={22} /><div><b>Performance test confirmation</b><span>Bloom will render a demanding animated scene for 30 seconds. Fans may briefly speed up. No files are changed and no result leaves this computer.</span></div><button className="benchmark-cancel" onClick={() => setStage(result ? "result" : "idle")}>Cancel</button><button onClick={runBenchmark}>Begin test</button></div>}{stage === "running" && <div className="benchmark-running"><canvas ref={canvasRef} /><div className="benchmark-overlay"><span><Activity size={15} />Benchmark running</span><b>{Math.ceil((100 - progress) * .3)}s</b></div><div className="benchmark-progress"><i style={{ width: `${progress}%` }} /></div><button onClick={stopBenchmark}>Stop test</button></div>}{stage === "result" && result && <div className="benchmark-results"><div className="benchmark-score"><small>Bloom score</small><b>{result.score}</b><span>{result.stability >= 95 ? "Excellent stability" : result.stability >= 88 ? "Good stability" : "Variable frame times"}</span></div><div className="benchmark-metrics"><div><small>Average FPS</small><b>{result.averageFps.toFixed(1)}</b></div><div><small>1% low</small><b>{result.onePercentLow.toFixed(1)}</b></div><div><small>Frame time</small><b>{result.averageFrameTime.toFixed(2)} ms</b></div><div><small>Stability</small><b>{result.stability.toFixed(1)}%</b></div></div><div className="benchmark-result-actions"><span><Timer size={14} />Completed {new Date(result.completedAt).toLocaleDateString()}</span><button onClick={() => setStage("consent")}><RotateCw size={14} />Run again</button></div></div>}<p className="benchmark-accuracy"><Shield size={13} />This measures Bloom’s representative graphics workload, not Minecraft FPS. In-game validation will arrive with the dedicated benchmark mod.</p></section>;
 }
 
-type MinecraftBenchmarkResult = {
-  minecraftVersion: string;
-  seed: number;
-  durationSeconds: number;
-  averageFps: number;
-  onePercentLow: number;
-  averageFrameTimeMs: number;
-  p95FrameTimeMs: number;
-  averageMemoryBytes: number;
-  peakMemoryBytes: number;
-  frames: number;
-  width: number;
-  height: number;
-  completedAt: number;
-};
-
-function AutoTuneMinecraftBenchmark({ onComplete, onReset }: { onComplete: () => void; onReset: () => void }) {
-  const [allowed, setAllowed] = useState(() => localStorage.getItem("bloom-autotune-accepted") === "true");
-  const [stage, setStage] = useState<"permission" | "installing" | "ready" | "running" | "result" | "error">("permission");
-  const [benchmarkStep, setBenchmarkStep] = useState<2 | 3>(2);
-  const [showDetails, setShowDetails] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState("Ready to install the benchmark environment");
-  const [result, setResult] = useState<MinecraftBenchmarkResult | null>(null);
-  useEffect(() => {
-    localStorage.removeItem("bloom-autotune-benchmark");
-    if (allowed) void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(value => { if (value) { setResult(value); setBenchmarkStep(3); setStage("result"); localStorage.setItem("bloom-autotune-minecraft-complete", String(value.completedAt)); onComplete(); } }).catch(() => {});
-  }, [allowed]);
-  useEffect(() => { if (allowed) return; const timer = window.setInterval(() => setAllowed(localStorage.getItem("bloom-autotune-accepted") === "true"), 250); return () => clearInterval(timer); }, [allowed]);
-  useEffect(() => {
-    if (stage !== "installing") return;
-    const timer = window.setInterval(() => void invoke<DownloadViewState>("get_minecraft_launch_status").then(next => {
-      if (next.instanceId !== "bloom-autotune-benchmark") return;
-      setProgress(next.progress); setStatus(next.message || "Installing benchmark files");
-      if (next.state === "complete") { setProgress(100); setBenchmarkStep(3); setStage("ready"); setStatus("Benchmark environment installed"); }
-      if (next.state === "error" || next.state === "cancelled") { setStage("error"); setStatus(next.message); }
-    }).catch(() => {}), 250);
-    return () => clearInterval(timer);
-  }, [stage]);
-  useEffect(() => {
-    if (stage !== "running") return;
-    const timer = window.setInterval(() => {
-      void invoke<{ state: string; progress: number; message: string } | null>("get_autotune_benchmark_status").then(next => {
-        if (!next) return; setProgress(next.progress); setStatus(next.message);
-        if (next.state === "error") { setStage("error"); return; }
-        if (next.state === "complete") void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(value => { if (value) { setResult(value); setBenchmarkStep(3); setStage("result"); localStorage.setItem("bloom-autotune-minecraft-complete", String(value.completedAt)); onComplete(); } });
-      }).catch(() => {});
-    }, 500);
-    return () => clearInterval(timer);
-  }, [stage]);
-  if (!allowed) return null;
-  const install = async () => {
-    onReset(); localStorage.removeItem("bloom-autotune-profile"); localStorage.removeItem("bloom-autotune-minecraft-complete");
-    setBenchmarkStep(2); setStage("installing"); setProgress(1); setStatus("Preparing the private benchmark instance");
-    try { await invoke("install_autotune_benchmark"); } catch (error) { setStatus(String(error)); setStage("error"); }
-  };
-  const launch = async () => {
-    setBenchmarkStep(3); setStage("running"); setProgress(0); setStatus("Starting Minecraft 26.2");
-    try { await invoke("launch_minecraft", { instanceId: "bloom-autotune-benchmark" }); } catch (error) { setStatus(String(error)); setStage("error"); }
-  };
-  const visibleBenchmarkStep = stage === "error" ? benchmarkStep : stage === "ready" || stage === "running" || stage === "result" ? 3 : 2;
-  return <><section className="autotune-step-screen"><AutoTuneStepHeader title="Test Minecraft" />
-    {stage === "permission" && <div className="autotune-action-card autotune-benchmark-permission-card"><span className="autotune-step-mark"><Cuboid size={25} /></span><div className="autotune-permission-copy"><b>Install the benchmark</b><p>Bloom creates a hidden Minecraft 26.2 test instance. Your normal instances, worlds, and settings are not changed.</p><button aria-expanded={showDetails} className="autotune-details-toggle" onClick={() => setShowDetails(value => !value)}>{showDetails ? "Hide details" : "Show details"}<ChevronDown className={showDetails ? "rotated" : ""} size={14} /></button></div><button onClick={() => void install()}>Install</button>{showDetails && <div className="autotune-details-panel"><div><Download size={16} /><span><b>What gets installed</b><small>Minecraft 26.2, Fabric API, and Bloom's benchmark mod in one private instance.</small></span></div><div><Activity size={16} /><span><b>What the test measures</b><small>About 75 seconds of real FPS, 1% lows, frame times, and Java memory in a fixed local world.</small></span></div><div><Shield size={16} /><span><b>What stays private</b><small>Results remain on this PC. Bloom does not read or upload your personal worlds or account data.</small></span></div><div><RotateCw size={16} /><span><b>If you run it again</b><small>Only the previous hidden AutoTune benchmark world is replaced.</small></span></div></div>}</div>}
-    {(stage === "installing" || stage === "running") && <div className="autotune-action-card centered"><span className="autotune-step-mark">{stage === "installing" ? <Download size={23} /> : <Play size={23} />}</span><b>{stage === "installing" ? "Installing benchmark" : "Testing Minecraft"}</b><p>{status}</p><div className="autotune-simple-progress"><i style={{ width: `${progress}%` }} /></div><small>{Math.round(progress)}%</small></div>}
-    {stage === "ready" && <div className="autotune-action-card"><span className="autotune-step-mark complete"><Check size={23} /></span><div><b>Ready to test</b><p>Minecraft opens, measures, and closes automatically.</p></div><button onClick={() => void launch()}><Play size={15} fill="currentColor" />Run test</button></div>}
-    {stage === "error" && <div className="autotune-action-card"><span className="autotune-step-mark error"><TriangleAlert size={22} /></span><div><b>Benchmark stopped</b><p>{status}</p></div><button onClick={() => { setBenchmarkStep(2); setStage("permission"); }}>Start over</button></div>}
-    {stage === "result" && result && <div className="autotune-result-card"><div className="autotune-result-lead"><span className="autotune-step-mark complete"><Check size={22} /></span><div><b>{result.averageFps.toFixed(1)} FPS</b><p>Benchmark complete</p></div></div><div className="autotune-stat-grid"><div><small>1% low</small><b>{result.onePercentLow.toFixed(1)}</b></div><div><small>Frame time</small><b>{result.averageFrameTimeMs.toFixed(2)} ms</b></div><div><small>Memory</small><b>{formatBytes(result.peakMemoryBytes)}</b></div></div><button className="autotune-secondary-action" onClick={() => { setBenchmarkStep(2); setStage("permission"); }}><RotateCw size={14} />Run again</button></div>}
-  </section><AutoTuneProgress step={visibleBenchmarkStep} /></>;
-}
-
-type AutoTuneProfile = {
-  targetFps: number;
-  memoryMb: number;
-  jvmProfile: "Default" | "Performance";
-  graphics: "Fast" | "Balanced" | "High";
-  renderDistance: number;
-  simulationDistance: number;
-  averageFps: number;
-  onePercentLow: number;
-  lowRatio: number;
-  confidence: "Measured" | "Measured with caution";
-  benchmarkCompletedAt: number;
-  reasons: Array<{ title: string; detail: string; tone: "good" | "warn" | "info" }>;
-};
-
-function AutoTuneTuner({ onComplete, onReset }: { onComplete: () => void; onReset: () => void }) {
-  const [profile, setProfile] = useState<AutoTuneProfile | null>(() => { try { return JSON.parse(localStorage.getItem("bloom-autotune-profile") || "null"); } catch { return null; } });
-  const [tuning, setTuning] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => { if (!profile) return; void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(benchmark => { if (benchmark && benchmark.completedAt !== profile.benchmarkCompletedAt) { localStorage.removeItem("bloom-autotune-profile"); setProfile(null); onReset(); } }).catch(() => {}); }, []);
-  useEffect(() => { if (profile) onComplete(); }, []);
-  const tune = async () => {
-    setTuning(true); setError("");
-    try {
-      const [hardware, benchmark] = await Promise.all([invoke<HardwareReport>("detect_hardware_report"), invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result")]);
-      if (!benchmark) throw new Error("Run the Minecraft benchmark before generating a tuning profile.");
-      const targetFps = Math.max(60, hardware.refreshRate || 60);
-      const lowRatio = benchmark.averageFps > 0 ? benchmark.onePercentLow / benchmark.averageFps : 0;
-      const totalRamMb = Math.round(hardware.ramBytes / 1048576);
-      const measuredNeed = Math.ceil((benchmark.peakMemoryBytes / 1048576 * 1.45 + 768) / 512) * 512;
-      const memoryMb = Math.max(3072, Math.min(8192, Math.floor(totalRamMb * .42 / 512) * 512, measuredNeed));
-      const severeStutter = lowRatio < .22 || benchmark.p95FrameTimeMs > 1000 / targetFps * 2.5;
-      const limitedThroughput = benchmark.averageFps < targetFps * .9;
-      const renderDistance = limitedThroughput ? Math.min(8, hardware.recommendedRenderDistance) : severeStutter ? Math.min(12, hardware.recommendedRenderDistance) : hardware.recommendedRenderDistance;
-      const simulationDistance = limitedThroughput ? Math.min(6, hardware.recommendedSimulationDistance) : severeStutter ? Math.min(8, hardware.recommendedSimulationDistance) : hardware.recommendedSimulationDistance;
-      const graphics: AutoTuneProfile["graphics"] = limitedThroughput ? "Fast" : benchmark.averageFps > targetFps * 1.45 && !severeStutter ? "High" : "Balanced";
-      const jvmProfile: AutoTuneProfile["jvmProfile"] = lowRatio < .65 ? "Performance" : "Default";
-      const reasons: AutoTuneProfile["reasons"] = [
-        { title: "Display target", detail: `${targetFps} FPS target from the detected ${hardware.refreshRate || 60} Hz display. The benchmark remained uncapped.`, tone: "info" },
-        { title: "Rendering headroom", detail: `${benchmark.averageFps.toFixed(1)} average FPS is ${(benchmark.averageFps / targetFps).toFixed(1)}× the display target, so Bloom ${limitedThroughput ? "reduced GPU-heavy settings" : "preserved visual quality"}.`, tone: limitedThroughput ? "warn" : "good" },
-        { title: "Frame consistency", detail: `${benchmark.onePercentLow.toFixed(1)} FPS 1% low (${(lowRatio * 100).toFixed(1)}% of average). Bloom ${severeStutter ? "reduced chunk and simulation pressure to address severe spikes" : "kept moderate world distances"}.`, tone: severeStutter ? "warn" : "good" },
-        { title: "Measured memory", detail: `${formatBytes(benchmark.peakMemoryBytes)} peak Java usage produced a ${memoryMb / 1024} GB heap recommendation while preserving system RAM for Windows.`, tone: "info" },
-        { title: "Runtime behavior", detail: `${jvmProfile} JVM tuning selected from measured frame consistency; aggressive Overdrive flags are never applied automatically.`, tone: jvmProfile === "Performance" ? "warn" : "good" },
-      ];
-      const next: AutoTuneProfile = { targetFps, memoryMb, jvmProfile, graphics, renderDistance, simulationDistance, averageFps: benchmark.averageFps, onePercentLow: benchmark.onePercentLow, lowRatio, confidence: severeStutter ? "Measured with caution" : "Measured", benchmarkCompletedAt: benchmark.completedAt, reasons };
-      localStorage.setItem("bloom-autotune-profile", JSON.stringify(next)); setProfile(next); onComplete();
-    } catch (reason) { setError(String(reason)); } finally { setTuning(false); }
-  };
-  return <section className="autotune-step-screen"><AutoTuneStepHeader title="Build profile" />{!profile ? <div className="autotune-action-card centered"><span className="autotune-step-mark"><WandSparkles size={24} /></span><b>{tuning ? "Building your profile" : "Ready to tune"}</b><p>{tuning ? "Comparing your measured results." : "Creates recommended settings from the benchmark."}</p>{tuning && <div className="autotune-simple-progress indeterminate"><i /></div>}<button disabled={tuning} onClick={() => void tune()}>{tuning ? "Tuning…" : "Build profile"}</button></div> : <div className="autotune-result-card"><div className="autotune-result-lead"><span className="autotune-step-mark complete"><Check size={22} /></span><div><b>Profile ready</b><p>{profile.confidence}</p></div></div><div className="autotune-stat-grid five"><div><small>Memory</small><b>{profile.memoryMb / 1024} GB</b></div><div><small>JVM</small><b>{profile.jvmProfile}</b></div><div><small>Graphics</small><b>{profile.graphics}</b></div><div><small>Render</small><b>{profile.renderDistance}</b></div><div><small>Simulation</small><b>{profile.simulationDistance}</b></div></div><button className="autotune-secondary-action" disabled={tuning} onClick={() => void tune()}><RotateCw size={14} />Recalculate</button></div>}{error && <div className="autotune-inline-error"><TriangleAlert size={15} /><span>{error}</span></div>}</section>;
-}
-
-function AutoTuneApply() {
-  const [profile, setProfile] = useState<AutoTuneProfile | null>(() => { try { return JSON.parse(localStorage.getItem("bloom-autotune-profile") || "null"); } catch { return null; } });
-  const [instanceCount, setInstanceCount] = useState(0);
-  const [confirming, setConfirming] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [appliedCount, setAppliedCount] = useState<number | null>(null);
-  const [error, setError] = useState("");
-  useEffect(() => { const timer = window.setInterval(() => { try { setProfile(JSON.parse(localStorage.getItem("bloom-autotune-profile") || "null")); } catch {} }, 400); void invoke<InstanceDraft[]>("list_instances").then(items => setInstanceCount(items.length)); return () => clearInterval(timer); }, []);
-  const apply = async () => { if (!profile) return; setApplying(true); setError(""); try { const count = await invoke<number>("apply_autotune_profile", { profile }); setAppliedCount(count); setConfirming(false); } catch (reason) { setError(String(reason)); } finally { setApplying(false); } };
-  return <section className="autotune-step-screen"><AutoTuneStepHeader title="Apply AutoTune" />{!profile ? <div className="autotune-action-card centered"><span className="autotune-step-mark"><LockKeyhole size={22} /></span><b>Profile required</b><p>Complete the previous step first.</p></div> : appliedCount !== null ? <div className="autotune-action-card centered"><span className="autotune-step-mark complete"><Check size={24} /></span><b>AutoTune is active</b><p>Updated {appliedCount} instance{appliedCount === 1 ? "" : "s"}. Future instances inherit it automatically.</p><button onClick={() => { setAppliedCount(null); setConfirming(false); }}>Review profile</button></div> : <><div className="autotune-result-card"><div className="autotune-stat-grid"><div><small>Memory</small><b>{profile.memoryMb / 1024} GB</b></div><div><small>JVM</small><b>{profile.jvmProfile}</b></div><div><small>Graphics</small><b>{profile.graphics}</b></div><div><small>Distances</small><b>{profile.renderDistance} / {profile.simulationDistance}</b></div></div>{confirming ? <div className="autotune-confirm-row"><div><b>Apply to {instanceCount} instance{instanceCount === 1 ? "" : "s"}?</b><p>Updates only AutoTune-managed settings.</p></div><button className="autotune-secondary-action" onClick={() => setConfirming(false)}>Cancel</button><button disabled={applying} onClick={() => void apply()}>{applying ? "Applying…" : "Apply"}</button></div> : <button className="autotune-primary-action" onClick={() => setConfirming(true)}>Apply profile</button>}</div></>}{error && <div className="autotune-inline-error"><TriangleAlert size={15} /><span>{error}</span></div>}</section>;
-}
-
 function AutoTuneFlow() {
-  const [hardwareComplete, setHardwareComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-hardware")));
-  const [benchmarkComplete, setBenchmarkComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-minecraft-complete")));
-  const [profileComplete, setProfileComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-profile")));
-  const resetBenchmarkProgress = () => { setBenchmarkComplete(false); setProfileComplete(false); };
-  const phase = profileComplete ? 4 : benchmarkComplete ? 3 : hardwareComplete ? 2 : 1;
-  if (phase === 1) return <AutoTunePage onComplete={() => setHardwareComplete(true)} />;
-  return <div className="autotune-flow-shell">
-    {phase === 2 ? <AutoTuneMinecraftBenchmark onComplete={() => setBenchmarkComplete(true)} onReset={resetBenchmarkProgress} /> : phase === 3 ? <><AutoTuneTuner onComplete={() => setProfileComplete(true)} onReset={() => setProfileComplete(false)} /><AutoTuneProgress step={4} /></> : <><AutoTuneApply /><AutoTuneProgress step={5} /></>}
-  </div>;
+  return <AutoTuneWorkflow hardwareScan={AutoTunePage} />;
 }
 
 type DownloadTaskKind = "mod" | "resourcepack" | "shaderpack" | "game";
@@ -2815,7 +2686,7 @@ function LogsPage({ entries, running, onClear }: { entries: LogEntry[]; running:
 }
 type CompletedDownload = { id: string; name: string; version: string; loader?: string; targetName?: string; kind?: DownloadTaskKind; iconUrl?: string; completedAt: number };
 
-function DownloadArtwork({ source }: { source: string }) {
+function DownloadArtwork({ source, progress }: { source: string; progress?: number }) {
   const [image, setImage] = useState(source);
   useEffect(() => {
     let current = true;
@@ -2826,15 +2697,19 @@ function DownloadArtwork({ source }: { source: string }) {
       .catch(() => {});
     return () => { current = false; };
   }, [source]);
-  return <img src={image} alt="" />;
+  const percent = progress === undefined ? 100 : Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0;
+  return <span className={`download-artwork ${progress === undefined ? "" : "download-artwork-progress"}`} aria-hidden="true"><img src={image} alt="" />{progress !== undefined && <img className="download-artwork-fill" src={image} alt="" style={{ clipPath: `inset(${100 - percent}% 0 0)` }} />}</span>;
 }
 
 const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
 
 type InstanceLibraryDestination = "view" | "add-mods" | "settings";
 
-function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, onPlay, onShare, onDelete }: { instance: InstanceDraft; busy: boolean; doubleClickToPlay: boolean; onNavigate: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onPlay: (instance: InstanceDraft) => void; onShare: (instance: InstanceDraft) => void; onDelete: (instance: InstanceDraft) => Promise<void> }) {
+function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, onPlay, onRename, onExport, onShare, onDuplicate, onDelete, onOrganize }: { instance: InstanceDraft; busy: boolean; doubleClickToPlay: boolean; onNavigate: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onPlay: (instance: InstanceDraft) => void; onRename: (instance: InstanceDraft, name: string) => Promise<void>; onExport: (instance: InstanceDraft) => Promise<void>; onShare: (instance: InstanceDraft) => void; onDuplicate: (instance: InstanceDraft) => Promise<void>; onDelete: (instance: InstanceDraft) => Promise<void>; onOrganize?: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [renameRequest, setRenameRequest] = useState(0);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const run = async (name: string, action: () => Promise<void>) => { setActionBusy(name); try { await action(); setMenuOpen(false); } catch { /* App reports native errors. */ } finally { setActionBusy(null); } };
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [position, setPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 190, maxHeight: 330 });
@@ -2852,7 +2727,7 @@ function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, on
       const bounds = (trigger.closest(".instance-library-card") as HTMLElement | null)?.getBoundingClientRect() || trigger.getBoundingClientRect();
       const width = 190;
       const contentHeight = menuRef.current?.scrollHeight || 188;
-      setPosition(fitActionMenuBelow(bounds, width, contentHeight, trigger.getBoundingClientRect().right - width));
+      setPosition(fitFloatingMenu(bounds, width, contentHeight, trigger.getBoundingClientRect().right - width));
     };
     const dismiss = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -2869,9 +2744,10 @@ function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, on
   const remove = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setDeleting(true);
-    try { await onDelete(instance); } finally { setDeleting(false); }
+    try { await onDelete(instance); } catch { /* App reports native errors. */ } finally { setDeleting(false); }
   };
   const openCard = (event: MouseEvent<HTMLElement>) => {
+    if (menuOpen) return;
     if (!doubleClickToPlay) { onNavigate(instance, "view"); return; }
     if (event.detail !== 1) return;
     if (openTimer.current !== null) window.clearTimeout(openTimer.current);
@@ -2881,28 +2757,34 @@ function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, on
     }, 240);
   };
   const playFromDoubleClick = (event: MouseEvent<HTMLElement>) => {
-    if (!doubleClickToPlay) return;
+    if (busy || menuOpen || (event.target as Element).closest("button,input,form") || !doubleClickToPlay) return;
     event.preventDefault();
     if (openTimer.current !== null) window.clearTimeout(openTimer.current);
     openTimer.current = null;
     onPlay(instance);
   };
   return <article className="instance-library-card" onClick={openCard} onDoubleClick={playFromDoubleClick}>
-    <div className="library-card-identity"><div className="library-card-top"><span className="library-instance-icon">{instance.icon ? <img src={instance.icon} alt="" /> : <span className="library-instance-fallback" aria-hidden="true">?</span>}</span><LoaderLogo loader={instance.loader} /></div>
-    <div className="library-card-copy"><h2>{instance.name}</h2><p>Minecraft {instance.version}</p><small title={instance.directory}>{instance.directory}</small></div></div>
-    <div className="library-card-actions"><button className="library-play" disabled={busy} onClick={(event) => { event.stopPropagation(); onPlay(instance); }}><Play size={15} fill="currentColor" />Play</button><button className="library-folder" onClick={(event) => { event.stopPropagation(); void invoke("open_instance_folder", { instanceId: instance.id }); }} aria-label={`Open ${instance.name} folder`}><span className="animated-folder"><Folder className="folder-closed" size={17} /><FolderOpen className="folder-open" size={17} /></span></button><button ref={triggerRef} className="library-more" onClick={(event) => { event.stopPropagation(); setMenuOpen(value => !value); }} aria-label={`Actions for ${instance.name}`} aria-expanded={menuOpen}><MoreHorizontal size={18} /></button></div>
-    {menuOpen && createPortal(<div ref={menuRef} className="select-menu select-menu-portal instance-library-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }} onClick={(event) => event.stopPropagation()}>
+    <div className="library-card-identity"><div className="library-card-top"><button className="library-artwork-open" aria-label={`Open ${instance.name}`} onClick={e => { e.stopPropagation(); openCard(e); }} onDoubleClick={e => { e.stopPropagation(); if (!doubleClickToPlay || busy) return; if (openTimer.current !== null) window.clearTimeout(openTimer.current); openTimer.current = null; onPlay(instance); }}><span className="library-instance-icon">{instance.icon ? <img src={instance.icon} alt="" /> : <span className="library-instance-fallback" aria-hidden="true">?</span>}</span></button><LoaderLogo loader={instanceEngineLabel(instance)} /></div>
+    <div className="library-card-copy"><h2 aria-label={instance.name}><InstanceName name={instance.name} request={renameRequest} onRename={name => onRename(instance, name)} disabled={actionBusy !== null} /></h2><p>Minecraft {instance.version}</p><small title={instance.directory}>{instance.directory}</small></div></div>
+    <div className="library-card-actions"><button className="library-play" disabled={busy || actionBusy !== null} onClick={e => { e.stopPropagation(); onPlay(instance); }}><Play size={15} fill="currentColor" />Play</button><button className="library-folder" onClick={event => { event.stopPropagation(); void invoke("open_instance_folder", { instanceId: instance.id }); }} aria-label={`Open ${instance.name} folder`}><FolderOpen size={17} /></button><button ref={triggerRef} className="library-more" onClick={e => { e.stopPropagation(); setMenuOpen(value => !value); }} aria-label={`Actions for ${instance.name}`} aria-expanded={menuOpen} onKeyDown={e => { if (e.key === "ArrowDown") { e.preventDefault(); setMenuOpen(true); requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus()); } }}><MoreHorizontal size={18} /></button></div>
+    {menuOpen && createPortal(<div ref={menuRef} className="select-menu select-menu-portal instance-library-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }} onClick={(event) => event.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); setMenuOpen(false); triggerRef.current?.focus(); } }}>
+      <button style={{ opacity: 0 }} disabled={actionBusy !== null} onClick={() => { setMenuOpen(false); setRenameRequest(n => n + 1); }}><Pencil size={15} />Rename</button>
+      <button style={{ opacity: 0 }} disabled={busy || actionBusy !== null} onClick={() => void run("duplicate", () => onDuplicate(instance))}><Copy size={15} />{actionBusy === "duplicate" ? "Duplicating…" : "Duplicate"}</button>
+      <button style={{ opacity: 0 }} disabled={busy || actionBusy !== null} onClick={() => void run("export", () => onExport(instance))}><Download size={15} />{actionBusy === "export" ? "Exporting…" : "Export ZIP"}</button>
+      <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id }); }}><FolderOpen size={15} />Open folder</button>
       <button style={{ opacity: 0 }} onClick={() => navigate("view")}><Layers3 size={15} />View instance</button>
-      <button style={{ opacity: 0 }} onClick={() => navigate("add-mods")}><Puzzle size={15} />Add mods</button>
+      {instance.engine !== "sakura" && <button style={{ opacity: 0 }} onClick={() => navigate("add-mods")}><Puzzle size={15} />Add mods</button>}
       <button style={{ opacity: 0 }} onClick={() => navigate("settings")}><SettingsIcon size={15} />Settings</button>
-      <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onShare(instance); }}><Share2 size={15} />Share instance</button>
-      <button style={{ opacity: 0 }} className={`instance-delete-action ${confirmDelete ? "confirm" : ""}`} disabled={deleting || busy} onClick={() => void remove()}><Trash2 size={15} />{deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete instance"}</button>
+      {onOrganize && <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onOrganize(); }}><FolderPlus size={15} />Move to folder</button>}
+      {instance.engine !== "sakura" && <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onShare(instance); }}><Share2 size={15} />Share instance</button>}
+      <button style={{ opacity: 0 }} className={`instance-delete-action ${confirmDelete ? "confirm" : ""}`} disabled={deleting || busy || actionBusy !== null} onClick={() => void remove()}><Trash2 size={15} />{deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete instance"}</button>
     </div>, document.body)}
   </article>;
 }
 
 function LoaderLogo({ loader }: { loader: string }) {
   const [failed, setFailed] = useState(false);
+  if (loader === "Sakura Alpha") return <span className="library-loader-logo library-loader-logo-fallback" aria-label="Sakura Alpha engine" title="Sakura Alpha"><Flower2 size={19} /></span>;
   const fabric = loader.toLowerCase().includes("fabric");
   // Packaged Tauri builds may use a local file/asset origin. Resolving from
   // document.baseURI keeps these bundled images beside index.html instead of
@@ -2914,19 +2796,32 @@ function LoaderLogo({ loader }: { loader: string }) {
   return <img className="library-loader-logo" src={source} alt={`${loader} loader`} onError={() => setFailed(true)} />;
 }
 
-function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, onDelete, onPlay, onCreate }: { instances: InstanceDraft[]; busy: boolean; doubleClickToPlay: boolean; onOpen: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onShare: (instance: InstanceDraft) => void; onDelete: (instance: InstanceDraft) => Promise<void>; onPlay: (instance: InstanceDraft) => void; onCreate: () => void }) {
-  const actionsRef = useRef<HTMLDivElement>(null);
+function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onRename, onExport, onShare, onDuplicate, onDelete, onPlay, onCreate }: { instances: InstanceDraft[]; busy: boolean; doubleClickToPlay: boolean; onOpen: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onRename: (instance: InstanceDraft, name: string) => Promise<void>; onExport: (instance: InstanceDraft) => Promise<void>; onShare: (instance: InstanceDraft) => void; onDuplicate: (instance: InstanceDraft) => Promise<void>; onDelete: (instance: InstanceDraft) => Promise<void>; onPlay: (instance: InstanceDraft) => void; onCreate: () => void }) {
+  const filters = useToolbarDisclosure();
+  const filterId = useId();
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("All");
-  const visible = instances.filter((instance) => instance.name.toLowerCase().includes(query.toLowerCase()) && (loader === "All" || instance.loader.toLowerCase() === loader.toLowerCase()));
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const loaders = ["All", ...Array.from(new Set(instances.map((instance) => instance.loader)))];
   return <div className="instances-page">
-    <header className="instances-page-heading"><h1>All Instances</h1></header>
-    <div ref={actionsRef} className="instances-library-actions"><button className="instances-create" onClick={onCreate}><CirclePlus size={17} />New instance</button><Select value={loader} options={loaders} onChange={setLoader} variant="filter" menuAnchorRef={actionsRef} /></div>
-    <div className="instances-grid">
-      {visible.map(instance => <InstanceLibraryCard key={instance.id} instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onShare={onShare} onDelete={onDelete} onPlay={onPlay} />)}
-      {!visible.length && <div className="instances-library-empty">{instances.length ? "No matching instances" : "No instances yet"}</div>}
+    <div ref={filters.root} className="instances-connected-heading">
+      <header className="instances-page-heading"><h1>All Instances</h1></header>
+      <div className="connected-toolbar-shelf" data-open={filters.open}>
+      <div className="instances-library-actions toolbar-shelf-actions">
+        <button className="instances-create" onClick={onCreate}><CirclePlus size={17} />New instance</button>
+        <button className="instances-create-folder" onClick={() => setCreatingFolder(true)}><FolderPlus size={17} />New folder</button>
+        <button ref={filters.trigger} type="button" className="content-filter-trigger" data-filtered={loader !== "All"}
+          aria-label={`Filter instances: ${loader}`} title="Filter instances" aria-expanded={filters.open} aria-controls={filterId}
+          onClick={() => filters.setOpen(value => !value)}><ListFilter size={19} /></button>
+      </div>
+      <ToolbarDrawer id={filterId} open={filters.open} className="instances-filter-drawer">
+        {loaders.length <= 4 ? <ToolbarSegments label="Loader" options={loaders} value={loader} onChange={setLoader} />
+          : <div className="toolbar-field"><span>Loader</span><Select value={loader} options={loaders} onChange={setLoader} /></div>}
+      </ToolbarDrawer>
+      </div>
     </div>
+    <InstanceFolders instances={instances} query={query} loader={loader} createOpen={creatingFolder} onCloseCreate={() => setCreatingFolder(false)}
+      renderInstance={(instance, organize) => <InstanceLibraryCard instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onRename={onRename} onExport={onExport} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onPlay={onPlay} onOrganize={organize} />} />
     <div className={`content-search instances-search-dock ${query ? "has-query" : ""}`} role="search" aria-label="Search instance library">
       <span className="content-search-mark" aria-hidden="true"><Search size={27} /></span>
       <input aria-label="Search your instances" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your instances…" />
@@ -2949,7 +2844,7 @@ function DownloadsPage({ download, instances, completed, missingMods, onClear, o
     </section>}
     <section className="download-section"><h2>Active</h2>
       {download.active || failed ? <div className={`download-task active-task ${failed ? "failed-task" : ""}`}>
-        <span className={`download-task-icon ${activeArtwork ? "has-artwork" : ""}`}>{activeArtwork ? <DownloadArtwork source={activeArtwork} /> : gameTask ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : download.taskKind === "mod" ? <Puzzle size={24} /> : download.taskKind === "resourcepack" ? <PackageOpen size={24} /> : <Cuboid size={24} />}</span>
+        <span className={`download-task-icon ${activeArtwork ? "has-artwork" : ""}`}>{activeArtwork ? <DownloadArtwork source={activeArtwork} progress={download.state === "complete" || download.state === "running" ? 100 : download.progress} /> : gameTask ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : download.taskKind === "mod" ? <Puzzle size={24} /> : download.taskKind === "resourcepack" ? <PackageOpen size={24} /> : <Cuboid size={24} />}</span>
         <div className="download-task-main"><div className="download-task-title"><div><b>{download.taskName || activeInstance?.name || "Minecraft"}</b><small>{download.taskKind && download.taskKind !== "game" ? `${download.taskVersion || (download.taskKind === "mod" ? "Fabric mod" : download.taskKind === "resourcepack" ? "Resource pack" : "Shader")} • Installing to ${activeInstance?.name || "instance"}` : activeInstance ? `${activeInstance.version} • ${activeInstance.loader}` : "Preparing instance"}</small></div><span>{Math.round(download.progress)}%</span></div><div className="download-linear"><i style={{ width: `${download.progress}%` }} /></div></div>
         <div className="download-metrics"><span>{failed ? "Task stopped" : download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Scanning files"}</span><small>{failed ? "See error" : download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : "Calculating speed"}</small></div>
         <div className="download-task-status"><b>{status}</b><small title={download.message}>{download.message || "Preparing files"}{download.message === "Loading assets" && <i className="loading-dots" />}</small></div>{!failed && <button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>}
@@ -2985,7 +2880,7 @@ function SpotlightInstanceSelect({
       if (!bounds) return;
       const width = Math.max(140, bounds.width - 10);
       const contentHeight = menuRef.current?.scrollHeight || instances.length * 50 + 10;
-      const top = bounds.bottom - 10;
+      const top = bounds.bottom - 15;
       const viewportPadding = 8;
       setPosition({
         top,
@@ -3015,14 +2910,14 @@ function SpotlightInstanceSelect({
   return (
     <div className="spotlight-instance-picker">
       <button ref={triggerRef} className="spotlight-select-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span><b>{selected.name}</b><small>{selected.version} • {selected.loader}</small></span>
+        <span><b>{selected.name}</b><small>{selected.version} • {instanceEngineLabel(selected)}</small></span>
         <ChevronDown size={17} className={open ? "rotated" : ""} />
       </button>
       {open && createPortal(
         <div ref={menuRef} className="select-menu select-menu-portal spotlight-select-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }}>
           {instances.map((instance) => (
             <button style={{ opacity: 0 }} className={instance.id === selected.id ? "chosen" : ""} key={instance.id} onClick={() => { onSelect(instance.id); setOpen(false); }}>
-              <b>{instance.name}</b><small>{instance.version} • {instance.loader}</small>
+              <b>{instance.name}</b><small>{instance.version} • {instanceEngineLabel(instance)}</small>
             </button>
           ))}
         </div>,
@@ -3099,6 +2994,7 @@ function App() {
   const [packMemberships, setPackMemberships] = useState<Map<string, PackChannelRole>>(() => new Map());
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [shareInstance, setShareInstance] = useState<InstanceDraft | null>(null);
+  const [floatingInstanceId, setFloatingInstanceId] = useState<string | null>(null);
   const [instanceDestination, setInstanceDestination] = useState<InstanceLibraryDestination>("view");
   const instanceOpenTimers = useRef(new Map<string, number>());
   const [spotlightInstanceId, setSpotlightInstanceId] = useState<string | null>(() => localStorage.getItem("bloom-spotlight-instance"));
@@ -3148,6 +3044,8 @@ function App() {
   );
   const [profileIcon, setProfileIcon] = useState<string | null>(() => localStorage.getItem(PROFILE_ICON_STORAGE_KEY));
   const [customBackgroundImage, setCustomBackgroundImage] = useState<string | null>(null);
+  const backgroundImageRevision = useRef(0);
+  const replaceBackgroundImage = (image: string | null) => { backgroundImageRevision.current++; setCustomBackgroundImage(image); };
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [windowMenuOpen, setWindowMenuOpen] = useState<WindowMenuName | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true");
@@ -3176,6 +3074,7 @@ function App() {
         localStorage.setItem(customBackgroundDefaultsMigrationKey, "complete");
       }
       loaded = { ...loaded, ...normalizeAnimatedAccent(loaded), theme: loaded.theme === "light" ? "light" : "oled" };
+      loaded.interactionSounds = normalizeInteractionSounds(loaded.interactionSounds);
       delete (loaded as SettingsState & { finish?: unknown }).finish;
       if (loaded.theme === "light" && loaded.sidebarTextColor === defaults.sidebarTextColor) loaded.sidebarTextColor = "#171b22";
       localStorage.setItem("bloom-settings", JSON.stringify(loaded));
@@ -3197,11 +3096,12 @@ function App() {
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [profileMenuOpen, signInOpen]);
   useEffect(() => {
-    if (!settings.customBackground) return;
+
     let cancelled = false;
+    const revision = backgroundImageRevision.current;
     const timer = window.setTimeout(() => {
       void invoke<string | null>("load_custom_background")
-        .then(image => { if (!cancelled) setCustomBackgroundImage(image); })
+        .then(image => { if (!cancelled && revision === backgroundImageRevision.current) setCustomBackgroundImage(image); })
         .catch(() => {});
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
@@ -3243,6 +3143,23 @@ function App() {
     ]);
   }, [settings.theme]);
   useAnimatedAccent({ ...settings, animations: settings.animations && !download.active && !gameRunning });
+  useEffect(() => {
+    configureInteractionSounds(settings.interactionSounds, settings.ultraPerformance);
+  }, [settings.interactionSounds, settings.ultraPerformance]);
+  useEffect(() => {
+    if (!settings.interactionSounds.enabled || settings.ultraPerformance) return;
+    return installInteractionSoundFeedback({ scroll: settings.interactionSounds.categories.scroll });
+  }, [settings.interactionSounds.enabled, settings.interactionSounds.categories.scroll, settings.ultraPerformance]);
+  useEffect(() => {
+    const hide = () => { if (document.hidden) stopInteractionSounds(); };
+    window.addEventListener("blur", stopInteractionSounds);
+    document.addEventListener("visibilitychange", hide);
+    return () => {
+      window.removeEventListener("blur", stopInteractionSounds);
+      document.removeEventListener("visibilitychange", hide);
+      stopInteractionSounds();
+    };
+  }, []);
   useEffect(() => {
     localStorage.setItem("bloom-settings", JSON.stringify(settings));
     document.documentElement.dataset.theme = settings.theme;
@@ -3635,6 +3552,7 @@ function App() {
     const instance = instances.find(item => item.id === download.instanceId);
     if (!instance) return;
     lastCompletedTask.current = completionKey;
+    if (download.state === "complete") void playInteractionSound("success");
     const completedItem: CompletedDownload = download.taskKind && download.taskKind !== "game"
       ? { id: `${instance.id}-${Date.now()}`, name: download.taskName || "Content", version: download.taskVersion || (download.taskKind === "mod" ? "Fabric" : download.taskKind === "resourcepack" ? "Resource pack" : "Shader"), targetName: instance.name, kind: download.taskKind, iconUrl: download.taskIcon, completedAt: Date.now() }
       : { id: `${instance.id}-${Date.now()}`, name: instance.name, version: instance.version, loader: instance.loader, kind: "game", iconUrl: instance.icon || undefined, completedAt: Date.now() };
@@ -3675,11 +3593,11 @@ function App() {
       active: true,
       progress: 1,
       state: "installing",
-      message: "Preparing Minecraft download",
+      message: instance.engine === "sakura" ? "Preparing Sakura" : "Preparing Minecraft download",
       instanceId: instance.id,
       taskKind: "game",
     });
-    setLogs(current => [...current, { id: `${Date.now()}-launch`, instanceId: instance.id, instanceName: instance.name, stream: "launcher", level: "info" as const, message: `Starting ${instance.name} (${instance.version} • ${instance.loader})`, timestamp: Date.now() }].slice(-600));
+    setLogs(current => [...current, { id: `${Date.now()}-launch`, instanceId: instance.id, instanceName: instance.name, stream: "launcher", level: "info" as const, message: `Starting ${instance.name} (${instance.version} • ${instanceEngineLabel(instance)})`, timestamp: Date.now() }].slice(-600));
     try {
       await invoke("launch_minecraft", { instanceId: instance.id, launchMethod: settings.launchMethod, downloadWorkers: settings.downloadWorkers, debugLogging: settings.debugLogging });
     } catch (error) {
@@ -3735,19 +3653,15 @@ function App() {
   };
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape") setWindowMenuOpen(null);
-    if (
-      event.key === "F12" ||
-      (event.ctrlKey && event.shiftKey) ||
-      (event.ctrlKey && event.key.toLowerCase() === "u")
-    )
-      event.preventDefault();
   };
   const selectedInstance = instances.find(instance => instance.id === selectedInstanceId);
+  const floatingInstance = instances.find(instance => instance.id === floatingInstanceId);
   const mostRecentInstance = instances[0];
   const deleteClientInstance = async (instance: InstanceDraft) => {
     try {
       await invoke("delete_instance", { instanceId: instance.id });
       setInstances(current => current.filter(item => item.id !== instance.id));
+      if (floatingInstanceId === instance.id) setFloatingInstanceId(null);
       if (selectedInstanceId === instance.id) { setSelectedInstanceId(null); setPage("instances"); }
       if (spotlightInstanceId === instance.id) { setSpotlightInstanceId(null); localStorage.removeItem("bloom-spotlight-instance"); }
       showToolMessage(`${instance.name} and all of its files were deleted.`, "notification");
@@ -3755,6 +3669,19 @@ function App() {
       showToolMessage(String(error), "error");
       throw error;
     }
+  };
+  const renameClientInstance = async (instance: InstanceDraft, name: string) => {
+    const changed = await invoke<InstanceDraft>("rename_instance", { instanceId: instance.id, name });
+    setInstances(current => current.map(item => item.id === changed.id ? changed : item));
+  };
+  const exportClientInstance = async (instance: InstanceDraft) => {
+    try {
+      const path = await invoke<string | null>("export_instance", { instanceId: instance.id });
+      if (path) {
+        showToolMessage(`Exported ${instance.name} to ${path}`, "notification");
+        void playInteractionSound("success");
+      }
+    } catch (error) { showToolMessage(String(error), "error"); throw error; }
   };
   const duplicateClientInstance = async (instance: InstanceDraft) => {
     try {
@@ -3788,6 +3715,11 @@ function App() {
     setToast(userError(message));
     toolToastTimer.current = window.setTimeout(() => setToast(""), 4000);
   };
+  const contentTransfer = useContentTransferController(instances.filter(instance => instance.engine !== "sakura"), (targetId, category, message) => {
+    instanceContentMemoryCache.delete(instanceContentCacheKey(targetId, category));
+    void playInteractionSound("success");
+    showToolMessage(message);
+  });
   const importModpack = async () => {
     if (download.active || gameRunning) return showToolMessage("Another download or game launch is already active.");
     try {
@@ -3814,10 +3746,11 @@ function App() {
     catch (error) { setDownload({ active: false, progress: 0, state: "idle", message: "" }); showToolMessage(String(error), "error"); }
   };
   const switchTargets: SwitchTarget[] = [
-    ...instances.map(instance => ({ id: `instance:${instance.id}`, label: instance.name, detail: `${instance.version} · ${instance.loader}`, kind: "instance" as const, run: () => openInstancePage(instance) })),
+    ...instances.map(instance => ({ id: `instance:${instance.id}`, label: instance.name, detail: `${instance.version} · ${instanceEngineLabel(instance)}`, kind: "instance" as const, run: () => openInstancePage(instance) })),
     ...([ ["Home", "home"], ["Instances", "instances"], ["Locker", "locker"], ["Social", "social"], ["Screenshots", "screenshots"], ["Utilities", "utilities"], ["Downloads", "downloads"], ["Logs", "logs"], ["New instance", "new-instance"] ] as const).map(([label, destination]) => ({ id: `page:${destination}`, label, detail: "Page", kind: "page" as const, run: () => setPage(destination) })),
     ...["General", "Appearance", "Background", "Performance", "Cache", "Minecraft", "Cosmetics", "Launcher", "Privacy", "Updates", "My Profile", "Advanced"].map(label => ({ id: `setting:${label}`, label, detail: "Settings", keywords: ({ Appearance: "theme accent color animations", Background: "image wallpaper organic opacity", Performance: "memory ram java arguments", Minecraft: "version loader", "My Profile": "account login avatar", Cache: "storage disk" } as Record<string, string>)[label], kind: "setting" as const, run: () => openSettings(label) })),
   ];
+  const activeNavPage = page === "instance" || page === "new-instance" ? "instances" : page === "autotune" ? "utilities" : page;
   const liveBackgroundActive = settings.backgroundMode === "live";
   const customBackgroundActive = settings.customBackground && (liveBackgroundActive || Boolean(customBackgroundImage));
   const customSurfaceDarkness = Math.max(0, Math.min(100, settings.sidebarOpacity));
@@ -3847,6 +3780,7 @@ function App() {
     }} />;
   }
   return (
+    <ContentTransferContext.Provider value={contentTransfer.controls}>
     <div
       className="app-shell"
       style={customBackgroundStyle}
@@ -3928,26 +3862,15 @@ function App() {
         </div>
       </div>
       <aside className="sidebar" aria-label={sidebarCollapsed ? "Compact sidebar" : "Sidebar"}>
-        <nav>
-          {nav.map(([Icon, label], index) => (
+        <nav className="sidebar-navigation" aria-label="Main navigation">
+          {nav.map(([Icon, label, destination]) => (
             <button
-              className={
-                (page === "home" && index === 0) ||
-                (page === "instances" && label === "Instances") ||
-                (page === "settings" && label === "Settings") ||
-                (page === "screenshots" && label === "Screenshots") ||
-                (page === "utilities" && label === "Utilities") ||
-                (page === "social" && label === "Social") ||
-                (page === "locker" && label === "Locker")
-                  ? "active"
-                  : ""
-              }
+              className={activeNavPage === destination ? "active" : ""}
               key={label}
               aria-label={label}
+              aria-current={activeNavPage === destination ? "page" : undefined}
               title={sidebarCollapsed ? label : undefined}
-              onClick={() =>
-                label === "Screenshots" ? setPage("screenshots") : label === "Locker" ? setPage("locker") : label === "Settings" ? openSettings() : label === "Instances" ? setPage("instances") : label === "Utilities" ? setPage("utilities") : label === "Social" ? setPage("social") : setPage("home")
-              }
+              onClick={() => destination === "settings" ? openSettings() : setPage(destination)}
             >
               <Icon size={17} />
               <span className="sidebar-nav-label">{label}</span>
@@ -3963,10 +3886,12 @@ function App() {
         </div>
         <div className="instance-list">
           {instances.length ? (
-            instances.slice(0, 3).map((instance) => (
+            (contentTransfer.dragging ? instances : instances.slice(0, 3)).map((instance) => (
               <div
                 className={`sidebar-instance ${page === "instance" && selectedInstanceId === instance.id ? "active" : ""}`}
                 key={instance.id}
+                data-content-drop-id={instance.id}
+                data-content-drop-name={instance.name}
               >
                 <button className="sidebar-instance-open" title={sidebarCollapsed ? instance.name : undefined} onClick={(event) => handleInstanceClick(event, instance)} onDoubleClick={(event) => handleInstanceDoubleClick(event, instance)} aria-label={`Open ${instance.name}`}>
                   <span className="sidebar-instance-media" aria-hidden="true">{instance.icon ? <img className="sidebar-instance-icon" src={instance.icon} alt="" /> : <span className="sidebar-instance-fallback">?</span>}</span>
@@ -4054,7 +3979,8 @@ function App() {
       </aside>
       <main className={`content ${page === "social" ? "social-content" : ""}`}>
         {page === "instance" && selectedInstance ? (
-          <InstancePage onMessage={showToolMessage} key={`${selectedInstance.id}:${instanceDestination}`} instance={selectedInstance} groupRole={packMemberships.get(selectedInstance.id)} busy={download.active || gameRunning} initialTab={instanceDestination === "settings" ? "settings" : "mods"} initialCatalog={instanceDestination === "add-mods"} recentSearchesEnabled={settings.recentModSearches} onPlay={() => void launch(selectedInstance)} onShare={() => setShareInstance(selectedInstance)} onDuplicate={() => duplicateClientInstance(selectedInstance)} onDelete={() => deleteClientInstance(selectedInstance)} onInstallContent={(item, category) => installContent(selectedInstance, item, category)} onChanged={(changed) => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} />
+          selectedInstance.engine === "sakura" ? <SakuraInstancePage key={selectedInstance.id} instance={selectedInstance} busy={download.active || gameRunning} onPlay={() => void launch(selectedInstance)} onMessage={showToolMessage} onChanged={changed => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} /> :
+          <InstancePage floating={floatingInstanceId === selectedInstance.id} onPopOut={() => setFloatingInstanceId(current => current === selectedInstance.id ? null : selectedInstance.id)} onMessage={showToolMessage} key={`${selectedInstance.id}:${instanceDestination}`} instance={selectedInstance} groupRole={packMemberships.get(selectedInstance.id)} busy={download.active || gameRunning} initialTab={instanceDestination === "settings" ? "settings" : "mods"} initialCatalog={instanceDestination === "add-mods"} recentSearchesEnabled={settings.recentModSearches} onPlay={() => void launch(selectedInstance)} onRename={name => renameClientInstance(selectedInstance, name)} onExport={() => exportClientInstance(selectedInstance)} onShare={() => setShareInstance(selectedInstance)} onDuplicate={() => duplicateClientInstance(selectedInstance)} onDelete={() => deleteClientInstance(selectedInstance)} onInstallContent={(item, category) => installContent(selectedInstance, item, category)} onChanged={(changed) => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} />
         ) : page === "logs" ? (
           <LogsPage entries={logs} running={gameRunning || download.state === "launching"} onClear={() => setLogs([])} />
         ) : page === "autotune" ? (
@@ -4062,17 +3988,17 @@ function App() {
         ) : page === "screenshots" ? (
           <ScreenshotShelf instances={instances} SelectControl={Select} onMessage={showToolMessage} />
         ) : page === "utilities" ? (
-          <UtilitiesPage instances={instances} SelectControl={Select} onOpenAutoTune={() => setPage("autotune")} onMessage={showToolMessage} />
+          <UtilitiesPage instances={instances.filter(instance => instance.engine !== "sakura")} SelectControl={Select} onOpenAutoTune={() => setPage("autotune")} onMessage={showToolMessage} />
         ) : page === "social" ? (
           <SocialPage onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} onInstanceImported={(result) => { setSharedPackMissingMods(result.missingMods); setDownload({ active: true, progress: 1, state: "installing", message: "Importing shared instance", instanceId: result.instanceId, taskKind: "game" }); refreshPackMemberships(); setPage("downloads"); void invoke<InstanceDraft[]>("list_instances").then(setInstances); }} />
         ) : page === "instances" ? (
-          <InstancesPage instances={instances} busy={download.active || gameRunning} doubleClickToPlay={settings.doubleClickToPlay} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onShare={setShareInstance} onOpen={(instance, destination) => { setSelectedInstanceId(instance.id); setInstanceDestination(destination); setPage("instance"); }} onDelete={deleteClientInstance} />
+          <InstancesPage onRename={renameClientInstance} onExport={exportClientInstance} onDuplicate={duplicateClientInstance} instances={instances} busy={download.active || gameRunning} doubleClickToPlay={settings.doubleClickToPlay} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onShare={setShareInstance} onOpen={(instance, destination) => { setSelectedInstanceId(instance.id); setInstanceDestination(destination); setPage("instance"); }} onDelete={deleteClientInstance} />
         ) : page === "downloads" ? (
           <DownloadsPage download={download} instances={instances} completed={completedDownloads} missingMods={sharedPackMissingMods} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} onDismissMissing={() => setSharedPackMissingMods([])} />
         ) : page === "locker" ? (
           <Locker profile={profile} motion={settings.animations && !settings.ultraPerformance} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />
         ) : page === "settings" ? (
-          <SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} backgroundImage={customBackgroundImage} onBackgroundImageChange={setCustomBackgroundImage} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => void installUpdate()} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} />
+          <WallpaperSourceContext.Provider value={customBackgroundImage}><SettingsPage settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} backgroundImage={customBackgroundImage} onBackgroundImageChange={replaceBackgroundImage} initialTab={settingsTarget} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={availableUpdate?.version || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => void installUpdate()} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} /></WallpaperSourceContext.Provider>
         ) : page === "new-instance" ? (
           <NewInstancePage
             defaults={settings}
@@ -4147,7 +4073,7 @@ function App() {
                         {instance.icon ? <img className="recent-instance-icon" src={instance.icon} alt="" /> : <span className="instance-placeholder-icon" aria-hidden="true">?</span>}
                         <div>
                           <b>{instance.name}</b>
-                          <small>{instance.version} • {instance.loader}</small>
+                          <small>{instance.version} • {instanceEngineLabel(instance)}</small>
                         </div>
                         <button
                           className="play-instance"
@@ -4190,6 +4116,7 @@ function App() {
           </div>
         ))}
       </aside>}
+      {floatingInstance && <FloatingInstancePlayer instance={floatingInstance} busy={download.active || gameRunning} onPlay={() => void launch(floatingInstance)} onClose={() => { setFloatingInstanceId(null); document.querySelector<HTMLButtonElement>(".instance-more")?.focus(); }} />}
       {shareInstance && <ShareInstanceDialog instance={shareInstance} onClose={() => setShareInstance(null)} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />}
       {(availableUpdate || mockUpdateActive) && <section
         ref={updateSurfaceRef}
@@ -4216,6 +4143,8 @@ function App() {
       </section>}
       {toast && <div className={`launch-toast ${toastKind}`} role={toastKind === "error" ? "alert" : "status"} aria-live={toastKind === "error" ? "assertive" : "polite"}><span>{toast}</span></div>}
     </div>
+    {contentTransfer.overlay}
+    </ContentTransferContext.Provider>
   );
 }
 createRoot(document.getElementById("root")!).render(

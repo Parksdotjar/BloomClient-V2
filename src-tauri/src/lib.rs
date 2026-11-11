@@ -1,6 +1,13 @@
+mod platform;
+mod runtime_archive;
+mod autotune;
 mod fabric_loader;
 mod launch_cache;
+mod sakura;
 mod screenshots;
+mod content_transfer;
+mod instance_folders;
+mod instance_actions;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex, OnceLock,
@@ -948,17 +955,17 @@ fn save_chunked_credential(uuid: &str, kind: &str, value: &str) -> Result<(), St
             "Bloom Client",
             &account_credential_part(uuid, &format!("{kind}-{index}")),
         )
-        .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+        .map_err(|error| format!("The system credential store could not prepare secure account storage: {error}"))?
         .set_password(chunk)
-        .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+        .map_err(|error| format!("The system credential store could not save this account securely: {error}"))?;
     }
     keyring::Entry::new(
         "Bloom Client",
         &account_credential_part(uuid, &format!("{kind}-count")),
     )
-    .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+    .map_err(|error| format!("The system credential store could not prepare secure account storage: {error}"))?
     .set_password(&chunks.len().to_string())
-    .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    .map_err(|error| format!("The system credential store could not save this account securely: {error}"))?;
     for index in chunks.len()..32 {
         delete_credential_entry(&account_credential_part(uuid, &format!("{kind}-{index}")))?;
     }
@@ -1048,9 +1055,9 @@ fn save_account_session(session: &MinecraftSession, make_active: bool) -> Result
         "Bloom Client",
         &account_credential_part(&session.uuid, "profile"),
     )
-    .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+    .map_err(|error| format!("The system credential store could not prepare secure account storage: {error}"))?
     .set_password(&serde_json::to_string(&profile).map_err(|error| error.to_string())?)
-    .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    .map_err(|error| format!("The system credential store could not save this account securely: {error}"))?;
     delete_credential_entry(&account_credential_name(&session.uuid))?;
     let mut store = read_account_store();
     if let Some(account) = store
@@ -1083,7 +1090,7 @@ fn delete_legacy_session() -> Result<(), String> {
             Ok(()) | Err(keyring::Error::NoEntry) => {}
             Err(error) => {
                 return Err(format!(
-                    "Windows could not remove the saved sign-in: {error}"
+                    "The system credential store could not remove the saved sign-in: {error}"
                 ))
             }
         }
@@ -1133,7 +1140,7 @@ async fn sign_out_minecraft(
             return Ok(None);
         };
         delete_account_credentials(&active_id)
-            .map_err(|error| format!("Windows could not remove the saved account: {error}"))?;
+            .map_err(|error| format!("The system credential store could not remove the saved account: {error}"))?;
         store.accounts.retain(|account| account.id != active_id);
         store.active_id = store.accounts.first().map(|account| account.id.clone());
         write_account_store(&store)?;
@@ -1165,7 +1172,7 @@ fn copy_text_to_clipboard(text: String) -> Result<(), String> {
                     std::thread::sleep(std::time::Duration::from_millis(15));
                     match clipboard.get_text() {
                         Ok(copied) if copied == text => return Ok(()),
-                        Ok(_) => last_error = Some("Windows replaced the clipboard contents".into()),
+                        Ok(_) => last_error = Some("The system replaced the clipboard contents".into()),
                         Err(error) => last_error = Some(format!("clipboard verification failed: {error}")),
                     }
                 }
@@ -1176,7 +1183,7 @@ fn copy_text_to_clipboard(text: String) -> Result<(), String> {
         std::thread::sleep(std::time::Duration::from_millis(40));
     }
     Err(format!(
-        "Windows could not copy the code: {}",
+        "The system could not copy the code: {}",
         last_error.unwrap_or_else(|| "the clipboard is unavailable".into())
     ))
 }
@@ -1611,29 +1618,13 @@ fn adoptium_architecture() -> Result<&'static str, String> {
         "x86_64" => Ok("x64"),
         "aarch64" => Ok("aarch64"),
         architecture => Err(format!(
-            "Automatic Java installation is not available for {architecture} Windows yet."
+            "Automatic Java installation is not available for architecture {architecture}."
         )),
     }
 }
 
 fn find_java_executable(folder: &std::path::Path) -> Option<std::path::PathBuf> {
-    let mut pending = vec![folder.to_path_buf()];
-    while let Some(current) = pending.pop() {
-        let entries = std::fs::read_dir(current).ok()?;
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.eq_ignore_ascii_case("javaw.exe"))
-            {
-                return Some(path);
-            }
-        }
-    }
-    None
+    runtime_archive::find_java(folder, platform::JAVA_EXECUTABLE)
 }
 
 fn download_managed_java(
@@ -1672,13 +1663,14 @@ fn download_managed_java(
         .build()
         .map_err(|error| error.to_string())?;
     let mut package = None;
+    let provider_os = platform::JAVA_PROVIDER_OS;
     for image in ["jre", "jdk"] {
-        let url = format!("https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture={architecture}&heap_size=normal&image_type={image}&jvm_impl=hotspot&os=windows&project=jdk&vendor=eclipse");
-        let assets: serde_json::Value = client
-            .get(url)
-            .send()
-            .map_err(|error| format!("Java provider could not be reached: {error}"))?
-            .error_for_status()
+        let url = format!("https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture={architecture}&heap_size=normal&image_type={image}&jvm_impl=hotspot&os={provider_os}&project=jdk&vendor=eclipse");
+        let response = client.get(url).send()
+            .map_err(|error| format!("Java provider could not be reached: {error}"))?;
+        // Some supported OS/Java combinations ship only a JDK, not a standalone JRE.
+        if response.status() == reqwest::StatusCode::NOT_FOUND { continue; }
+        let assets: serde_json::Value = response.error_for_status()
             .map_err(|error| format!("Java provider rejected the request: {error}"))?
             .json()
             .map_err(|error| format!("Java provider returned invalid data: {error}"))?;
@@ -1692,7 +1684,7 @@ fn download_managed_java(
             break;
         }
     }
-    let package = package.ok_or_else(|| format!("No supported Windows Java {major} runtime is currently available from Eclipse Adoptium."))?;
+    let package = package.ok_or_else(|| format!("No supported {provider_os} Java {major} runtime is currently available from Eclipse Adoptium."))?;
     let url = package["link"]
         .as_str()
         .ok_or("The Java provider response did not include a download link.")?;
@@ -1701,8 +1693,9 @@ fn download_managed_java(
         .ok_or("The Java provider response did not include a SHA-256 checksum.")?
         .to_ascii_lowercase();
     let total = package["size"].as_u64().unwrap_or(0);
-    let archive = root.join(format!("temurin-{major}-{architecture}.zip"));
-    let partial = archive.with_extension("zip.part");
+    let extension = platform::JAVA_ARCHIVE_EXTENSION;
+    let archive = root.join(format!("temurin-{major}-{architecture}.{extension}"));
+    let partial = root.join(format!("temurin-{major}-{architecture}.{extension}.part"));
     let mut response = client
         .get(url)
         .send()
@@ -1771,31 +1764,12 @@ fn download_managed_java(
         std::fs::remove_dir_all(&staging).map_err(|error| error.to_string())?;
     }
     std::fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
-    let file = std::fs::File::open(&archive).map_err(|error| error.to_string())?;
-    let mut zip = zip::ZipArchive::new(file)
-        .map_err(|error| format!("Java archive could not be opened: {error}"))?;
-    for index in 0..zip.len() {
-        if cancel.load(Ordering::SeqCst) {
-            let _ = std::fs::remove_dir_all(&staging);
-            return Err("__cancelled__".into());
-        }
-        let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
-        let relative = entry
-            .enclosed_name()
-            .ok_or("The Java archive contained an unsafe path.")?;
-        let target = staging.join(relative);
-        if entry.is_dir() {
-            std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
-        } else {
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-            }
-            let mut file = std::fs::File::create(target).map_err(|error| error.to_string())?;
-            std::io::copy(&mut entry, &mut file).map_err(|error| error.to_string())?;
-        }
+    if let Err(error) = runtime_archive::extract(&archive, &staging, extension, cancel) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(error);
     }
     let staged_java = find_java_executable(&staging)
-        .ok_or("The installed Java package did not contain javaw.exe.")?;
+        .ok_or("The installed Java package did not contain its Java executable.")?;
     let relative_java = staged_java
         .strip_prefix(&staging)
         .map_err(|error| error.to_string())?
@@ -1821,17 +1795,6 @@ fn download_managed_java(
     Ok(java)
 }
 
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WindowsHardware {
-    cpu: String,
-    cores: u32,
-    threads: u32,
-    ram_bytes: u64,
-    gpus: Vec<String>,
-    refresh_rate: Option<u32>,
-}
-
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HardwareReport {
@@ -1849,19 +1812,7 @@ struct HardwareReport {
 }
 
 fn detect_hardware_report_blocking() -> Result<HardwareReport, String> {
-    let script = r#"$cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $system=Get-CimInstance Win32_ComputerSystem; $video=@(Get-CimInstance Win32_VideoController); [pscustomobject]@{cpu=[string]$cpu.Name;cores=[uint32]$cpu.NumberOfCores;threads=[uint32]$cpu.NumberOfLogicalProcessors;ramBytes=[uint64]$system.TotalPhysicalMemory;gpus=@($video | ForEach-Object {[string]$_.Name});refreshRate=[uint32](($video | Measure-Object CurrentRefreshRate -Maximum).Maximum)} | ConvertTo-Json -Compress"#;
-    let output = command_without_console("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
-        .output()
-        .map_err(|error| format!("Hardware scan could not start: {error}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "Hardware scan failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    let hardware: WindowsHardware = serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("Hardware scan returned invalid data: {error}"))?;
+    let hardware = platform::detect_hardware()?;
     let ram_gb = hardware.ram_bytes / 1_073_741_824;
     let recommended_memory_mb = match ram_gb {
         0..=7 => 2048,
@@ -1926,6 +1877,10 @@ struct InstanceConfig {
     id: String,
     name: String,
     #[serde(default)]
+    engine: sakura::Engine,
+    #[serde(default)]
+    sakura: Option<sakura::Settings>,
+    #[serde(default)]
     icon: Option<String>,
     #[serde(default = "default_loader")]
     loader: String,
@@ -1973,9 +1928,7 @@ fn bloom_data_dir() -> Result<std::path::PathBuf, String> {
         })?;
         return Ok(path);
     }
-    let appdata = std::env::var("APPDATA")
-        .map_err(|_| "APPDATA is unavailable on this computer.".to_string())?;
-    let path = std::path::PathBuf::from(appdata).join("BloomClient");
+    let path = platform::data_directory()?;
     std::fs::create_dir_all(path.join("instances")).map_err(|error| error.to_string())?;
     Ok(path)
 }
@@ -2045,6 +1998,16 @@ async fn load_custom_background() -> Result<Option<String>, String> {
         .map_err(|error| format!("The background image reader stopped unexpectedly: {error}"))?
 }
 
+#[tauri::command]
+fn clear_custom_background() -> Result<(), String> {
+    let path = custom_background_path()?;
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct AutoTuneProfile {
@@ -2078,7 +2041,11 @@ fn autotune_jvm_arguments(profile: &str) -> String {
 }
 
 fn patch_options(path: &std::path::Path, updates: &[(&str, String)]) -> Result<(), String> {
-    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let existing = match std::fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.to_string()),
+    };
     let mut handled = std::collections::HashSet::new();
     let mut output = Vec::new();
     for line in existing.lines() {
@@ -2108,6 +2075,7 @@ fn apply_autotune_to_config(
     config: &mut InstanceConfig,
     profile: &AutoTuneProfile,
 ) -> Result<(), String> {
+    if config.engine == sakura::Engine::Sakura { return Ok(()); }
     config.memory = profile.memory_mb.clamp(1024, 16384);
     config.jvm_arguments = autotune_jvm_arguments(&profile.jvm_profile);
     let preset = match profile.graphics.to_ascii_lowercase().as_str() {
@@ -2151,10 +2119,8 @@ fn apply_autotune_to_config(
         &std::path::PathBuf::from(&config.directory).join("options.txt"),
         &[
             ("graphicsPreset", format!("\"{preset}\"")),
-            ("maxFps", "260".into()),
-            ("enableVsync", "false".into()),
-            ("fullscreen", "true".into()),
-            ("exclusiveFullscreen", "false".into()),
+            ("maxFps", profile.target_fps.clamp(30, 260).to_string()),
+            ("graphicsMode", if preset == "fast" { "0" } else if preset == "fabulous" { "2" } else { "1" }.into()),
             ("ao", ao.into()),
             ("biomeBlendRadius", blend.into()),
             ("prioritizeChunkUpdates", updates.into()),
@@ -2185,41 +2151,126 @@ fn apply_autotune_to_config(
 }
 
 fn apply_autotune_profile_blocking(profile: AutoTuneProfile) -> Result<usize, String> {
-    let data = bloom_data_dir()?;
-    std::fs::write(
-        data.join("autotune-profile.json"),
-        serde_json::to_vec_pretty(&profile).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
-    let folder = data.join("instances");
-    let mut applied = 0;
-    for entry in std::fs::read_dir(folder)
-        .map_err(|error| error.to_string())?
-        .flatten()
-    {
-        if entry.path().extension().and_then(|value| value.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(mut config) = serde_json::from_slice::<InstanceConfig>(
-            &std::fs::read(entry.path()).unwrap_or_default(),
-        ) else {
-            continue;
-        };
-        if !config.visible || config.id == AUTOTUNE_INSTANCE_ID {
-            continue;
-        }
-        apply_autotune_to_config(&mut config, &profile)?;
-        write_instance(&config)?;
-        applied += 1;
+    let measured = get_autotune_benchmark_result()?.ok_or("Run the benchmark before applying a profile.")?;
+    if measured["completedAt"].as_u64() != Some(profile.benchmark_completed_at)
+        || !(1024..=8192).contains(&profile.memory_mb) || !(30..=1000).contains(&profile.target_fps)
+        || !(2..=32).contains(&profile.render_distance) || !(5..=32).contains(&profile.simulation_distance)
+        || !matches!(profile.jvm_profile.as_str(), "Default" | "Performance")
+        || !matches!(profile.graphics.as_str(), "Fast" | "Balanced" | "High") {
+        return Err("The tuning profile is outdated or invalid. Build it again from the latest test.".into());
     }
-    Ok(applied)
+    apply_autotune_profile_in(&bloom_data_dir()?, &profile)
+}
+
+fn apply_autotune_profile_in(data: &std::path::Path, profile: &AutoTuneProfile) -> Result<usize, String> {
+    let mut configs = Vec::new();
+    let mut snapshots: Vec<(std::path::PathBuf, Option<Vec<u8>>)> = Vec::new();
+    for entry in std::fs::read_dir(data.join("instances")).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        if entry.path().extension().and_then(|value| value.to_str()) != Some("json") { continue; }
+        let bytes = std::fs::read(entry.path()).map_err(|error| error.to_string())?;
+        let config: InstanceConfig = serde_json::from_slice(&bytes).map_err(|error| format!("Could not read an instance: {error}"))?;
+        if !config.visible || config.id == AUTOTUNE_INSTANCE_ID || config.engine == sakura::Engine::Sakura { continue; }
+        let options_path = std::path::PathBuf::from(&config.directory).join("options.txt");
+        let options = match std::fs::read(&options_path) {
+            Ok(bytes) => Some(bytes), Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(format!("Could not read settings for {}: {error}", config.name)),
+        };
+        snapshots.push((entry.path(), Some(bytes)));
+        snapshots.push((options_path, options));
+        configs.push((entry.path(), config));
+    }
+    let saved_profile = data.join("autotune-profile.json");
+    let previous_profile = match std::fs::read(&saved_profile) {
+        Ok(bytes) => Some(bytes), Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.to_string()),
+    };
+    snapshots.push((saved_profile.clone(), previous_profile));
+    let result = (|| -> Result<usize, String> {
+        for (path, config) in &mut configs {
+            apply_autotune_to_config(config, profile)?;
+            std::fs::write(path, serde_json::to_vec_pretty(config).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        }
+        // Publish future defaults only once every eligible instance has saved successfully.
+        std::fs::write(saved_profile, serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        Ok(configs.len())
+    })();
+    if let Err(error) = result {
+        let mut rollback_failed = false;
+        for (path, bytes) in snapshots.into_iter().rev() {
+            if bytes.as_ref().is_some_and(|original| std::fs::read(&path).ok().as_ref() == Some(original)) { continue; }
+            let restored = match bytes {
+                Some(bytes) => std::fs::write(path, bytes),
+                None => match std::fs::remove_file(path) { Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), outcome => outcome },
+            };
+            rollback_failed |= restored.is_err();
+        }
+        return Err(format!("AutoTune could not save: {error}. {}", if rollback_failed { "Some settings could not be restored; review your instance settings before playing." } else { "Previous settings were restored." }));
+    }
+    result
 }
 
 #[tauri::command]
-async fn apply_autotune_profile(profile: AutoTuneProfile) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || apply_autotune_profile_blocking(profile))
-        .await
-        .map_err(|error| format!("The AutoTune writer stopped unexpectedly: {error}"))?
+fn get_applied_autotune_profile() -> Option<AutoTuneProfile> { saved_autotune_profile() }
+
+#[cfg(test)]
+mod autotune_application_tests {
+    use super::*;
+    fn fixture() -> (std::path::PathBuf, AutoTuneProfile) {
+        let root = std::env::temp_dir().join(format!("bloom-autotune-apply-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("instances")).unwrap();
+        for (id, engine, visible) in [("java", "java", true), ("native", "sakura", true), ("hidden", "java", false)] {
+            let dir = root.join(id);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("options.txt"), "fullscreen:false\nenableVsync:true\nrenderDistance:20\ncustomSetting:keep\n").unwrap();
+            let config = serde_json::json!({"id":id,"name":id,"engine":engine,"version":"26.3","directory":dir,"java":"Automatic","memory":4096,"jvmArguments":"custom","mods":true,"resourcePacks":true,"shaderPacks":true,"config":true,"customResolution":false,"visible":visible,"shortcut":false});
+            std::fs::write(root.join("instances").join(format!("{id}.json")), config.to_string()).unwrap();
+        }
+        let profile = serde_json::from_value(serde_json::json!({"targetFps":144,"memoryMb":3072,"jvmProfile":"Default","graphics":"Fast","renderDistance":8,"simulationDistance":5,"averageFps":100,"onePercentLow":60,"lowRatio":0.6,"confidence":"Measured","benchmarkCompletedAt":123,"reasons":[]})).unwrap();
+        (root, profile)
+    }
+    #[test]
+    fn autotune_apply_counts_only_java_and_preserves_window_preferences() {
+        let (root, profile) = fixture();
+        let native_before = std::fs::read(root.join("instances/native.json")).unwrap();
+        let hidden_before = std::fs::read(root.join("hidden/options.txt")).unwrap();
+        assert_eq!(apply_autotune_profile_in(&root, &profile).unwrap(), 1);
+        let options = std::fs::read_to_string(root.join("java/options.txt")).unwrap();
+        for line in ["fullscreen:false", "enableVsync:true", "customSetting:keep", "maxFps:144", "renderDistance:8", "graphicsMode:0"] { assert!(options.contains(line)); }
+        assert_eq!(native_before, std::fs::read(root.join("instances/native.json")).unwrap());
+        assert_eq!(hidden_before, std::fs::read(root.join("hidden/options.txt")).unwrap());
+        assert!(root.join("autotune-profile.json").is_file());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[cfg(windows)]
+    #[test]
+    fn autotune_failed_save_restores_options_and_does_not_publish_defaults() {
+        let (root, profile) = fixture();
+        let path = root.join("instances/java.json");
+        let before = std::fs::read(root.join("java/options.txt")).unwrap();
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true); std::fs::set_permissions(&path, permissions.clone()).unwrap();
+        let result = apply_autotune_profile_in(&root, &profile);
+        permissions.set_readonly(false); std::fs::set_permissions(&path, permissions).unwrap();
+        assert!(result.unwrap_err().contains("Previous settings were restored"));
+        assert_eq!(before, std::fs::read(root.join("java/options.txt")).unwrap());
+        assert!(!root.join("autotune-profile.json").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[tauri::command]
+async fn apply_autotune_profile(profile: AutoTuneProfile, state: tauri::State<'_, LauncherState>) -> Result<usize, String> {
+    let active = state.launch_active.clone();
+    {
+        let mut guard = active.lock().map_err(|_| "The launcher is busy.")?;
+        if *guard || state.game_running.load(Ordering::SeqCst) { return Err("Close Minecraft and wait for downloads to finish before applying AutoTune.".into()); }
+        *guard = true;
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || apply_autotune_profile_blocking(profile))
+        .await.map_err(|error| format!("The AutoTune writer stopped unexpectedly: {error}"));
+    if let Ok(mut guard) = active.lock() { *guard = false; }
+    result?
 }
 
 fn java_major(path: &str) -> Option<u32> {
@@ -2256,29 +2307,7 @@ fn detect_java_installations_blocking() -> Vec<JavaInstallation> {
         .map(|runtime| (runtime.java_path.clone(), runtime.major_version))
         .collect::<std::collections::HashMap<_, _>>();
     candidates.extend(managed.into_iter().map(|runtime| runtime.java_path));
-    if let Ok(path) = std::env::var("PATH") {
-        for entry in std::env::split_paths(&path) {
-            let java = entry.join("java.exe");
-            if java.exists() {
-                candidates.push(java.to_string_lossy().to_string());
-            }
-        }
-    }
-    for root in ["ProgramFiles", "ProgramFiles(x86)"] {
-        if let Ok(base) = std::env::var(root) {
-            for folder in ["Java", "Eclipse Adoptium", "Microsoft"] {
-                let parent = std::path::PathBuf::from(&base).join(folder);
-                if let Ok(entries) = std::fs::read_dir(parent) {
-                    for entry in entries.flatten() {
-                        let java = entry.path().join("bin").join("java.exe");
-                        if java.exists() {
-                            candidates.push(java.to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
+    candidates.extend(platform::discover_java());
     candidates.sort();
     candidates.dedup();
     let installations = candidates
@@ -2288,9 +2317,10 @@ fn detect_java_installations_blocking() -> Vec<JavaInstallation> {
                 .get(&path)
                 .copied()
                 .or_else(|| java_major(&path));
+            let usable = major_version.is_some() && platform::java_matches_host(std::path::Path::new(&path));
             JavaInstallation {
                 path,
-                usable: major_version.is_some(),
+                usable,
                 major_version,
             }
         })
@@ -2330,17 +2360,9 @@ fn resolve_instance_target(
     directory: &str,
     instance_id: &str,
 ) -> Result<std::path::PathBuf, String> {
-    let game_dir = if directory.starts_with(".minecraft") {
-        std::env::var("APPDATA")
-            .map_err(|_| "APPDATA is unavailable.".to_string())?
-            .into()
-    } else {
-        std::path::PathBuf::from(directory)
-    };
-    let mut target = if directory.starts_with(".minecraft") {
-        game_dir.join(directory)
-    } else {
-        game_dir.join(instance_id)
+    let mut target = match platform::default_game_alias(directory)? {
+        Some(path) => path,
+        None => std::path::PathBuf::from(directory).join(instance_id),
     };
     if target
         .file_name()
@@ -2358,6 +2380,11 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
         return Err("Choose an instance name first.".into());
     }
     let mut config = config;
+    sakura::validate(&config)?;
+    if config.engine == sakura::Engine::Sakura {
+        config.mods = false; config.resource_packs = false; config.shader_packs = false; config.config = false;
+        config.jvm_arguments.clear(); config.shortcut = false; config.custom_resolution = false;
+    }
     config.id = config
         .name
         .to_lowercase()
@@ -2397,7 +2424,7 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
             apply_autotune_to_config(&mut config, &profile)?;
         }
     }
-    utilities::apply_active_setup_to_instance(&config)?;
+    if config.engine == sakura::Engine::Java { utilities::apply_active_setup_to_instance(&config)?; }
     let path = bloom_data_dir()?
         .join("instances")
         .join(format!("{}.json", config.id));
@@ -2588,6 +2615,7 @@ fn write_instance(config: &InstanceConfig) -> Result<(), String> {
 }
 
 fn content_folder(config: &InstanceConfig, category: &str) -> Result<std::path::PathBuf, String> {
+    if config.engine == sakura::Engine::Sakura { return Err("Sakura Alpha uses official Minecraft textures and does not load Java mods, resource packs, or shaders.".into()); }
     let folder = match category {
         "mods" => "mods",
         "resourcepacks" => "resourcepacks",
@@ -2832,6 +2860,7 @@ fn update_instance_settings(
         return Err("Memory must be between 1024 MB and 16384 MB.".into());
     }
     let mut config = load_instance(&instance_id)?;
+    if config.engine == sakura::Engine::Sakura { return Err("Use this Sakura instance's native settings instead of Java settings.".into()); }
     config.name = name.trim().to_string();
     config.memory = memory;
     config.jvm_arguments = jvm_arguments;
@@ -2994,24 +3023,24 @@ async fn import_instance_content_files(
 fn open_game_folder() -> Result<(), String> {
     let target = bloom_data_dir()?.join("minecraft");
     std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
-    command_without_console("explorer.exe")
-        .arg(target)
-        .spawn()
-        .map_err(|error| error.to_string())?;
-    Ok(())
+    platform::open_folder(&target)
 }
 
 const AUTOTUNE_INSTANCE_ID: &str = "bloom-autotune-benchmark";
-const AUTOTUNE_VERSION: &str = "26.2";
-const AUTOTUNE_FABRIC_LOADER: &str = "0.19.3";
-const AUTOTUNE_FABRIC_API: &str = "0.154.0+26.2";
-const AUTOTUNE_MOD: &[u8] = include_bytes!("../resources/bloom-autotune-benchmark-26.2.jar");
+const AUTOTUNE_VERSION: &str = autotune::VERSION;
+const AUTOTUNE_FABRIC_LOADER: &str = "0.19.5";
+const AUTOTUNE_FABRIC_API: &str = "0.163.0+26.3";
+const AUTOTUNE_MOD: &[u8] = include_bytes!("../resources/bloom-autotune-benchmark-26.3.jar");
 
 fn write_autotune_options(game_directory: &std::path::Path) -> Result<(), String> {
     let options = concat!(
         "version:4903\n",
         "enableVsync:false\n",
-        "fullscreen:true\n",
+        "fullscreen:false\n",
+        "pauseOnLostFocus:false\n",
+        "renderDistance:12\n",
+        "simulationDistance:8\n",
+        "graphicsPreset:\"fancy\"\n",
         "maxFps:260\n",
         "narrator:0\n",
         "narratorHotkey:false\n",
@@ -3036,14 +3065,14 @@ fn install_autotune_benchmark(
     app: tauri::AppHandle,
     state: tauri::State<'_, LauncherState>,
 ) -> Result<String, String> {
-    let appdata = std::env::var("APPDATA").map_err(|_| "APPDATA is unavailable.")?;
-    let game_directory = std::path::PathBuf::from(appdata)
-        .join(".minecraft")
+    let game_directory = platform::game_directory()?
         .join("instances")
         .join(AUTOTUNE_INSTANCE_ID);
-    let config = InstanceConfig {
+    let mut config = InstanceConfig {
         id: AUTOTUNE_INSTANCE_ID.into(),
         name: "Bloom AutoTune Benchmark".into(),
+        engine: sakura::Engine::Java,
+        sakura: None,
         icon: None,
         loader: "Fabric".into(),
         loader_version: Some(AUTOTUNE_FABRIC_LOADER.into()),
@@ -3056,11 +3085,10 @@ fn install_autotune_benchmark(
         resource_packs: false,
         shader_packs: false,
         config: true,
-        custom_resolution: false,
+        custom_resolution: true,
         visible: false,
         shortcut: false,
     };
-    write_instance(&config)?;
     {
         let mut active = state
             .launch_active
@@ -3075,6 +3103,7 @@ fn install_autotune_benchmark(
     let active = state.launch_active.clone();
     let cancel = state.cancel_requested.clone();
     let instance_id = AUTOTUNE_INSTANCE_ID.to_string();
+    emit_launch(&app, &instance_id, "installing", 0, "Preparing the private AutoTune instance");
     std::thread::spawn(move || {
         let result = (|| -> Result<(), String> {
             emit_launch(
@@ -3084,15 +3113,18 @@ fn install_autotune_benchmark(
                 1,
                 "Preparing the private AutoTune instance",
             );
+            config.memory = autotune::benchmark_memory(detect_hardware_report_blocking()?.ram_bytes)?;
             if game_directory.exists() {
+                autotune::require_managed_directory(&game_directory)?;
                 std::fs::remove_dir_all(&game_directory).map_err(|error| error.to_string())?;
             }
             let mods = game_directory.join("mods");
             std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
             std::fs::write(game_directory.join(".bloom-autotune-managed"), b"managed")
                 .map_err(|error| error.to_string())?;
+            write_instance(&config)?;
             write_autotune_options(&game_directory)?;
-            std::fs::write(mods.join("bloom-autotune-benchmark-26.2.jar"), AUTOTUNE_MOD)
+            std::fs::write(mods.join("bloom-autotune-benchmark-26.3.jar"), AUTOTUNE_MOD)
                 .map_err(|error| error.to_string())?;
             let mut plan = mc_launcher_core::net::download::DownloadPlan::default();
             plan.tasks.push(mc_launcher_core::net::download::DownloadTask {
@@ -3141,14 +3173,16 @@ fn install_autotune_benchmark(
 #[tauri::command]
 fn get_autotune_benchmark_result() -> Result<Option<serde_json::Value>, String> {
     let config = load_instance(AUTOTUNE_INSTANCE_ID)?;
-    let path = std::path::PathBuf::from(config.directory).join("bloom-benchmark-result.json");
+    let path = std::path::PathBuf::from(&config.directory).join("bloom-benchmark-result.json");
     if !path.exists() {
         return Ok(None);
     }
     let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-    serde_json::from_slice(&bytes)
-        .map(Some)
-        .map_err(|error| format!("Benchmark result is invalid: {error}"))
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| format!("Benchmark result is invalid: {error}"))?;
+    autotune::validate_result(&value)?;
+    let run_id = std::fs::read_to_string(std::path::PathBuf::from(config.directory).join("bloom-benchmark-run-id.txt")).map_err(|error| error.to_string())?;
+    if value["runId"].as_str() != Some(run_id.trim()) { return Err("The benchmark result belongs to an earlier run.".into()); }
+    Ok(Some(value))
 }
 
 #[tauri::command]
@@ -3162,6 +3196,17 @@ fn get_autotune_benchmark_status() -> Result<Option<serde_json::Value>, String> 
     serde_json::from_slice(&bytes)
         .map(Some)
         .map_err(|error| format!("Benchmark status is invalid: {error}"))
+}
+
+#[tauri::command]
+fn cancel_autotune_benchmark(state: tauri::State<'_, LauncherState>) -> Result<(), String> {
+    let launch = current_launch().lock().map_err(|_| "The benchmark status is busy.")?;
+    if launch.instance_id != AUTOTUNE_INSTANCE_ID || !matches!(launch.state.as_str(), "installing" | "launching" | "running") {
+        return Err("There is no active AutoTune test to stop.".into());
+    }
+    // A simultaneous resource-pack download must not redirect this cancellation.
+    state.cancel_requested.store(true, Ordering::SeqCst);
+    Ok(())
 }
 
 fn safe_pack_path(raw: &str) -> Result<std::path::PathBuf, String> {
@@ -3306,13 +3351,14 @@ fn import_fabric_modpack_path_with_icon(
         suffix += 1;
     }
     let game_directory =
-        std::path::PathBuf::from(std::env::var("APPDATA").map_err(|_| "APPDATA is unavailable.")?)
-            .join(".minecraft")
+        platform::game_directory()?
             .join("instances")
             .join(&id);
     let mut config = InstanceConfig {
         id: id.clone(),
         name,
+        engine: sakura::Engine::Java,
+        sakura: None,
         icon,
         loader: "Fabric".into(),
         loader_version: Some(fabric_version),
@@ -4355,6 +4401,7 @@ fn install_instance_files_internal(
     range_end: u8,
     repair: bool,
 ) -> Result<String, String> {
+    if config.engine == sakura::Engine::Sakura { return Err("Sakura does not use the Java installation pipeline.".into()); }
     let mut prepared_paths = Vec::new();
     let scale =
         |value: u8| range_start + (((range_end - range_start) as u16 * value as u16) / 100) as u8;
@@ -4480,7 +4527,7 @@ fn install_instance_files_internal(
         extract_natives_cached(&vanilla.libraries, minecraft_dir, &version_id, repair)
         .map_err(|error| error.to_string())?;
     }
-    cosmetics::reconcile(config)?;
+    if config.id != AUTOTUNE_INSTANCE_ID { cosmetics::reconcile(config)?; }
     prepared_paths.push(minecraft_dir.join("versions").join(&config.version).join(format!("{}.json", config.version)));
     prepared_paths.push(minecraft_dir.join("versions").join(&version_id).join(format!("{version_id}.json")));
     let natives = mc_launcher_core::install::natives::natives_directory(minecraft_dir, &version_id);
@@ -4500,7 +4547,7 @@ fn prepare_instance_files(app: &tauri::AppHandle, instance_id: &str, config: &In
     if launch_cache::reusable(config) {
         if let Some(receipt) = cache::read_json::<launch_cache::Receipt>("launch-installations", &launch_cache::key(config, root), None) {
             if receipt.valid() {
-                cosmetics::reconcile(config)?;
+                if config.id != AUTOTUNE_INSTANCE_ID { cosmetics::reconcile(config)?; }
                 emit_launch(app, instance_id, "installing", end, "Using verified Minecraft installation");
                 return Ok(receipt.version_id);
             }
@@ -4522,10 +4569,8 @@ fn selected_java(app: &tauri::AppHandle, instance_id: &str, config: &InstanceCon
     if let Some(path) = cached_selected_java(config, required) { return Ok(path); }
     let path = selected_java_uncached(app, instance_id, config, required, cancel)?;
     let mut files = vec![path.clone()];
-    if let Some(bin) = path.parent() {
-        let jvm = bin.join("server").join("jvm.dll");
-        if jvm.is_file() { files.push(jvm); }
-    }
+    let jvm = platform::java_library_stamp(&path);
+    if jvm.is_file() { files.push(jvm); }
     if let Some(receipt) = launch_cache::Receipt::capture(path.to_string_lossy().into_owned(), files) {
         let _ = cache::write_json("launch-java", &key, &receipt);
     }
@@ -4552,8 +4597,8 @@ fn selected_java_uncached(
             return Err(format!("Minecraft {} needs Java {required} or newer, but this instance is set to Java {found}.", config.version));
         }
         let path = std::path::PathBuf::from(configured_path);
-        let javaw = path.with_file_name("javaw.exe");
-        return Ok(if javaw.is_file() { javaw } else { path });
+        if !platform::java_matches_host(&path) { return Err("Choose a Java runtime matching this Mac’s architecture, or select Automatic.".into()); }
+        return Ok(platform::launch_java(path));
     }
     if let Some(java) = detect_java_installations_blocking()
         .into_iter()
@@ -4566,8 +4611,8 @@ fn selected_java_uncached(
         })
     {
         let path = std::path::PathBuf::from(java.path);
-        let javaw = path.with_file_name("javaw.exe");
-        return Ok(if javaw.is_file() { javaw } else { path });
+        if !platform::java_matches_host(&path) { return Err("Choose a Java runtime matching this Mac’s architecture, or select Automatic.".into()); }
+        return Ok(platform::launch_java(path));
     }
     download_managed_java(app, instance_id, required, cancel)
 }
@@ -4586,6 +4631,7 @@ async fn launch_minecraft(
         return Err("Download workers must be 1, 3, or 5.".into());
     }
     DOWNLOAD_WORKERS.store(download_workers as usize, Ordering::Relaxed);
+    let native_engine = load_instance(&instance_id)?.engine == sakura::Engine::Sakura;
     {
         let mut active = state
             .launch_active
@@ -4609,7 +4655,22 @@ async fn launch_minecraft(
             }
             "Sign in with Microsoft before launching Minecraft.".to_string()
         })?;
+    if instance_id == AUTOTUNE_INSTANCE_ID {
+        let prepared = (|| -> Result<(), String> {
+            let config = load_instance(&instance_id)?;
+            if config.version != AUTOTUNE_VERSION { return Err("Reinstall the Minecraft 26.3 benchmark before running this test.".into()); }
+            let directory = std::path::Path::new(&config.directory);
+            autotune::prepare_run(directory)?;
+            write_autotune_options(directory)?;
+            Ok(())
+        })();
+        if let Err(error) = prepared {
+            if let Ok(mut active) = state.launch_active.lock() { *active = false; }
+            return Err(error);
+        }
+    }
     let session_store = state.session.clone();
+    let session_retry = state.session.clone();
     let authentication_id = instance_id.clone();
     let authentication_error = Arc::new(Mutex::new(None::<String>));
     let authentication_error_for_task = authentication_error.clone();
@@ -4617,7 +4678,12 @@ async fn launch_minecraft(
     let mut authentication = launch_cache::AbortTask(tauri::async_runtime::spawn(async move {
         let outcome = async {
         let auth_started = std::time::Instant::now();
-        let session = launch_session(&stored_session).await?;
+        // Sakura's online join validates this session with Minecraft's session server.
+        // Reuse a still-fresh, previously authenticated keyring session without an
+        // extra profile HTTP roundtrip on the critical warm-launch path.
+        let session = if native_engine && launch_cache::fresh_session(stored_session.expires_at, launch_cache::now()) {
+            stored_session.clone()
+        } else { launch_session(&stored_session).await? };
         if session.access_token != stored_session.access_token || session.username != stored_session.username || session.expires_at != stored_session.expires_at {
             let to_save = session.clone();
             tauri::async_runtime::spawn_blocking(move || save_account_session(&to_save, true)).await.map_err(|_| "Secure account storage stopped unexpectedly.")??;
@@ -4626,9 +4692,9 @@ async fn launch_minecraft(
         let auth_ms = auth_started.elapsed().as_millis();
         let cosmetics_started = std::time::Instant::now();
         let cosmetic_session = session.clone();
-        let token = tauri::async_runtime::spawn_blocking(move || {
-            load_instance(&authentication_id).ok().and_then(|config| cosmetics::prepare_session(&config, &cosmetic_session))
-        }).await.map_err(|_| "Cosmetics preparation stopped unexpectedly.")?;
+        let token = if native_engine || authentication_id == AUTOTUNE_INSTANCE_ID { None } else { tauri::async_runtime::spawn_blocking(move || {
+            load_instance(&authentication_id).ok().filter(|config| config.engine == sakura::Engine::Java).and_then(|config| cosmetics::prepare_session(&config, &cosmetic_session))
+        }).await.map_err(|_| "Cosmetics preparation stopped unexpectedly.")? };
         Ok::<_, String>((session, token, auth_ms, cosmetics_started.elapsed().as_millis()))
         }.await;
         if let Err(error) = &outcome {
@@ -4641,6 +4707,7 @@ async fn launch_minecraft(
     let cancel_requested = state.cancel_requested.clone();
     let game_running = state.game_running.clone();
     let content_active = state.content_install_active.clone();
+    emit_launch(&app, &instance_id, "launching", 0, "Preparing Minecraft launch");
     std::thread::spawn(move || {
         let preparation_started = std::time::Instant::now();
         let config = match load_instance(&instance_id) {
@@ -4653,7 +4720,42 @@ async fn launch_minecraft(
                 return;
             }
         };
-        if let Err(error) = utilities::apply_active_setup_to_instance(&config) {
+        if config.engine == sakura::Engine::Sakura {
+            let result = (|| -> Result<(), String> {
+                let prepared = sakura::prepare(&app, &config, &cancel_requested, false)?;
+                let session = loop {
+                    if cancel_requested.load(Ordering::SeqCst) {
+                        if let Some(error) = authentication_error.lock().ok().and_then(|error| error.clone()) { return Err(format!("The selected Microsoft account needs to reconnect: {error}")); }
+                        return Err("__cancelled__".into());
+                    }
+                    if let Ok(result) = tauri::async_runtime::block_on(async { tokio::time::timeout(std::time::Duration::from_millis(25), &mut authentication.0).await }) {
+                        let (session, _, auth_ms, _) = result.map_err(|_| "Account preparation stopped unexpectedly.".to_string())??;
+                        emit_game_log(&app, &instance_id, "launcher", format!("Sakura timing: account {auth_ms} ms; preparation {} ms", preparation_started.elapsed().as_millis()));
+                        break session;
+                    }
+                };
+                sakura::run(&app, &config, prepared, &session, &cancel_requested, &game_running, launch_started, debug_logging)
+            })();
+            match result {
+                Ok(()) => emit_launch(&app, &instance_id, "idle", 0, "Sakura closed"),
+                Err(error) if error == "__cancelled__" => {
+                    if let Some(error) = authentication_error.lock().ok().and_then(|error| error.clone()) { emit_launch(&app, &instance_id, "error", 0, format!("The selected Microsoft account needs to reconnect: {error}")); }
+                    else { emit_launch(&app, &instance_id, "cancelled", 0, "Launch cancelled"); }
+                }
+                Err(error) => {
+                    if error.contains("Your Minecraft session expired") || error.contains("Your Minecraft session needs refreshing") {
+                        let retry = session_retry.lock().ok().and_then(|mut saved| { saved.as_mut().map(|session| { session.expires_at = 0; session.clone() }) });
+                        if let Some(session) = retry { let _ = save_account_session(&session, true); }
+                    }
+                    emit_launch(&app, &instance_id, "error", 0, error);
+                }
+            }
+            game_running.store(false, Ordering::SeqCst);
+            if let Ok(mut value) = active.lock() { *value = content_active.load(Ordering::SeqCst); }
+            let _ = app.emit("minecraft-process-state", false);
+            return;
+        }
+        if let Err(error) = if config.id == AUTOTUNE_INSTANCE_ID { Ok(()) } else { utilities::apply_active_setup_to_instance(&config) } {
             emit_launch(
                 &app,
                 &instance_id,
@@ -4976,6 +5078,7 @@ fn repair_minecraft_installation(
         let result = bloom_data_dir()
             .map(|path| path.join("minecraft"))
             .and_then(|shared| {
+                if config.engine == sakura::Engine::Sakura { return sakura::prepare(&app, &config, &cancel, true).map(|_| ()); }
                 install_instance_files_internal(&app, &instance_id, &config, &shared, &cancel, 1, 100, true)
                     .map(|_| ())
             });
@@ -5055,6 +5158,7 @@ pub fn run() {
             cosmetics::reconcile_cosmetics,
             save_custom_background,
             load_custom_background,
+            clear_custom_background,
             search_modrinth_content,
             get_modrinth_project_details,
             list_modrinth_modpack_releases,
@@ -5066,12 +5170,21 @@ pub fn run() {
             remove_managed_java_runtime,
             detect_hardware_report,
             apply_autotune_profile,
+            get_applied_autotune_profile,
             get_minecraft_releases,
             save_instance,
+            sakura::get_sakura_availability,
+            sakura::update_sakura_settings,
             list_instances,
+            instance_folders::list_instance_folders,
+            instance_folders::change_instance_folder,
             duplicate_instance,
+            instance_actions::rename_instance,
+            instance_actions::export_instance,
             delete_instance,
             list_instance_content,
+            content_transfer::preview_content_transfer,
+            content_transfer::copy_instance_content,
             toggle_instance_content,
             delete_instance_content,
             set_instance_icon,
@@ -5083,6 +5196,7 @@ pub fn run() {
             install_autotune_benchmark,
             get_autotune_benchmark_result,
             get_autotune_benchmark_status,
+            cancel_autotune_benchmark,
             import_fabric_modpack,
             import_modrinth_modpack,
             modpack_sharing::create_modpack_share,

@@ -7,6 +7,7 @@ src-tauri/gen/
 *.tsbuildinfo
 /src-tauri/resources/bloom-cosmetics-*.jar
 /src-tauri/resources/bloom-cosmetics-*.sha256
+/src-tauri/resources/sakura/
 # Unused local wordmark experiments from the retired sidebar brand treatment.
 /public/bloom-wordmark.png
 /public/bloom-wordmark-v2.png
@@ -26,3 +27,6 @@ tools/release-manager/publish/
 *.db
 *.db-shm
 *.db-wal
+
+# Native Mac sidecars staged by build-sakura; never commit build output.
+/src-tauri/binaries/sakura-*-apple-darwin

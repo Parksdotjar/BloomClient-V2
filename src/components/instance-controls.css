@@ -1,0 +1,13 @@
+/* Instance-only controls; shared action buttons and sidebar styling stay intact. */
+.instance-inline-name { display: block; min-width: 0; max-width: 100%; }
+.instance-name-trigger { display: block; max-width: 100%; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+.instance-name-trigger:hover { color: var(--text); }
+.instance-name-trigger:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 4px; }
+.instance-inline-name form { margin: 0; min-width: 0; }
+.instance-inline-name input { width: 100%; min-width: 0; min-height: 28px; padding: 0 5px; border: 1px solid var(--border); border-radius: 5px; background: var(--control); color: var(--text); font: inherit; letter-spacing: inherit; }
+.instance-inline-name input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent); outline-offset: 1px; }
+.instance-name-error { display: block; margin-top: 7px; color: var(--theme-danger-ink, #ef5a5a); font-size: 11px; font-weight: 500; white-space: normal; letter-spacing: normal; }
+.library-card-copy h2 { overflow: visible; }
+.library-artwork-open { padding: 0; border: 0; border-radius: 12px; background: transparent; color: inherit; }
+.instance-library-menu { overflow-y: auto; scrollbar-width: none; }
+.instance-library-menu::-webkit-scrollbar { display: none; }

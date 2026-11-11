@@ -221,8 +221,9 @@ fn reconcile_with_preference(config: &InstanceConfig, enabled: bool) -> Result<(
     }
     if let Some(version) = config.loader_version.as_deref() {
         let numbers: Vec<u32> = version.split('.').map(|v| v.parse().unwrap_or(0)).collect();
-        if numbers.as_slice() < [0, 19, 2].as_slice() {
-            return Err("Bloom capes need Fabric Loader 0.19.2 or newer. Update the instance loader or disable Bloom cosmetics.".into());
+        let minimum = match config.version.as_str() { "26.3" => 5, "26.2" => 3, _ => 2 };
+        if numbers.as_slice() < [0, 19, minimum].as_slice() {
+            return Err(format!("Bloom cosmetics for Minecraft {} need Fabric Loader 0.19.{minimum} or newer. Update the instance loader or disable Bloom cosmetics.", config.version));
         }
     }
     if bundled_jar.is_empty() {
@@ -352,10 +353,13 @@ pub async fn cosmetics_request(
     let authorized = matches!(
         (method.as_str(), path.as_str()),
         ("GET", "/v1/cosmetics/me")
+            | ("GET", "/v1/capes/locker")
+            | ("POST", "/v1/capes/redeem")
+            | ("POST", "/v1/capes/claim")
             | ("PUT", "/v1/capes/equipped")
             | ("PUT", "/v1/cosmetics/badge")
-    );
-    if !authorized && !(method == "GET" && path == "/v1/capes") {
+    ) || (method == "GET" && path == "/v1/capes/shop" && account_id.is_some());
+    if !authorized && !(method == "GET" && matches!(path.as_str(), "/v1/capes" | "/v1/capes/shop")) {
         return Err("Unsupported cape operation".into());
     }
     if !live() {
@@ -374,6 +378,12 @@ pub async fn cosmetics_request(
             return Err("The account changed. Open Locker again.".into());
         }
     }
+    let catalog_request = method == "GET" && matches!(path.as_str(), "/v1/capes" | "/v1/capes/locker" | "/v1/capes/shop");
+    let catalog_key = if path == "/v1/capes/locker" {
+        format!("cape-locker-owned-v2-{}", session.as_ref().ok_or("Sign in to Minecraft first.")?.uuid)
+    } else if path == "/v1/capes/shop" {
+        format!("cape-shop-v1-{}", session.as_ref().map(|s| s.uuid.as_str()).unwrap_or("public"))
+    } else { "published-cape-catalog-v1".to_string() };
     for attempt in 0..2 {
         let mut request = bloom_backend_request(
             reqwest::Method::from_bytes(method.as_bytes()).map_err(|e| e.to_string())?,
@@ -388,13 +398,15 @@ pub async fn cosmetics_request(
         }
         let response = match request.send().await {
             Ok(response) => response,
-            Err(_) if method == "GET" && path == "/v1/capes" => {
+            Err(_) if catalog_request => {
                 if let Some(cached) = super::cache::read_json::<serde_json::Value>(
                     "cosmetic-catalog",
-                    "published-cape-catalog-v1",
+                    &catalog_key,
                     None,
                 ) {
-                    return Ok(hydrate_cosmetic_catalog(cached).await);
+                    let mut value = hydrate_cosmetic_catalog(cached).await;
+                    value["offline"] = true.into();
+                    return Ok(value);
                 }
                 return Err("The cape service could not be reached.".into());
             }
@@ -409,6 +421,28 @@ pub async fn cosmetics_request(
             }
         }
         if !response.status().is_success() {
+            if path == "/v1/capes/claim" {
+                return Err(match response.status().as_u16() {
+                    404 => "This cape is no longer available in Shop.",
+                    429 => "Too many requests. Wait a minute and try again.",
+                    401 => "Sign in to Minecraft again to add this cape.",
+                    _ => "The cape could not be added. Please try again.",
+                }.into());
+            }
+            if path == "/v1/capes/redeem" {
+                let status = response.status().as_u16();
+                let data: serde_json::Value = response.json().await.unwrap_or_default();
+                let message = match data["error"].as_str().unwrap_or("") {
+                    "invalid_code" => "That code doesn't look right. Check it and try again.",
+                    "code_already_used" => "That code has already been claimed.",
+                    "cape_already_claimed" => "You already have this cape. This code is still unused.",
+                    "code_unavailable" => "That code is invalid or no longer available.",
+                    "too_many_requests" => "Too many attempts. Wait a minute and try again.",
+                    _ if status == 401 => "Sign in to Minecraft again to redeem a code.",
+                    _ => "The code could not be redeemed. Please try again.",
+                };
+                return Err(message.into());
+            }
             return Err(format!(
                 "The cape service could not complete this action ({}).",
                 response.status()
@@ -418,9 +452,8 @@ pub async fn cosmetics_request(
             .json()
             .await
             .map_err(|_| "Invalid cape service response.".to_string())?;
-        if method == "GET" && path == "/v1/capes" {
-            let cache_key = "published-cape-catalog-v1";
-            let _ = super::cache::write_json("cosmetic-catalog", cache_key, &value);
+        if catalog_request {
+            let _ = super::cache::write_json("cosmetic-catalog", &catalog_key, &value);
             value = hydrate_cosmetic_catalog(value).await;
         }
         return Ok(value);
@@ -534,7 +567,7 @@ mod tests {
         let directory =
             std::env::temp_dir().join(format!("bloom-cosmetics-test-{}", uuid::Uuid::new_v4()));
         let mut config: InstanceConfig = serde_json::from_value(serde_json::json!({
-            "id":"test", "name":"Test", "loader":"Fabric", "loaderVersion":"0.19.2",
+            "id":"test", "name":"Test", "loader":"Fabric", "loaderVersion":"0.19.5",
             "version":"1.21.11", "directory":directory.join("instance"), "java":"auto",
             "memory":2048, "jvmArguments":"", "mods":true, "resourcePacks":true,
             "shaderPacks":true, "config":true, "customResolution":false,
