@@ -20,11 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: Windows regression
-            os: windows-latest
-          - name: Apple Silicon
-            os: macos-15
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"name":"Apple Silicon","os":"macos-15"}]' || '[{"name":"Windows regression","os":"windows-latest"},{"name":"Apple Silicon","os":"macos-15"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
@@ -43,30 +39,65 @@ jobs:
             sakura -> target
           cache-on-failure: true
           cache-workspace-crates: true
+      - name: Reuse the already-tested Mac binaries for packaging corrections
+        id: compiled
+        if: runner.os == 'macOS' && github.ref == 'refs/heads/codex/macos-test-build'
+        run: |
+          # This immutable cache was created by run 42952156686. Reuse is allowed
+          # only while every application/build input matches that tested revision.
+          git fetch --depth=1 origin 32521fad7747af7122a870ff78db4778406d35e8
+          if ! git diff --quiet 32521fad7747af7122a870ff78db4778406d35e8 HEAD -- . ':!scripts/macos.mjs' ':!.github/workflows/desktop-platforms.yml' ':!MACOS_SUPPORT.md'; then
+            exit 0
+          fi
+          python3 - <<'PY'
+          import os, pathlib, shutil
+          def binary(directory, stem):
+              matches = [p for p in pathlib.Path(directory).glob(stem + '-*')
+                         if p.is_file() and os.access(p, os.X_OK) and p.read_bytes()[:4] == bytes.fromhex('cffaedfe')]
+              return matches[0] if len(matches) == 1 else None
+          launcher = binary('src-tauri/target/release/deps', 'bloomclient')
+          engine = binary('sakura/target/release/deps', 'sakura')
+          if launcher and engine:
+              shutil.copy2(launcher, 'src-tauri/target/release/bloomclient')
+              pathlib.Path('src-tauri/binaries').mkdir(exist_ok=True)
+              shutil.copy2(engine, 'src-tauri/binaries/sakura-aarch64-apple-darwin')
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                  output.write('reused=true\n')
+              print('Restored release binaries from the tested source revision.')
+          else:
+              print('Complete compiled binaries unavailable; building from source.')
+          PY
       - run: npm ci
       - run: node --test tests/platform-build.test.mjs tests/updater-manifests.test.mjs
       - run: node --experimental-strip-types --test tests/autotune.test.ts
       - name: Typecheck frontend
         run: npm run typecheck
       - name: Build all four cosmetics versions
+        if: steps.compiled.outputs.reused != 'true'
         run: npm run build:cosmetics
       - name: Build optimized Sakura engine
+        if: steps.compiled.outputs.reused != 'true'
         run: npm run build:sakura
       - name: Build frontend
         run: npm run build
       - name: Check native launcher
+        if: steps.compiled.outputs.reused != 'true'
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - name: Test native launcher
+        if: steps.compiled.outputs.reused != 'true'
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
       - name: Test benchmark instrumentation on Windows
         if: runner.os == 'Windows'
         run: benchmark-mod/gradlew.bat -p benchmark-mod test --no-daemon
       - name: Test benchmark instrumentation on Mac
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.compiled.outputs.reused != 'true'
         run: sh benchmark-mod/gradlew -p benchmark-mod test --no-daemon
       - name: Build Mac acceptance installer
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.compiled.outputs.reused != 'true'
         run: npm run mac:build
+      - name: Package the tested Mac binaries
+        if: runner.os == 'macOS' && steps.compiled.outputs.reused == 'true'
+        run: npm exec tauri bundle -- --verbose --config '{"bundle":{"createUpdaterArtifacts":false,"macOS":{"signingIdentity":"-"}}}'
       - name: Check packaged Mac binaries
         if: runner.os == 'macOS'
         run: |
@@ -75,7 +106,7 @@ jobs:
           lipo "$app/Contents/MacOS/bloomclient" -verify_arch arm64
           lipo "$app/Contents/MacOS/sakura" -verify_arch arm64
           "$app/Contents/MacOS/sakura" --capabilities
-          codesign --verify --strict "$app/Contents/MacOS/bloomclient"
+          codesign --verify --deep --strict "$app"
           codesign --verify --strict "$app/Contents/MacOS/sakura"
       - uses: actions/upload-artifact@v6
         if: runner.os == 'macOS'

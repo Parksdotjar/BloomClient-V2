@@ -34,5 +34,5 @@ else if (action === "check") {
   // This helper does not provision credentials or publish; shipping signatures remain a separate release step.
   // Compiler caches may contain old mounted-image intermediates. Always package fresh outputs.
   rmSync(resolve(root, "src-tauri", "target", "release", "bundle"), { recursive: true, force: true });
-  run("npm", ["run", "tauri:build", "--", "--verbose", "--config", '{"bundle":{"createUpdaterArtifacts":false}}']);
+  run("npm", ["run", "tauri:build", "--", "--verbose", "--config", '{"bundle":{"createUpdaterArtifacts":false,"macOS":{"signingIdentity":"-"}}}']);
 }
