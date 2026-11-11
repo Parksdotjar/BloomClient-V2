@@ -72,8 +72,8 @@ jobs:
         run: |
           app="src-tauri/target/release/bundle/macos/Bloom Client.app"
           test -d "$app"
-          lipo -verify_arch arm64 "$app/Contents/MacOS/bloomclient"
-          lipo -verify_arch arm64 "$app/Contents/MacOS/sakura"
+          lipo "$app/Contents/MacOS/bloomclient" -verify_arch arm64
+          lipo "$app/Contents/MacOS/sakura" -verify_arch arm64
           "$app/Contents/MacOS/sakura" --capabilities
           codesign --verify --strict "$app/Contents/MacOS/bloomclient"
           codesign --verify --strict "$app/Contents/MacOS/sakura"
