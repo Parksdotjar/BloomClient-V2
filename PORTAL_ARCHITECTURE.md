@@ -1,0 +1,27 @@
+# Portal
+
+Portal occupies the former global Settings sidebar position. Client settings remains in the account menu, including when signed out, and in the existing menu/quick-switcher shortcuts. Instance headers and content navigation are unchanged.
+
+## Discovery and ownership
+
+`src-tauri/src/portal.rs` reads each visible Java instance's `servers.dat` and `saves/*/level.dat` using bounded NBT decoding. World names and last-played timestamps come from Minecraft metadata; thumbnails use bounded local PNG data. Invalid files produce per-instance warnings without discarding healthy destinations. Canonical world paths must stay immediately inside that instance's saves directory.
+
+An entry's identity hashes its instance ID, kind and target. Server addresses are normalized, so the default port and host casing do not create duplicates; the same server in two instances remains two distinct launch choices. Bloom's additional server shortcuts, favorites and recent joins live in `BloomClient/portal.json`, serialized through one mutex and replaced only after a complete temporary file is synced. Discovery and shortcut removal never modify Minecraft's server list or saves.
+
+## Direct launch and recent sessions
+
+The existing `launch_minecraft` command accepts an optional `portalTarget` (`kind`, `target`). Home, instance Play, AutoTune and existing callers can omit it. Portal launches retain the existing account, Java, loader, mods, global sync, download queue guards, logs and lifecycle handling. Arguments are separate process arguments, never shell text.
+
+Direct play is offered for release versions 1.20 and later, including the 26.x version scheme. After installation, the merged game's argument metadata must also advertise Quick Play support. Missing worlds, unsafe paths, older releases and worlds saved in a newer or incomparable version are rejected. Users can open the owning instance normally to review Minecraft's version/backup flow. Snapshots are intentionally not offered for direct play yet.
+
+For every supported normal launch, Bloom passes a unique relative `--quickPlayPath` under the instance's `.bloom/quick-play/`. AutoTune is excluded. While Minecraft runs, its existing process loop checks that small log at most once per second and once after exit. Vanilla writes the log after joining; merely clicking Play does not create a recent server. Unchanged and partial writes are ignored/retried. Recorded entries preserve favorites and user-named shortcuts. Logs are removed on normal process cleanup. A Bloom crash may leave a small orphan log, but a future run never reuses it.
+
+The on-disk codec was verified against the installed Minecraft 26.3 client: an array of records containing `type`, `id`, `name`, `lastPlayedTime` and `gamemode`. The parser also accepts `identifier` for compatibility with older documentation. Realms are ignored because this page does not implement Realms authentication or listing. The recorded timestamp is when Bloom observes the successful join (normally within one second); existing singleplayer recency also comes from `LastPlayed` in level.dat.
+
+## UI and refresh
+
+`PortalPage.tsx` renders a compact server list beneath the raised header. Search, the view selector, filter controls and each destination group use separate surfaces with visible page background between them. Servers and Worlds have independent list panels, with group headings outside. The Add server form remains attached to its header. Each row contains saved artwork or an existing fallback, the destination name, one secondary line (server address or world instance), favorite, options and Join/Play. There are no cards, Continue section or persistent counts. The options menu exposes the owning instance, version, full launch restriction, Open instance, native Copy address, and removal for Portal-only shortcuts. No server status is invented. Server rows without a working custom icon use Minecraft’s actual default server image (`public/minecraft-default-server.png`), extracted unchanged from `assets/minecraft/textures/misc/unknown_server.png` in the locally installed Minecraft 26.3 client. Keep its pixel art crisp; custom server icons retain precedence.
+
+Search and All/Servers/Worlds combine with favorites and an attached filter drawer for stable instance-ID filtering and recent/name/instance sorting. All groups the filtered results beneath subtle Servers and Worlds headings; empty groups are omitted and dedicated tabs have no duplicate heading. Sorting applies within each group. Name and ID break ties deterministically; a deleted instance filter falls back to all instances. All mutations await native persistence, and an older discovery read cannot overwrite a confirmed mutation. Copy feedback appears only after the existing `copy_text_to_clipboard` command succeeds.
+
+Add server uses a persistent Add/Back button with the shared icon swap and an attached inline form. Fields remain filled on failure or closing/reopening, clear after success, and reset filters so the saved server is visible. The existing custom Select handles instance choice; Escape closes its menu before the form. Empty, filtered, initial-read failure and loading states retain real recovery actions. Shared drawer transitions, favorite transitions, copy confirmation and brief save feedback respect reduced motion, animation-off and Ultra performance mode. This supersedes the November 17 card proposal rejected by Parks; the current visual implementation awaits review.

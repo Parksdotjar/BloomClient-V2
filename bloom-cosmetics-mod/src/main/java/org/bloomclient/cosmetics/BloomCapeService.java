@@ -27,7 +27,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 
 public final class BloomCapeService {
-    private static final Logger LOGGER = LoggerFactory.getLogger("Bloom Cosmetics");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Delight Cosmetics");
     private static final BloomCapeService INSTANCE = new BloomCapeService();
     private static final int MAX_STATIC_BYTES = 40 * 1024 * 1024;
     private static final int MAX_ATLAS_BYTES = 32 * 1024 * 1024;
@@ -49,7 +49,7 @@ public final class BloomCapeService {
     public void start() {
         if (!started.compareAndSet(false, true)) return;
         BloomCosmeticsRuntime.scheduleRefresh(this::refreshObservedPlayers);
-        LOGGER.info("Bloom Cosmetics is ready for live static and animated cape updates.");
+        LOGGER.info("Delight Cosmetics is ready for live static and animated cape updates.");
     }
 
     public UUID observePlayer(UUID uuid) {
@@ -112,7 +112,7 @@ public final class BloomCapeService {
         long now = System.currentTimeMillis(), next = nextWarning.get();
         if (now >= next && nextWarning.compareAndSet(next, now + 60_000)) {
             // Never log signed URLs, response bodies, player UUIDs or session tokens.
-            LOGGER.warn("Bloom cape lookup or texture download failed; retrying automatically. Check the cosmetics service connection if the cape stays missing.");
+            LOGGER.warn("Delight cape lookup or texture download failed; retrying automatically. Check the cosmetics service connection if the cape stays missing.");
         }
     }
 
@@ -274,7 +274,7 @@ public final class BloomCapeService {
             long size=(long)image.getWidth()*image.getHeight()*4;
             if(!reserve(size)) { image.close(); return CompletableFuture.failedFuture(new IllegalStateException("Cape memory budget reached")); }
             return BloomCosmeticsRuntime.registerTexture(
-                    "capes", cape.capeId, cape.revision, "Bloom cape " + cape.capeId, image)
+                    "capes", cape.capeId, cape.revision, "Delight cape " + cape.capeId, image)
                 .thenApply(identifier -> new LoadedCape(List.of(identifier),0,false,size,allocated))
                 .whenComplete((result,error)->{if(error!=null)allocated.addAndGet(-size);});
         } catch (Exception error) {
@@ -295,7 +295,7 @@ public final class BloomCapeService {
             long size=(long)image.getWidth()*image.getHeight()*4;
             if(!reserve(size)) { image.close(); return CompletableFuture.failedFuture(new IllegalStateException("Cape memory budget reached")); }
             return BloomCosmeticsRuntime.registerTexture(
-                    "elytra", cape.capeId, cape.revision, "Bloom elytra " + cape.capeId, image)
+                    "elytra", cape.capeId, cape.revision, "Delight elytra " + cape.capeId, image)
                 .thenApply(identifier -> new LoadedTexture(identifier,size))
                 .whenComplete((result,error)->{if(error!=null)allocated.addAndGet(-size);});
         } catch (Exception error) {
@@ -340,7 +340,7 @@ public final class BloomCapeService {
                 registrations.add(BloomCosmeticsRuntime.registerTexture(
                     "capes", cape.capeId,
                     animation.revision + "-frame-" + index,
-                    "Bloom animated cape " + cape.capeId + " frame " + index,
+                    "Delight animated cape " + cape.capeId + " frame " + index,
                     frame
                 ));
             }

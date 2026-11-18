@@ -84,7 +84,7 @@ fn paths(request: &Transfer) -> Result<Paths, String> {
         return Err(format!("Only .{extension} files can be copied here."));
     }
     if request.category == "mods" && cosmetics::is_managed_file(&request.file_name) {
-        return Err("Bloom manages this mod separately for each instance.".into());
+        return Err("Delight manages this mod separately for each instance.".into());
     }
     let source_config = load_instance(&request.source_id)?;
     let target = load_instance(&request.target_id)?;

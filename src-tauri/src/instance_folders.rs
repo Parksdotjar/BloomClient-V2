@@ -40,7 +40,7 @@ fn read_store(path: &Path) -> Result<Store, String> {
             Ok(store)
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Store::default()),
-        Err(error) => Err(format!("Bloom could not read instance folders: {error}")),
+        Err(error) => Err(format!("Delight could not read instance folders: {error}")),
     }
 }
 
@@ -55,7 +55,7 @@ fn write_store(path: &Path, store: &Store) -> Result<(), String> {
         fs::rename(&temporary, path).map_err(|e| e.to_string())
     })();
     if result.is_err() { let _ = fs::remove_file(&temporary); }
-    result.map_err(|error| format!("Bloom could not save instance folders: {error}"))
+    result.map_err(|error| format!("Delight could not save instance folders: {error}"))
 }
 
 fn prune(store: &mut Store, valid: &HashSet<String>) {

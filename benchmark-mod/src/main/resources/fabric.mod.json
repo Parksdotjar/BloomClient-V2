@@ -2,9 +2,10 @@
   "schemaVersion": 1,
   "id": "bloom_autotune",
   "version": "${version}",
-  "name": "Bloom Benchmark",
+  "name": "Delight Benchmark",
+  "icon": "assets/bloom_autotune/icon.png",
   "description": "A standardized, fixed-seed Minecraft performance benchmark with average FPS, 1% lows, frame times, and memory measurements.",
-  "authors": ["Bloom Client"],
+  "authors": ["Delight Client"],
   "contact": {
     "homepage": "https://bloomclient.org",
     "sources": "https://github.com/Parksdotjar/BlimClient",
@@ -16,8 +17,8 @@
     "client": ["dev.bloomclient.benchmark.BloomBenchmarkClient"]
   },
   "depends": {
-    "fabricloader": ">=0.19.3",
-    "minecraft": "~26.2",
+    "fabricloader": ">=0.19.5",
+    "minecraft": "=26.3",
     "java": ">=25",
     "fabric-api": "*"
   }

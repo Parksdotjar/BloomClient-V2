@@ -13,7 +13,7 @@ public final class EmoteWheelScreen extends Screen {
     private boolean keyboard, finished;
     private double lastX=-1,lastY=-1;
     private final List<int[]> spans=new ArrayList<>();
-    public EmoteWheelScreen(){super(Text.literal("Bloom Emotes"));}
+    public EmoteWheelScreen(){super(Text.literal("Delight Emotes"));}
     @Override public boolean shouldPause(){return false;}
     @Override protected void init(){
         radius=Math.max(60,Math.min(115,Math.min(width/2-12,height/2-32)));

@@ -31,8 +31,8 @@
 .content-toolbar .manager-tools { flex-shrink: 0; }
 .content-toolbar-filter-slot { display: grid; grid-template-columns: 1fr; opacity: 1; transition: grid-template-columns 280ms ease, opacity 180ms ease, margin 280ms ease; }
 .content-toolbar-filter-slot > button { min-width: 0; overflow: hidden; }
-.content-toolbar[data-mode="catalog"] .content-toolbar-filter-slot { grid-template-columns: 0fr; opacity: 0; margin-right: -10px; }
-.content-toolbar[data-mode="catalog"] .content-filter-trigger { width: 0; padding: 0; border-width: 0; }
+.content-toolbar[data-mode="catalog"]:not([data-catalog-filters="true"]) .content-toolbar-filter-slot { grid-template-columns: 0fr; opacity: 0; margin-right: -10px; }
+.content-toolbar[data-mode="catalog"]:not([data-catalog-filters="true"]) .content-filter-trigger { width: 0; padding: 0; border-width: 0; }
 .content-toolbar .content-filter-trigger { transition: color 180ms ease, background-color 180ms ease; }
 .content-toolbar .content-filter-trigger[data-filtered="true"] { color: var(--accent-ink, var(--accent)); }
 .content-toolbar .content-filter-trigger[aria-expanded="true"] { background: var(--dropdown-selected); color: var(--text); }

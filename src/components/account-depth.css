@@ -1,0 +1,104 @@
+/* The identity card shares the sidebar's ceramic finish; undo-logout.css applies its darker footer variant. */
+.app-shell > .sidebar > .profile {
+  --account-face-top: color-mix(in srgb, var(--panel-strong) 90%, #fff);
+  --account-face-bottom: color-mix(in srgb, var(--panel-strong) 75%, var(--page));
+  --account-face-focus: color-mix(in srgb, var(--panel-strong) 82%, #fff);
+  --account-ceramic-edge: var(--theme-highlight, #ffffff0c);
+  --account-ceramic-shadow: var(--theme-shadow, #0009);
+}
+:root[data-theme="light"] .app-shell > .sidebar > .profile {
+  --account-face-top: #e9e9e9;
+  --account-face-bottom: #d4d4d4;
+  --account-face-focus: #f4f4f4;
+  --account-ceramic-edge: #ffffff30;
+  --account-ceramic-shadow: #a0a0a044;
+}
+/* Paint on the moving dock only, including custom backgrounds. Its trigger
+   must stay transparent so a second surface cannot cover the bevels. */
+.app-shell > .sidebar > .profile > .signed-in {
+  border: 0 !important;
+  background: linear-gradient(160deg, var(--account-face-top) 20%, var(--account-face-bottom)) !important;
+  box-shadow: inset 1px 2px 2px var(--account-ceramic-edge),
+    inset -1px -2px 3px var(--theme-shadow-soft, #0003),
+    0 6px 10px var(--account-ceramic-shadow) !important;
+}
+.app-shell > .sidebar > .profile > .signed-in.menu-open {
+  box-shadow: inset 1px 2px 2px var(--account-ceramic-edge),
+    inset -1px -2px 3px var(--theme-shadow-soft, #0003),
+    0 10px 13px -8px var(--theme-shadow, #000f),
+    0 23px 30px -17px var(--theme-shadow, #000d) !important;
+}
+.app-shell > .sidebar > .profile > .signed-in > .profile-trigger {
+  outline: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+/* Keyboard focus brightens the material instead of drawing a ring around it. */
+.app-shell > .sidebar > .profile > .signed-in:has(> .profile-trigger:focus-visible) {
+  --account-face-top: var(--account-face-focus);
+}
+
+/* The menu reads as its own surface without a perimeter stroke. Keep the
+   established stationary reveal behind the moving identity dock. */
+.app-shell > .sidebar > .profile:has(> .profile-popover.open > .undo-logout) {
+  filter: drop-shadow(0 12px 16px var(--account-ceramic-shadow));
+}
+.app-shell .profile-popover:has(> .undo-logout) {
+  --account-menu-fill: linear-gradient(160deg, var(--theme-surface, #111314), var(--theme-inset, #0b0d0e));
+  padding: 24px 8px 8px;
+  border: 0; outline: 0; border-radius: 0 0 14px 14px; box-shadow: none;
+  /* Stay opaque and distinct when wallpaper glass is enabled. */
+  background: var(--account-menu-fill) !important;
+}
+.app-shell[data-custom-background="on"] > .sidebar > .profile > .profile-popover:has(> .undo-logout) { background: var(--account-menu-fill) !important; }
+.app-shell .profile-popover:has(> .undo-logout) > .profile-popover-actions { gap: 4px; }
+.app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button {
+  min-height: 44px; padding: 4px 8px; border: 0; outline: 0; box-shadow: none;
+  grid-template-columns: 28px minmax(0, 1fr) 12px; gap: 8px;
+  color: var(--theme-ink, #f1f4f1);
+}
+.app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--theme-ink, #f1f4f1) 7%, var(--theme-surface, #111314));
+}
+.app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button:active {
+  background: var(--theme-inset, #080a0b);
+}
+.app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions b { font-size: 12px; }
+.app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button > span { width: 28px; height: 28px; }
+.app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button > svg { opacity: .45; transition: opacity 180ms ease; }
+.app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button:is(:hover, :focus-visible) > svg { opacity: 1; }
+.app-shell .profile-popover:has(> .undo-logout) > .profile-popover-rule { height: 0; margin: 8px 0 0; }
+.app-shell[data-sidebar-collapsed="true"] .profile-popover:has(> .undo-logout) { padding-inline: 5px; }
+.app-shell[data-sidebar-collapsed="true"] .profile-popover:has(> .undo-logout) .profile-popover-actions > button { padding-inline: 0; grid-template-columns: 1fr; gap: 0; }
+:root:is([data-animations="off"], [data-performance="ultra"]) .app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button > svg { transition: none !important; }
+:root[data-performance="ultra"] .app-shell > .sidebar > .profile { filter: none; }
+@media (prefers-reduced-motion: reduce) { .app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button > svg { transition: none !important; } }
+
+.app-shell .profile-popover > .profile-logout {
+  background: color-mix(in srgb, var(--theme-danger-surface, #b72f39) 16%, var(--theme-inset, #090b0c));
+  box-shadow: inset 0 7px 12px -7px var(--theme-shadow, #000d);
+  transition: background-color 240ms ease, box-shadow 240ms ease, color 240ms ease;
+}
+.app-shell .profile-popover > .profile-logout:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--theme-danger-surface, #b72f39) 28%, var(--theme-inset, #090b0c));
+  box-shadow: inset 0 4px 10px -6px var(--theme-shadow, #000d);
+}
+.app-shell .profile-popover > .profile-logout:active {
+  box-shadow: inset 0 9px 12px -7px var(--theme-shadow, #000e);
+}
+.app-shell .profile-popover > .profile-logout > span > svg {
+  filter: drop-shadow(0 2px 2px var(--theme-shadow, #0008));
+  transition: transform 260ms cubic-bezier(.2,.8,.2,1);
+}
+.app-shell .profile-popover > .profile-logout:is(:hover, :focus-visible) > span > svg {
+  transform: translateX(3px);
+}
+:root:is([data-animations="off"], [data-performance="ultra"]) .app-shell .profile-logout,
+:root:is([data-animations="off"], [data-performance="ultra"]) .app-shell .profile-logout > span > svg {
+  transition: none;
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .profile-popover > .profile-logout,
+  .app-shell .profile-popover > .profile-logout > span > svg { transition: none; transform: none !important; }
+}

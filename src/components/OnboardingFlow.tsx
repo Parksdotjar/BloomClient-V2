@@ -37,9 +37,9 @@ function safeMicrosoftUrl(value: string) {
 function OnboardingTitlebar() {
   return <header className="onboarding-titlebar" data-tauri-drag-region>
     <div className="onboarding-window-controls">
-      <button aria-label="Minimize Bloom Client" onClick={() => void getCurrentWindow().minimize()}><Minus size={16} /></button>
-      <button aria-label="Maximize or restore Bloom Client" onClick={() => void getCurrentWindow().toggleMaximize()}><Maximize2 size={15} /></button>
-      <button className="close" aria-label="Close Bloom Client" onClick={() => void invoke("exit_application")}><X size={17} /></button>
+      <button aria-label="Minimize Delight Client" onClick={() => void getCurrentWindow().minimize()}><Minus size={16} /></button>
+      <button aria-label="Maximize or restore Delight Client" onClick={() => void getCurrentWindow().toggleMaximize()}><Maximize2 size={15} /></button>
+      <button className="close" aria-label="Close Delight Client" onClick={() => void invoke("exit_application")}><X size={17} /></button>
     </div>
   </header>;
 }
@@ -47,7 +47,7 @@ function OnboardingTitlebar() {
 export function OnboardingSplash() {
   return <div className="onboarding-shell onboarding-splash">
     <OnboardingTitlebar />
-    <main className="onboarding-main"><div className="onboarding-brand" aria-label="Starting Bloom Client"><img src={new URL("bloom-logo.png", document.baseURI).href} alt="" /></div></main>
+    <main className="onboarding-main"><div className="onboarding-brand" aria-label="Starting Delight Client"><img src={new URL("delight-logo.png", document.baseURI).href} alt="" /></div></main>
   </div>;
 }
 
@@ -114,7 +114,7 @@ export function OnboardingFlow({
     try {
       await openUrl(verificationUrl);
     } catch {
-      setError("Bloom could not open your browser.");
+      setError("Delight could not open your browser.");
     }
   };
 
@@ -125,8 +125,8 @@ export function OnboardingFlow({
       <main className="onboarding-main">
         <section className={`onboarding-flow phase-${phase}`} aria-live="polite">
           {phase === "welcome" && <div className="onboarding-step onboarding-welcome">
-            <img className="onboarding-step-logo" src={new URL("bloom-logo.png", document.baseURI).href} alt="" />
-            <h1>Welcome to Bloom</h1>
+            <img className="onboarding-step-logo" src={new URL("delight-logo.png", document.baseURI).href} alt="" />
+            <h1>Welcome to Delight</h1>
             <button className="onboarding-primary microsoft" onClick={() => void begin()}>
               <span><img src={new URL("microsoft-logo.svg", document.baseURI).href} alt="" /></span>
               Connect Microsoft
@@ -139,7 +139,7 @@ export function OnboardingFlow({
           </div>}
 
           {phase === "authorize" && <div className="onboarding-step onboarding-authorize">
-            <img className="onboarding-step-logo" src={new URL("bloom-logo.png", document.baseURI).href} alt="" />
+            <img className="onboarding-step-logo" src={new URL("delight-logo.png", document.baseURI).href} alt="" />
             <h1>Connect Microsoft</h1>
             <div className={`onboarding-code-stack ${copied ? "copied" : ""}`}>
               <button className="onboarding-code-card" disabled={copying || copied} onClick={() => void copyCode()} aria-label={`Copy Microsoft code ${code}`}>

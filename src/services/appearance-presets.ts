@@ -19,7 +19,7 @@ async function database(): Promise<IDBDatabase> {
     const request = indexedDB.open('bloom-appearance-presets', 1);
     request.onupgradeneeded = () => request.result.createObjectStore('presets', { keyPath: 'id' });
     request.onerror = () => reject(new Error('Could not open saved appearances.'));
-    request.onblocked = () => reject(new Error('Close other Bloom windows and try again.'));
+    request.onblocked = () => reject(new Error('Close other Delight windows and try again.'));
     request.onsuccess = () => resolve(request.result);
   });
 }

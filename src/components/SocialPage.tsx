@@ -87,7 +87,7 @@ const emptySession: SessionState = { signedIn: false, user: null, needsUsername:
 const emptySnapshot: Snapshot = { session: emptySession, friends: [], requests: { incoming: [], outgoing: [] }, conversations: [], groups: [], invites: [], messages: [], syncWarning: null };
 const reactionChoices = ["👍", "❤️", "😂", "🔥", "🎉", "👀"];
 
-const userLabel = (user: SocialUser) => user.displayName || user.username || "Bloom user";
+const userLabel = (user: SocialUser) => user.displayName || user.username || "Delight user";
 const initials = (user: SocialUser) => userLabel(user).slice(0, 2).toUpperCase();
 const formatTime = (value: number) => new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
@@ -118,9 +118,9 @@ function Avatar({ user, large = false }: { user: SocialUser; large?: boolean }) 
 
 function SignInView({ busy, onSignIn }: { busy: boolean; onSignIn: () => void }) {
   return <section className="social-auth-state">
-    <img className="social-auth-flower" src={new URL("bloom-logo.png", document.baseURI).href} alt="" />
+    <img className="social-auth-flower" src={new URL("delight-logo.png", document.baseURI).href} alt="" />
     <h1>Sign in to use Social</h1>
-    <p>Connect a Bloom account to message friends.</p>
+    <p>Connect a Delight account to message friends.</p>
     <button onClick={onSignIn} disabled={busy}>{busy ? <RefreshCw className="spin" size={18} /> : <LockKeyhole size={18} />} {busy ? "Waiting for approval…" : "Connect account"}</button>
   </section>;
 }
@@ -129,7 +129,7 @@ function UsernameSetup({ busy, onSave }: { busy: boolean; onSave: (username: str
   const [username, setUsername] = useState("");
   return <section className="social-auth-state social-name-setup">
     <span className="social-auth-icon"><UserPlus size={34} /></span>
-    <h1>Choose your Bloom account username.</h1>
+    <h1>Choose your Delight account username.</h1>
     <p>Friends add you using this exact name. Use 3–20 letters, numbers, or underscores.</p>
     <form onSubmit={event => { event.preventDefault(); onSave(username); }}>
       <label htmlFor="social-username">Username</label>
@@ -152,10 +152,10 @@ function FriendsView({ snapshot, busy, onAdd, onOpen, onRemove }: { snapshot: Sn
   return <section className="social-directory-view">
     <header className="social-directory-heading-simple"><h2>Friends</h2><b>{snapshot.friends.length}</b></header>
     <form className="social-add-friend" onSubmit={async event => { event.preventDefault(); const submitted = name.trim(); if (submitted && await onAdd(submitted)) setName(""); }}>
-      <Search size={18} /><input value={name} onChange={event => setName(event.target.value)} placeholder="Enter an exact Bloom account username" autoComplete="off" /><button disabled={busy || name.trim().length < 3}><UserPlus size={18} /> Add friend</button>
+      <Search size={18} /><input value={name} onChange={event => setName(event.target.value)} placeholder="Enter an exact Delight account username" autoComplete="off" /><button disabled={busy || name.trim().length < 3}><UserPlus size={18} /> Add friend</button>
     </form>
     <div className="social-people-list">
-      {snapshot.friends.length ? snapshot.friends.map(friend => <div key={friend.id} className="social-friend-manage-row"><button className="social-friend-manage-main" onClick={() => onOpen(friend)}><Avatar user={friend} /><span><b>{userLabel(friend)}</b><small>@{friend.username}</small></span></button><button className="social-friend-manage-more" onClick={() => setMenuFor(value => value === friend.id ? null : friend.id)} aria-label={`Actions for ${userLabel(friend)}`}><MoreHorizontal size={18} /></button>{menuFor === friend.id && <div className="social-member-menu"><button onClick={() => { if (friend.username) void navigator.clipboard.writeText(friend.username); setMenuFor(null); }}>Copy username</button><button onClick={() => onOpen(friend)}>Open direct message</button><button className="danger" disabled={busy} onClick={() => { setMenuFor(null); onRemove(friend.id); }}>Remove friend</button></div>}</div>) : <div className="social-empty-list"><UsersRound size={28} /><b>No friends yet</b><span>Add someone by their exact Bloom account username.</span></div>}
+      {snapshot.friends.length ? snapshot.friends.map(friend => <div key={friend.id} className="social-friend-manage-row"><button className="social-friend-manage-main" onClick={() => onOpen(friend)}><Avatar user={friend} /><span><b>{userLabel(friend)}</b><small>@{friend.username}</small></span></button><button className="social-friend-manage-more" onClick={() => setMenuFor(value => value === friend.id ? null : friend.id)} aria-label={`Actions for ${userLabel(friend)}`}><MoreHorizontal size={18} /></button>{menuFor === friend.id && <div className="social-member-menu"><button onClick={() => { if (friend.username) void navigator.clipboard.writeText(friend.username); setMenuFor(null); }}>Copy username</button><button onClick={() => onOpen(friend)}>Open direct message</button><button className="danger" disabled={busy} onClick={() => { setMenuFor(null); onRemove(friend.id); }}>Remove friend</button></div>}</div>) : <div className="social-empty-list"><UsersRound size={28} /><b>No friends yet</b><span>Add someone by their exact Delight account username.</span></div>}
     </div>
   </section>;
 }
@@ -166,7 +166,7 @@ function InstanceInviteCard({ invite, me, busy, onAccept, onDecline, onRevoke }:
   const pending = invite.status === "pending" || invite.status === "installing";
   const status = invite.status === "installing" ? "Installing…" : invite.status.charAt(0).toUpperCase() + invite.status.slice(1);
   return <article className={`social-instance-invite ${incoming ? "incoming" : "outgoing"} ${invite.status}`}>
-    <span className="social-invite-art"><img src={invite.iconDataUrl || new URL("bloom-logo.png", document.baseURI).href} alt="" /></span>
+    <span className="social-invite-art"><img src={invite.iconDataUrl || new URL("delight-logo.png", document.baseURI).href} alt="" /></span>
     <div className="social-invite-copy"><b>{incoming ? `${userLabel(other)} invited you to play ${invite.instanceName}` : `You invited ${userLabel(other)} to play ${invite.instanceName}`}</b><small>{invite.minecraftVersion} • {invite.loader}</small>{!pending && <em>{status}</em>}</div>
     {incoming && pending ? <div className="social-invite-actions"><button disabled={busy || invite.status === "installing"} onClick={() => onAccept(invite)}><Check size={16} /> Accept</button><button className="social-invite-x" disabled={busy || invite.status === "installing"} onClick={() => onDecline(invite.id)} aria-label="Decline invite" title="Decline"><X size={18} /></button></div> : !incoming && pending ? <button className="social-invite-x social-invite-revoke" disabled={busy || invite.status === "installing"} onClick={() => onRevoke(invite.id)} aria-label="Cancel invite" title="Cancel invite"><X size={18} /></button> : null}
   </article>;
@@ -228,7 +228,7 @@ function EncryptionDrawer({ friend, details, loading, busy, onClose, onVerify, o
       setScanError("");
       onVerify();
     } catch {
-      setScanError("Bloom could not read a verification QR code from that image.");
+      setScanError("Delight could not read a verification QR code from that image.");
     } finally { URL.revokeObjectURL(source); }
   };
   return <aside className={`social-encryption-drawer ${changed ? "changed" : ""}`}>
@@ -236,7 +236,7 @@ function EncryptionDrawer({ friend, details, loading, busy, onClose, onVerify, o
     {loading || !details ? <div className="social-security-loading"><RefreshCw className="spin" size={20} /> Checking encryption…</div> : <div className="social-security-body">
       <section className="social-security-status">
         {changed ? <ShieldAlert size={28} /> : <ShieldCheck size={28} />}
-        <div><b>{changed ? "Encryption identity changed" : verified ? "Identity verified" : "Messages are encrypted"}</b><p>{changed ? "Bloom found encryption keys that differ from the ones remembered on this device. Review them before sending anything new." : verified ? "You confirmed this safety number matches the one shown by your friend." : "Verification is optional. It is an extra check for the rare case that an encryption identity is unexpectedly replaced."}</p></div>
+        <div><b>{changed ? "Encryption identity changed" : verified ? "Identity verified" : "Messages are encrypted"}</b><p>{changed ? "Delight found encryption keys that differ from the ones remembered on this device. Review them before sending anything new." : verified ? "You confirmed this safety number matches the one shown by your friend." : "Verification is optional. It is an extra check for the rare case that an encryption identity is unexpectedly replaced."}</p></div>
       </section>
       <section className="social-security-identity"><Avatar user={friend} large /><span><b>{userLabel(friend)}</b><small>{details.friendDeviceCount} active encrypted {details.friendDeviceCount === 1 ? "device" : "devices"}</small></span></section>
       <section className="social-security-code">
@@ -621,7 +621,7 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
           setEncryptionOpen(false);
           setEncryptionDetails(null);
           lastSyncWarning.current = null;
-          onNotify("Bloom account connected.");
+          onNotify("Delight account connected.");
           await hydrate(true);
           return;
         }
@@ -649,13 +649,13 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
       setEncryptionOpen(false);
       setEncryptionDetails(null);
       lastSyncWarning.current = null;
-      onNotify("Signed out of Bloom Social.");
+      onNotify("Signed out of Delight Social.");
     } catch (error) { onNotify(String(error), "error"); }
     finally { setBusy(false); setLoading(false); }
   };
   if (loading) return <div className="social-loading"><RefreshCw className="spin" size={22} /> Loading Social…</div>;
   if (!session.signedIn) return <SignInView busy={busy} onSignIn={() => void beginSignIn()} />;
-  if (session.needsUsername) return <UsernameSetup busy={busy} onSave={username => { setBusy(true); void invoke<SocialUser>("social_set_username", { username }).then(() => { setLoading(true); onNotify("Bloom account username saved."); return hydrate(true); }).catch(error => { setLoading(false); onNotify(String(error), "error"); }).finally(() => setBusy(false)); }} />;
+  if (session.needsUsername) return <UsernameSetup busy={busy} onSave={username => { setBusy(true); void invoke<SocialUser>("social_set_username", { username }).then(() => { setLoading(true); onNotify("Delight account username saved."); return hydrate(true); }).catch(error => { setLoading(false); onNotify(String(error), "error"); }).finally(() => setBusy(false)); }} />;
   if (!session.user) return <SignInView busy={busy} onSignIn={() => void beginSignIn()} />;
 
   const lastFor = (friendId: string) => snapshot.messages.filter(message => !message.groupId && message.friendId === friendId && message.kind === "message").at(-1);
@@ -860,7 +860,7 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
       </div>
     </aside>
     <div className="social-main">
-      {section === "friends" ? <FriendsView snapshot={snapshot} busy={busy} onAdd={name => action(() => invoke("social_send_friend_request", { username: name }), "Friend request sent.")} onOpen={openFriend} onRemove={id => void action(() => invoke("social_remove_friend", { userId: id }), "Friend removed.")} /> : section === "inbox" ? <InboxView snapshot={snapshot} busy={busy} onAcceptFriend={id => void action(() => invoke("social_accept_friend_request", { userId: id }), "Friend request accepted.")} onDeclineFriend={id => void action(() => invoke("social_decline_friend_request", { userId: id }))} /> : selectedGroup ? <GroupConversationView me={session.user} group={selectedGroup} messages={snapshot.messages} busy={busy} onMembers={() => setGroupDrawer("members")} onRename={name => updateGroupName(selectedGroup.id, name)} onIcon={file => void updateGroupIcon(selectedGroup.id, file)} onSend={(text, replyTo) => void sendGroupMessage(selectedGroup.id, text, replyTo)} onEdit={(messageId, text) => void editGroupMessage(selectedGroup.id, messageId, text)} onReact={(messageId, emoji, add) => void sendGroupReaction(selectedGroup.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinGroupMessage(selectedGroup.id, messageId, pinned)} /> : selectedFriend ? <ConversationView me={session.user} friend={selectedFriend} messages={snapshot.messages} invites={snapshot.invites} busy={busy} encryption={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} onOpenEncryption={() => void refreshEncryption(selectedFriend.id, true)} onSend={(text, replyTo) => void sendMessage(selectedFriend.id, text, replyTo)} onEdit={(messageId, text) => void editMessage(selectedFriend.id, messageId, text)} onScreenshot={() => void sendScreenshot(selectedFriend.id)} onReact={(messageId, emoji, add) => void sendReaction(selectedFriend.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinMessage(selectedFriend.id, messageId, pinned)} onAcceptInvite={invite => void acceptInstanceInvite(invite)} onDeclineInvite={declineInstanceInvite} onRevokeInvite={revokeInstanceInvite} /> : <section className="social-no-conversation"><MessageCircle size={34} /><h2>No conversations yet</h2><p>Create a group chat or add a friend by their exact Bloom account username.</p><button onClick={() => setSection("friends")}><UserPlus size={18} /> Add a friend</button></section>}
+      {section === "friends" ? <FriendsView snapshot={snapshot} busy={busy} onAdd={name => action(() => invoke("social_send_friend_request", { username: name }), "Friend request sent.")} onOpen={openFriend} onRemove={id => void action(() => invoke("social_remove_friend", { userId: id }), "Friend removed.")} /> : section === "inbox" ? <InboxView snapshot={snapshot} busy={busy} onAcceptFriend={id => void action(() => invoke("social_accept_friend_request", { userId: id }), "Friend request accepted.")} onDeclineFriend={id => void action(() => invoke("social_decline_friend_request", { userId: id }))} /> : selectedGroup ? <GroupConversationView me={session.user} group={selectedGroup} messages={snapshot.messages} busy={busy} onMembers={() => setGroupDrawer("members")} onRename={name => updateGroupName(selectedGroup.id, name)} onIcon={file => void updateGroupIcon(selectedGroup.id, file)} onSend={(text, replyTo) => void sendGroupMessage(selectedGroup.id, text, replyTo)} onEdit={(messageId, text) => void editGroupMessage(selectedGroup.id, messageId, text)} onReact={(messageId, emoji, add) => void sendGroupReaction(selectedGroup.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinGroupMessage(selectedGroup.id, messageId, pinned)} /> : selectedFriend ? <ConversationView me={session.user} friend={selectedFriend} messages={snapshot.messages} invites={snapshot.invites} busy={busy} encryption={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} onOpenEncryption={() => void refreshEncryption(selectedFriend.id, true)} onSend={(text, replyTo) => void sendMessage(selectedFriend.id, text, replyTo)} onEdit={(messageId, text) => void editMessage(selectedFriend.id, messageId, text)} onScreenshot={() => void sendScreenshot(selectedFriend.id)} onReact={(messageId, emoji, add) => void sendReaction(selectedFriend.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinMessage(selectedFriend.id, messageId, pinned)} onAcceptInvite={invite => void acceptInstanceInvite(invite)} onDeclineInvite={declineInstanceInvite} onRevokeInvite={revokeInstanceInvite} /> : <section className="social-no-conversation"><MessageCircle size={34} /><h2>No conversations yet</h2><p>Create a group chat or add a friend by their exact Delight account username.</p><button onClick={() => setSection("friends")}><UserPlus size={18} /> Add a friend</button></section>}
       {groupDrawer && <GroupDrawer group={groupDrawer === "members" ? selectedGroup : null} friends={snapshot.friends} me={session.user} busy={busy} onClose={() => setGroupDrawer(null)} onCreate={createGroup} onAdd={userId => void action(() => invoke("social_add_group_member", { groupId: selectedGroup?.id, userId }), "Person added to the group.")} onRemove={userId => void action(() => invoke("social_remove_group_member", { groupId: selectedGroup?.id, userId }), userId === session.user?.id ? "You left the group." : "Person removed from the group.")} onOpenFriend={openFriend} />}
       {encryptionOpen && selectedFriend && <EncryptionDrawer friend={selectedFriend} details={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} loading={encryptionLoading} busy={busy} onClose={() => setEncryptionOpen(false)} onVerify={() => void acknowledgeEncryption(selectedFriend.id, true)} onContinue={() => void acknowledgeEncryption(selectedFriend.id, false)} />}
     </div>

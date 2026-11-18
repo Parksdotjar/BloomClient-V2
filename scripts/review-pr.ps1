@@ -64,7 +64,7 @@ if ($Install -or -not (Test-Path -LiteralPath (Join-Path $reviewPath "node_modul
 
 Write-Host ""
 Write-Host "PR $PullRequest is isolated at: $reviewPath" -ForegroundColor Green
-Write-Host "Your primary Bloom workspace was not switched or modified."
+Write-Host "Your primary Delight workspace was not switched or modified."
 
 if ($Launch) {
     Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "npm run tauri dev" -WorkingDirectory $reviewPath

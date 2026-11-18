@@ -1,4 +1,4 @@
-/* Main navigation and Settings share one raised selected surface, including under background glass. */
+/* Shared navigation baseline; the approved ceramic main-sidebar treatment is scoped below. */
 :is(.sidebar-navigation, .settings-tabs) {
   --nav-idle-ink: color-mix(in srgb, var(--theme-ink, #f1f4f1) 50%, var(--muted));
   --nav-selected-ink: var(--theme-ink, #f1f4f1);
@@ -36,8 +36,11 @@
 }
 
 :is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button:not(.active):not(.selected):is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--panel-strong) 72%, transparent) !important;
   color: var(--nav-selected-ink) !important;
+}
+
+.app-shell .settings-tabs > button:not(.active):not(.selected):is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--panel-strong) 72%, transparent) !important;
 }
 
 :is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button:is(.active, .selected) {
@@ -53,6 +56,89 @@
 :is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-ink, var(--accent)) 45%, transparent);
   outline-offset: 2px;
+}
+
+/* One ceramic surface paints the selection; route buttons only paint their ink. */
+.app-shell:not([data-custom-background="on"]):not([data-blurred-sidebars="on"]) > .sidebar {
+  background: var(--ceramic-sidebar, #000);
+}
+:root[data-theme="light"] .app-shell:not([data-custom-background="on"]):not([data-blurred-sidebars="on"]) > .sidebar {
+  --ceramic-sidebar: #eeeeee;
+}
+.app-shell > .sidebar > .sidebar-navigation {
+  position: relative;
+  isolation: isolate;
+  --nav-selected-top: var(--panel-strong);
+  --nav-selected-bottom: color-mix(in srgb, var(--panel-strong) 25%, var(--page));
+  --ceramic-shadow: #0009;
+  --ceramic-edge: #ffffff0c;
+  --nav-idle-ink: var(--muted);
+}
+:root[data-theme="light"] .app-shell > .sidebar > .sidebar-navigation {
+  --nav-selected-top: #e9e9e9;
+  --nav-selected-bottom: #d4d4d4;
+  --ceramic-shadow: #a0a0a044;
+  --ceramic-edge: #ffffff30;
+}
+.app-shell > .sidebar > .sidebar-navigation > button {
+  position: relative;
+  z-index: 1;
+  min-height: 46px;
+  border-radius: 14px;
+  font-weight: 600 !important;
+  transition: color 180ms ease;
+}
+.app-shell > .sidebar > .sidebar-navigation > .sidebar-selection {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border-radius: 14px;
+}
+/* Translation stays on the outer track; compression cannot scale its route offset. */
+.sidebar-selection-surface {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--nav-selected-top) var(--nav-selected-opacity), transparent) 20%,
+    color-mix(in srgb, var(--nav-selected-bottom) var(--nav-selected-opacity), transparent)) !important;
+  box-shadow: inset 1px 2px 2px var(--ceramic-edge), inset -1px -2px 3px var(--theme-shadow-soft, #0003),
+    0 6px 10px var(--ceramic-shadow) !important;
+}
+.app-shell > .sidebar > .sidebar-navigation[data-press-motion="on"] > button,
+.app-shell > .sidebar > .sidebar-navigation[data-press-motion="on"] .sidebar-selection-surface {
+  transform-origin: center;
+  scale: 1;
+  transition: color 180ms ease, scale var(--sidebar-press-duration) cubic-bezier(.2,.9,.22,1.3);
+}
+/* Native :active holds through a press; the route's onClick starts travel on release. */
+.app-shell > .sidebar > .sidebar-navigation[data-press-motion="on"] > button:active:not(:disabled),
+.app-shell > .sidebar > .sidebar-navigation[data-press-motion="on"]:has(> button:active:not(:disabled)) .sidebar-selection-surface {
+  scale: .975;
+  transition-duration: 180ms, min(120ms, var(--sidebar-press-duration));
+  transition-timing-function: ease, cubic-bezier(.2,.72,.22,1);
+}
+.app-shell > .sidebar > .sidebar-navigation > button,
+.app-shell > .sidebar > .sidebar-navigation > button:is(.active, :hover, :focus-visible) {
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.app-shell[data-sidebar-collapsed="true"] > .sidebar > .sidebar-navigation > .sidebar-selection {
+  border-radius: 11px;
+}
+:root:is([data-animations="off"], [data-performance="ultra"]) .app-shell > .sidebar > .sidebar-navigation :is(button, .sidebar-selection-surface) {
+  scale: 1 !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell > .sidebar > .sidebar-navigation :is(button, .sidebar-selection-surface) {
+    scale: 1 !important;
+    transition: none !important;
+  }
 }
 
 :root[data-animations="off"] :is(.sidebar-navigation, .settings-tabs) > button,

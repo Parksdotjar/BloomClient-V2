@@ -130,7 +130,7 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
           <div className="locker-collection-heading">{heading}<div><span>{items.length}</span><button className="locker-refresh" aria-label="Refresh cloaks" title="Refresh cloaks" disabled={busy || refreshing} onClick={() => setRefresh(value => value + 1)}><RotateCw size={16} className={refreshing ? "spin" : ""} /></button></div></div>
           {loading ? <div className="locker-inline-state" role="status"><Shirt size={30} /><h2>Loading locker…</h2></div> : items.length === 0 ? <div className="locker-inline-state">
             <h2>{error ? "Locker unavailable" : !profile ? "Sign in to Minecraft" : "Your collection starts here"}</h2>
-            <p>{error ? "Bloom could not load your cloaks." : !profile ? "Your claimed cloaks are saved to your Minecraft account." : "Pick a free cloak in Shop or redeem a code."}</p>
+            <p>{error ? "Delight could not load your cloaks." : !profile ? "Your claimed cloaks are saved to your Minecraft account." : "Pick a free cloak in Shop or redeem a code."}</p>
             <button className="locker-state-action" onClick={error ? () => setRefresh(value => value + 1) : onBrowse}>{error ? "Try again" : "Browse Shop"}</button>
           </div> : <>
           <div className="locker-grid">

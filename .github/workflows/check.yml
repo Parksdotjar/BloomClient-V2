@@ -45,10 +45,12 @@ jobs:
   rust:
     name: rust
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v7
+        with: { node-version: 20 }
       - name: Install Tauri Linux dependencies
         run: |
           sudo apt-get update
@@ -61,6 +63,8 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libxkbcommon-dev \
+            libwayland-dev
       - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib content_transfer::tests

@@ -16,7 +16,7 @@ fn comparison_png(png: &str) -> Result<Vec<u8>, String> {
 pub async fn save_screenshot_comparison(png: String) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let bytes = comparison_png(&png)?;
-        let Some(path) = rfd::FileDialog::new().set_title("Export comparison").add_filter("PNG image", &["png"]).set_file_name("Bloom-comparison.png").save_file() else { return Ok(false); };
+        let Some(path) = rfd::FileDialog::new().set_title("Export comparison").add_filter("PNG image", &["png"]).set_file_name("Delight-comparison.png").save_file() else { return Ok(false); };
         if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("png")) { return Err("Choose a filename ending in .png.".into()); }
         std::fs::write(path, bytes).map_err(|error| format!("The comparison could not be saved: {error}"))?;
         Ok(true)

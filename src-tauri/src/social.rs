@@ -408,7 +408,7 @@ fn get_secret(name: &str) -> Option<String> {
 fn set_secret(name: &str, value: &str) -> Result<(), String> {
     credential(name)?
         .set_password(value)
-        .map_err(|error| format!("Windows could not save Bloom Social securely: {error}"))
+        .map_err(|error| format!("The system credential store could not save Delight Social securely: {error}"))
 }
 fn delete_secret(name: &str) -> Result<(), String> {
     match credential(name)?.delete_credential() {
@@ -429,7 +429,7 @@ fn profile_secret(name: &str) -> String {
 
 fn activate_profile(profile: &str, migrate_legacy: bool) -> Result<(), String> {
     if Uuid::parse_str(profile).is_err() {
-        return Err("Bloom rejected an invalid Social profile.".into());
+        return Err("Delight rejected an invalid Social profile.".into());
     }
     if migrate_legacy {
         for name in ["tokens", "device-id", "vault-key"] {
@@ -470,10 +470,10 @@ fn vault_key() -> Result<[u8; 32], String> {
     if let Some(value) = get_secret(&name) {
         let bytes = URL_SAFE_NO_PAD
             .decode(value)
-            .map_err(|_| "Bloom Social's secure storage key is invalid.".to_string())?;
+            .map_err(|_| "Delight Social's secure storage key is invalid.".to_string())?;
         return bytes
             .try_into()
-            .map_err(|_| "Bloom Social's secure storage key has the wrong length.".to_string());
+            .map_err(|_| "Delight Social's secure storage key has the wrong length.".to_string());
     }
     let mut key = [0u8; 32];
     OsRng.fill_bytes(&mut key);
@@ -490,13 +490,13 @@ fn social_root() -> Result<std::path::PathBuf, String> {
 fn encrypt_vault(vault: &SocialVault) -> Result<Vec<u8>, String> {
     let key = vault_key()?;
     let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|_| "Bloom Social could not open secure storage.".to_string())?;
+        .map_err(|_| "Delight Social could not open secure storage.".to_string())?;
     let mut nonce = [0u8; 12];
     OsRng.fill_bytes(&mut nonce);
     let plaintext = serde_json::to_vec(vault).map_err(|error| error.to_string())?;
     let ciphertext = cipher
         .encrypt(Nonce::from_slice(&nonce), plaintext.as_ref())
-        .map_err(|_| "Bloom Social could not encrypt local history.".to_string())?;
+        .map_err(|_| "Delight Social could not encrypt local history.".to_string())?;
     let mut output = Vec::with_capacity(5 + nonce.len() + ciphertext.len());
     output.extend_from_slice(b"BSV1");
     output.extend_from_slice(&nonce);
@@ -506,14 +506,14 @@ fn encrypt_vault(vault: &SocialVault) -> Result<Vec<u8>, String> {
 
 fn decrypt_vault(bytes: &[u8]) -> Result<SocialVault, String> {
     if bytes.len() < 17 || &bytes[..4] != b"BSV1" {
-        return Err("Bloom Social's local vault is invalid.".into());
+        return Err("Delight Social's local vault is invalid.".into());
     }
     let key = vault_key()?;
     let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|_| "Bloom Social could not open secure storage.".to_string())?;
+        .map_err(|_| "Delight Social could not open secure storage.".to_string())?;
     let plaintext = cipher
         .decrypt(Nonce::from_slice(&bytes[4..16]), &bytes[16..])
-        .map_err(|_| "Bloom Social could not unlock local history.".to_string())?;
+        .map_err(|_| "Delight Social could not unlock local history.".to_string())?;
     serde_json::from_slice(&plaintext).map_err(|error| error.to_string())
 }
 
@@ -550,7 +550,7 @@ fn save_vault(vault: &SocialVault) -> Result<(), String> {
 fn load_account(vault: &SocialVault) -> Result<Account, String> {
     let key = vault_key()?;
     let pickle = AccountPickle::from_encrypted(&vault.account_pickle, &key)
-        .map_err(|_| "Bloom Social could not unlock the encryption identity.".to_string())?;
+        .map_err(|_| "Delight Social could not unlock the encryption identity.".to_string())?;
     Ok(Account::from_pickle(pickle))
 }
 
@@ -564,7 +564,7 @@ fn load_session(vault: &SocialVault, device: &str) -> Result<Option<Session>, St
         return Ok(None);
     };
     let pickle = SessionPickle::from_encrypted(value, &vault_key()?)
-        .map_err(|_| "A Bloom Social conversation key could not be unlocked.".to_string())?;
+        .map_err(|_| "A Delight Social conversation key could not be unlocked.".to_string())?;
     Ok(Some(Session::from_pickle(pickle)))
 }
 
@@ -611,12 +611,12 @@ fn refresh_tokens(tokens: &SavedTokens) -> Result<SavedTokens, String> {
         .post(format!("{SOCIAL_API}/native/refresh"))
         .json(&serde_json::json!({ "refreshToken": tokens.refresh_token }))
         .send()
-        .map_err(|error| format!("Bloom Social could not refresh your sign-in: {error}"))?;
+        .map_err(|error| format!("Delight Social could not refresh your sign-in: {error}"))?;
     if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
     }
     if !response.status().is_success() {
-        return Err("Your Bloom Social sign-in expired. Sign in again.".into());
+        return Err("Your Delight Social sign-in expired. Sign in again.".into());
     }
     let bundle: TokenBundle = response.json().map_err(|error| error.to_string())?;
     save_tokens(&bundle)?;
@@ -629,10 +629,10 @@ fn refresh_tokens(tokens: &SavedTokens) -> Result<SavedTokens, String> {
 }
 
 fn current_tokens() -> Result<SavedTokens, String> {
-    let _guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
-    let tokens = load_tokens().ok_or_else(|| "Sign in to your Bloom account first.".to_string())?;
+    let _guard = social_credential_io().lock().map_err(|_| "Delight account restoration is busy.".to_string())?;
+    let tokens = load_tokens().ok_or_else(|| "Sign in to your Delight account first.".to_string())?;
     if tokens.refresh_expires_at <= timestamp() {
-        return Err("Your Bloom Social sign-in expired. Sign in again.".into());
+        return Err("Your Delight Social sign-in expired. Sign in again.".into());
     }
     if tokens.access_expires_at <= timestamp() + 30_000 {
         refresh_tokens(&tokens)
@@ -642,13 +642,13 @@ fn current_tokens() -> Result<SavedTokens, String> {
 }
 
 fn refresh_rejected_tokens(name: &str, rejected: &SavedTokens) -> Result<SavedTokens, String> {
-    let _guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
+    let _guard = social_credential_io().lock().map_err(|_| "Delight account restoration is busy.".to_string())?;
     if profile_secret("tokens") != name {
-        return Err("The Bloom account changed. Try sharing again.".into());
+        return Err("The Delight account changed. Try sharing again.".into());
     }
-    let current = load_tokens().ok_or("Sign in to your Bloom account first.")?;
+    let current = load_tokens().ok_or("Sign in to your Delight account first.")?;
     if current.refresh_expires_at <= timestamp() {
-        return Err("Your Bloom Social sign-in expired. Sign in again.".into());
+        return Err("Your Delight Social sign-in expired. Sign in again.".into());
     }
     // Another request may already have rotated this session while /me was in flight.
     if current.access_token != rejected.access_token && current.access_expires_at > timestamp() + 30_000 {
@@ -683,7 +683,7 @@ fn authenticated_request(
     authenticated_response(tokens, |tokens| {
         let mut request = client.request(method.clone(), format!("{SOCIAL_API}{route}")).bearer_auth(&tokens.access_token);
         if let Some(body) = &body { request = request.json(body); }
-        request.send().map_err(|error| format!("Bloom Social is unavailable: {error}"))
+        request.send().map_err(|error| format!("Delight Social is unavailable: {error}"))
     }, |tokens| refresh_rejected_tokens(&name, tokens))
 }
 
@@ -720,7 +720,7 @@ fn request_empty(
     if response.status().is_success() {
         Ok(())
     } else {
-        Err("Bloom Social could not finish that request.".into())
+        Err("Delight Social could not finish that request.".into())
     }
 }
 
@@ -731,7 +731,7 @@ fn device_directory(user_id: &str) -> Result<Vec<DeviceIdentity>, String> {
         None,
     )?;
     if response.devices.is_empty() {
-        return Err("This Bloom account does not have an active encryption device.".into());
+        return Err("This Delight account does not have an active encryption device.".into());
     }
     Ok(response.devices)
 }
@@ -823,7 +823,7 @@ fn encryption_details(
     let local = vault
         .profile
         .as_ref()
-        .ok_or_else(|| "Sign in to Bloom Social first.".to_string())?;
+        .ok_or_else(|| "Sign in to Delight Social first.".to_string())?;
     let local_id = local.id.clone();
     let local_devices = device_directory(&local_id)?;
     let friend_devices = device_directory(friend_id)?;
@@ -865,12 +865,12 @@ fn upload_blob(friend_id: &str, ciphertext: Vec<u8>) -> Result<serde_json::Value
         .header("content-type", "application/octet-stream")
         .body(ciphertext)
         .send()
-        .map_err(|error| format!("Bloom could not upload the encrypted screenshot: {error}"))?;
+        .map_err(|error| format!("Delight could not upload the encrypted screenshot: {error}"))?;
     if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
     }
     if !response.status().is_success() {
-        return Err("Bloom could not store the encrypted screenshot.".into());
+        return Err("Delight could not store the encrypted screenshot.".into());
     }
     response.json().map_err(|error| error.to_string())
 }
@@ -881,7 +881,7 @@ fn download_blob(blob_id: &str) -> Result<Vec<u8>, String> {
         .get(format!("{SOCIAL_API}/blobs/{blob_id}"))
         .bearer_auth(tokens.access_token)
         .send()
-        .map_err(|error| format!("Bloom could not download an encrypted screenshot: {error}"))?;
+        .map_err(|error| format!("Delight could not download an encrypted screenshot: {error}"))?;
     if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
     }
@@ -897,7 +897,7 @@ fn download_blob(blob_id: &str) -> Result<Vec<u8>, String> {
 fn normalize_screenshot(path: &std::path::Path) -> Result<(Vec<u8>, u32, u32), String> {
     use image::GenericImageView;
     let input = std::fs::read(path)
-        .map_err(|error| format!("Bloom could not read that screenshot: {error}"))?;
+        .map_err(|error| format!("Delight could not read that screenshot: {error}"))?;
     if input.len() > 32 * 1024 * 1024 {
         return Err("That screenshot is too large to process.".into());
     }
@@ -910,7 +910,7 @@ fn normalize_screenshot(path: &std::path::Path) -> Result<(Vec<u8>, u32, u32), S
     let mut output = std::io::Cursor::new(Vec::new());
     image
         .write_to(&mut output, image::ImageFormat::Png)
-        .map_err(|error| format!("Bloom could not normalize that screenshot: {error}"))?;
+        .map_err(|error| format!("Delight could not normalize that screenshot: {error}"))?;
     let bytes = output.into_inner();
     if bytes.len() > 8 * 1024 * 1024 {
         return Err("The normalized screenshot is larger than 8 MiB.".into());
@@ -929,10 +929,10 @@ fn encrypt_screenshot(
     OsRng.fill_bytes(&mut content_key);
     OsRng.fill_bytes(&mut nonce);
     let cipher = Aes256Gcm::new_from_slice(&content_key)
-        .map_err(|_| "Bloom could not prepare screenshot encryption.".to_string())?;
+        .map_err(|_| "Delight could not prepare screenshot encryption.".to_string())?;
     let encrypted = cipher
         .encrypt(Nonce::from_slice(&nonce), plaintext)
-        .map_err(|_| "Bloom could not encrypt that screenshot.".to_string())?;
+        .map_err(|_| "Delight could not encrypt that screenshot.".to_string())?;
     let mut ciphertext = Vec::with_capacity(nonce.len() + encrypted.len());
     ciphertext.extend_from_slice(&nonce);
     ciphertext.extend_from_slice(&encrypted);
@@ -941,7 +941,7 @@ fn encrypt_screenshot(
     let blob_id = uploaded
         .get("id")
         .and_then(|value| value.as_str())
-        .ok_or_else(|| "Bloom did not return an encrypted screenshot ID.".to_string())?
+        .ok_or_else(|| "Delight did not return an encrypted screenshot ID.".to_string())?
         .to_string();
     Ok((
         AttachmentDescriptor {
@@ -962,7 +962,7 @@ fn decrypt_screenshot(descriptor: &AttachmentDescriptor) -> Result<String, Strin
     if format!("{:x}", Sha256::digest(&ciphertext)) != descriptor.ciphertext_hash
         || ciphertext.len() < 29
     {
-        return Err("Bloom rejected a damaged encrypted screenshot.".into());
+        return Err("Delight rejected a damaged encrypted screenshot.".into());
     }
     let key = URL_SAFE_NO_PAD
         .decode(&descriptor.content_key)
@@ -971,14 +971,14 @@ fn decrypt_screenshot(descriptor: &AttachmentDescriptor) -> Result<String, Strin
         .map_err(|_| "The screenshot key is invalid.".to_string())?;
     let plaintext = cipher
         .decrypt(Nonce::from_slice(&ciphertext[..12]), &ciphertext[12..])
-        .map_err(|_| "Bloom could not authenticate this screenshot.".to_string())?;
+        .map_err(|_| "Delight could not authenticate this screenshot.".to_string())?;
     let decoded = image::load_from_memory(&plaintext)
-        .map_err(|_| "Bloom rejected an invalid decrypted screenshot.".to_string())?;
+        .map_err(|_| "Delight rejected an invalid decrypted screenshot.".to_string())?;
     use image::GenericImageView;
     if decoded.dimensions() != (descriptor.width, descriptor.height)
         || plaintext.len() != descriptor.byte_size
     {
-        return Err("Bloom rejected mismatched screenshot details.".into());
+        return Err("Delight rejected mismatched screenshot details.".into());
     }
     Ok(format!(
         "data:{};base64,{}",
@@ -1048,38 +1048,38 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
         };
         let response = http_client()?.post(format!("{SOCIAL_API}/native/status")).json(&serde_json::json!({
             "challenge": challenge, "state": state,
-        })).send().map_err(|error| format!("Bloom could not check account approval: {error}"))?;
+        })).send().map_err(|error| format!("Delight could not check account approval: {error}"))?;
         if response.status() == reqwest::StatusCode::ACCEPTED { return Ok(None); }
         if response.status() == reqwest::StatusCode::FORBIDDEN {
             auth_runtime().lock().map_err(|_| "The sign-in manager is busy.".to_string())?.attempt = None;
-            return Err("Bloom account connection was cancelled.".into());
+            return Err("Delight account connection was cancelled.".into());
         }
         if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
         }
         if !response.status().is_success() {
-            return Err("Bloom could not check that account approval. Try connecting again.".into());
+            return Err("Delight could not check that account approval. Try connecting again.".into());
         }
         let approval: NativeApproval = response.json().map_err(|error| error.to_string())?;
         if Uuid::parse_str(&approval.profile).is_err() {
-            return Err("Bloom sign-in returned an invalid account profile.".into());
+            return Err("Delight sign-in returned an invalid account profile.".into());
         }
         let code = approval.code;
         let profile = approval.profile;
-        let credential_guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
+        let credential_guard = social_credential_io().lock().map_err(|_| "Delight account restoration is busy.".to_string())?;
         activate_profile(&profile, false)?;
         let (curve, signing) = identity_keys()?;
         let response = http_client()?.post(format!("{SOCIAL_API}/native/exchange")).json(&serde_json::json!({
-            "code": code, "verifier": verifier, "deviceId": device_id()?, "deviceName": "Bloom Client on Windows",
+            "code": code, "verifier": verifier, "deviceId": device_id()?, "deviceName": crate::platform::DEVICE_NAME,
             "curve25519Key": curve, "ed25519Key": signing,
-        })).send().map_err(|error| format!("Bloom could not finish sign-in: {error}"))?;
+        })).send().map_err(|error| format!("Delight could not finish sign-in: {error}"))?;
         if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
         }
-        if !response.status().is_success() { return Err("Bloom could not verify that sign-in. Please try again.".into()); }
+        if !response.status().is_success() { return Err("Delight could not verify that sign-in. Please try again.".into()); }
         let bundle: TokenBundle = response.json().map_err(|error| error.to_string())?;
         if bundle.user.as_ref().map(|user| user.id.as_str()) != Some(profile.as_str()) {
-            return Err("Bloom rejected a mismatched account profile.".into());
+            return Err("Delight rejected a mismatched account profile.".into());
         }
         save_tokens(&bundle)?;
         let mut vault = load_vault()?;
@@ -1087,7 +1087,7 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
         save_vault(&vault)?;
         drop(credential_guard);
         if let Err(error) = upload_prekeys() {
-            eprintln!("[Bloom Social] signed in, but prekey upload will retry later: {error}");
+            eprintln!("[Delight Social] signed in, but prekey upload will retry later: {error}");
         }
         auth_runtime().lock().map_err(|_| "The sign-in manager is busy.".to_string())?.attempt = None;
         Ok(Some(SocialSessionState { signed_in: true, user: bundle.user, needs_username: bundle.needs_username.unwrap_or(false) }))
@@ -1100,8 +1100,8 @@ fn restore_session() -> Result<SocialSessionState, String> {
         return Ok(signed_out());
     }
     let result = request::<MeResponse>(reqwest::Method::GET, "/me", None);
-    let _vault_guard = social_vault_io().lock().map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
-    let _credential_guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
+    let _vault_guard = social_vault_io().lock().map_err(|_| "Delight Social's local message store is busy.".to_string())?;
+    let _credential_guard = social_credential_io().lock().map_err(|_| "Delight account restoration is busy.".to_string())?;
     // Sign-out may have completed while /me was in flight. Never reactivate that profile.
     if load_tokens().is_none() {
         return Ok(signed_out());
@@ -1112,7 +1112,7 @@ fn restore_session() -> Result<SocialSessionState, String> {
                 activate_profile(&me.user.id, true)?;
             }
             if active_profile().as_deref() != Some(me.user.id.as_str()) {
-                return Err("The Bloom account changed. Try again.".into());
+                return Err("The Delight account changed. Try again.".into());
             }
             let mut vault = load_vault()?;
             vault.profile = Some(me.user.clone());
@@ -1123,7 +1123,7 @@ fn restore_session() -> Result<SocialSessionState, String> {
             // Preserve the last verified profile during temporary service/network failures.
             let cached = load_vault()?.profile;
             if cached.is_some() {
-                eprintln!("[Bloom Social] session refresh deferred: {error}");
+                eprintln!("[Delight Social] session refresh deferred: {error}");
                 Ok(SocialSessionState { signed_in: true, user: cached, needs_username: false })
             } else {
                 Err(error)
@@ -1188,7 +1188,7 @@ fn create_inbound_session(
         .map_err(|_| "The sender's encryption identity was invalid.".to_string())?;
     let result = account
         .create_inbound_session(SessionConfig::version_1(), curve, prekey)
-        .map_err(|_| "Bloom could not establish the encrypted conversation.".to_string())?;
+        .map_err(|_| "Delight could not establish the encrypted conversation.".to_string())?;
     save_session(vault, session_key, &result.session)?;
     Ok(result.plaintext)
 }
@@ -1219,7 +1219,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
             Ok(message) => message,
             Err(_) => {
                 warning.get_or_insert_with(|| {
-                    "Bloom skipped a damaged encrypted message.".to_string()
+                    "Delight skipped a damaged encrypted message.".to_string()
                 });
                 advance_envelope_cursor(vault, groups, envelope.sequence);
                 continue;
@@ -1249,13 +1249,13 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
                             ) {
                                 Ok(value) => value,
                                 Err(_) => {
-                                    warning.get_or_insert_with(|| "Bloom skipped a message whose encryption session could not be renewed.".to_string());
+                                    warning.get_or_insert_with(|| "Delight skipped a message whose encryption session could not be renewed.".to_string());
                                     advance_envelope_cursor(vault, groups, envelope.sequence);
                                     continue;
                                 }
                             },
                             _ => {
-                                warning.get_or_insert_with(|| "Bloom skipped a message from an expired encryption session.".to_string());
+                                warning.get_or_insert_with(|| "Delight skipped a message from an expired encryption session.".to_string());
                                 advance_envelope_cursor(vault, groups, envelope.sequence);
                                 continue;
                             }
@@ -1272,13 +1272,13 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
             ) {
                 Ok(value) => value,
                 Err(_) => {
-                    warning.get_or_insert_with(|| "Bloom skipped a message whose encryption session could not be established.".to_string());
+                    warning.get_or_insert_with(|| "Delight skipped a message whose encryption session could not be established.".to_string());
                     advance_envelope_cursor(vault, groups, envelope.sequence);
                     continue;
                 }
             },
             _ => {
-                warning.get_or_insert_with(|| "Bloom skipped a message sent before its encryption session was established.".to_string());
+                warning.get_or_insert_with(|| "Delight skipped a message sent before its encryption session was established.".to_string());
                 advance_envelope_cursor(vault, groups, envelope.sequence);
                 continue;
             }
@@ -1287,7 +1287,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
             Ok(event) => event,
             Err(_) => {
                 warning.get_or_insert_with(|| {
-                    "Bloom skipped an invalid decrypted message.".to_string()
+                    "Delight skipped an invalid decrypted message.".to_string()
                 });
                 advance_envelope_cursor(vault, groups, envelope.sequence);
                 continue;
@@ -1298,7 +1298,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
             || !["message", "reaction", "pin", "edit"].contains(&event.kind.as_str())
         {
             warning.get_or_insert_with(|| {
-                "Bloom skipped an unsupported encrypted message.".to_string()
+                "Delight skipped an unsupported encrypted message.".to_string()
             });
             advance_envelope_cursor(vault, groups, envelope.sequence);
             continue;
@@ -1306,7 +1306,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
         if event.kind == "pin" {
             let Some(target_id) = event.target_id.as_ref().filter(|value| !value.is_empty()) else {
                 warning
-                    .get_or_insert_with(|| "Bloom skipped an invalid encrypted pin.".to_string());
+                    .get_or_insert_with(|| "Delight skipped an invalid encrypted pin.".to_string());
                 advance_envelope_cursor(vault, groups, envelope.sequence);
                 continue;
             };
@@ -1315,7 +1315,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
             let pinned = operation == Some("add") || updating;
             if !pinned && operation != Some("remove") {
                 warning
-                    .get_or_insert_with(|| "Bloom skipped an invalid encrypted pin.".to_string());
+                    .get_or_insert_with(|| "Delight skipped an invalid encrypted pin.".to_string());
                 advance_envelope_cursor(vault, groups, envelope.sequence);
                 continue;
             }
@@ -1352,7 +1352,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
                     Ok(value) => value,
                     Err(_) => {
                         warning.get_or_insert_with(|| {
-                            "Bloom skipped a damaged pinned screenshot.".to_string()
+                            "Delight skipped a damaged pinned screenshot.".to_string()
                         });
                         advance_envelope_cursor(vault, groups, envelope.sequence);
                         continue;
@@ -1424,7 +1424,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
                 Ok(value) => value,
                 Err(_) => {
                     warning.get_or_insert_with(|| {
-                        "Bloom skipped a damaged encrypted screenshot.".to_string()
+                        "Delight skipped a damaged encrypted screenshot.".to_string()
                     });
                     advance_envelope_cursor(vault, groups, envelope.sequence);
                     continue;
@@ -1481,7 +1481,7 @@ fn snapshot() -> Result<SocialSnapshot, String> {
         request(reqwest::Method::GET, "/instance-invites", None)?;
     let _vault_guard = social_vault_io()
         .lock()
-        .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+        .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
     let mut vault = load_vault()?;
     vault.profile = Some(me.user.clone());
     let sync_warning = match decrypt_new_envelopes(&mut vault) {
@@ -1493,7 +1493,7 @@ fn snapshot() -> Result<SocialSnapshot, String> {
             // A stale or damaged envelope must not make the account, friends, and
             // already-decrypted local history disappear. Keep the last known-good
             // vault untouched so a later client can retry the encrypted envelope.
-            eprintln!("[Bloom Social] encrypted sync paused: {error}");
+            eprintln!("[Delight Social] encrypted sync paused: {error}");
             vault = load_vault()?;
             Some(error)
         }
@@ -1524,7 +1524,7 @@ pub async fn social_snapshot() -> Result<SocialSnapshot, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let result = snapshot();
         if let Err(error) = &result {
-            eprintln!("[Bloom Social] snapshot failed: {error}");
+            eprintln!("[Delight Social] snapshot failed: {error}");
         }
         result
     })
@@ -1550,12 +1550,12 @@ pub async fn social_sync_messages() -> Result<SocialMessageSync, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let _vault_guard = social_vault_io()
             .lock()
-            .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+            .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
         let mut vault = load_vault()?;
         let sync_warning = match decrypt_new_envelopes(&mut vault) {
             Ok(warning) => warning,
             Err(error) => {
-                eprintln!("[Bloom Social] incremental encrypted sync paused: {error}");
+                eprintln!("[Delight Social] incremental encrypted sync paused: {error}");
                 vault = load_vault()?;
                 Some(error)
             }
@@ -1578,7 +1578,7 @@ pub async fn social_encryption_details(
     tauri::async_runtime::spawn_blocking(move || {
         let _vault_guard = social_vault_io()
             .lock()
-            .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+            .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
         let mut vault = load_vault()?;
         let details = encryption_details(&mut vault, &friend_id, None)?;
         save_vault(&vault)?;
@@ -1596,7 +1596,7 @@ pub async fn social_acknowledge_identity(
     tauri::async_runtime::spawn_blocking(move || {
         let _vault_guard = social_vault_io()
             .lock()
-            .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+            .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
         let mut vault = load_vault()?;
         let details = encryption_details(&mut vault, &friend_id, Some(verified))?;
         save_vault(&vault)?;
@@ -1619,10 +1619,10 @@ fn share_context_with(
 ) -> Result<SocialShareContext, String> {
     let session = restore()?;
     if !session.signed_in || session.user.is_none() {
-        return Err("Sign in to your Bloom account before sharing an instance.".into());
+        return Err("Sign in to your Delight account before sharing an instance.".into());
     }
     if session.needs_username {
-        return Err("Choose your Bloom username in Social before sharing an instance.".into());
+        return Err("Choose your Delight username in Social before sharing an instance.".into());
     }
     let friends = friends()?;
     Ok(SocialShareContext { session, friends: friends.friends })
@@ -1730,7 +1730,7 @@ pub async fn social_create_instance_invites(
                     created_at: timestamp(),
                 };
                 if let Err(error) = send_event(invite.recipient.id.clone(), event, None) {
-                    eprintln!("[Bloom Social] invite note delivery will not block the durable invite: {error}");
+                    eprintln!("[Delight Social] invite note delivery will not block the durable invite: {error}");
                     warning.get_or_insert_with(|| "The invites were sent, but a personal message could not be delivered to every recipient.".to_string());
                 }
             }
@@ -1901,7 +1901,7 @@ fn encrypt_for_recipient(
                 .iter()
                 .find(|bundle| bundle.device_id == target)
                 .ok_or_else(|| {
-                    "Your friend needs to open Bloom Social once before receiving messages."
+                    "Your friend needs to open Delight Social once before receiving messages."
                         .to_string()
                 })?;
             let identity = Curve25519PublicKey::from_base64(&bundle.curve25519_key)
@@ -1910,12 +1910,12 @@ fn encrypt_for_recipient(
                 .map_err(|_| "Your friend's one-time key was invalid.".to_string())?;
             account
                 .create_outbound_session(SessionConfig::version_1(), identity, one_time)
-                .map_err(|_| "Bloom could not create an encrypted conversation.".to_string())?
+                .map_err(|_| "Delight could not create an encrypted conversation.".to_string())?
         };
         let ciphertext = serde_json::to_string(
             &session
                 .encrypt(&plaintext)
-                .map_err(|_| "Bloom could not encrypt this message.".to_string())?,
+                .map_err(|_| "Delight could not encrypt this message.".to_string())?,
         )
         .map_err(|error| error.to_string())?;
         save_session(vault, &outbound_session_key, &session)?;
@@ -1923,7 +1923,7 @@ fn encrypt_for_recipient(
     }
     if encrypted.is_empty() {
         return Err(
-            "That person needs to open Bloom Social once before receiving messages.".into(),
+            "That person needs to open Delight Social once before receiving messages.".into(),
         );
     }
     Ok(encrypted)
@@ -1936,7 +1936,7 @@ fn send_event(
 ) -> Result<SocialMessage, String> {
     let _vault_guard = social_vault_io()
         .lock()
-        .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+        .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
     let mut vault = load_vault()?;
     if event.operation.as_deref() == Some("reply") {
         let target = event.target_id.as_deref().ok_or("Reply target not found.")?;
@@ -2070,9 +2070,9 @@ pub async fn social_edit_message(
         }
         let _vault_guard = social_vault_io()
             .lock()
-            .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+            .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
         let mut vault = load_vault()?;
-        let me = vault.profile.as_ref().map(|user| user.id.clone()).ok_or("Bloom account profile is unavailable.")?;
+        let me = vault.profile.as_ref().map(|user| user.id.clone()).ok_or("Delight account profile is unavailable.")?;
         let original = vault.messages.iter().find(|message| {
             message.id == message_id && message.friend_id == friend_id && message.group_id.is_none()
                 && message.kind == "message" && message.sender_id == me && message.text.is_some()
@@ -2147,7 +2147,7 @@ pub async fn social_pin_message(
     tauri::async_runtime::spawn_blocking(move || {
         let _vault_guard = social_vault_io()
             .lock()
-            .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+            .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
         let mut vault = load_vault()?;
         let message = vault.messages.iter().find(|message| message.id == message_id && message.friend_id == friend_id && message.group_id.is_none() && message.kind == "message").cloned().ok_or("Message not found.")?;
         if message.pinned == pinned { return Ok(message); }
@@ -2287,7 +2287,7 @@ fn send_group_event(group_id: String, event: PlainEvent) -> Result<SocialMessage
         .ok_or("Group chat not found.")?;
     let _vault_guard = social_vault_io()
         .lock()
-        .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+        .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
     let mut vault = load_vault()?;
     if event.operation.as_deref() == Some("reply") {
         let target = event.target_id.as_deref().ok_or("Reply target not found.")?;
@@ -2304,7 +2304,7 @@ fn send_group_event(group_id: String, event: PlainEvent) -> Result<SocialMessage
         .profile
         .as_ref()
         .map(|user| user.id.clone())
-        .ok_or("Bloom account profile is unavailable.")?;
+        .ok_or("Delight account profile is unavailable.")?;
     let plaintext = serde_json::to_vec(&event).map_err(|error| error.to_string())?;
     let mut batches = Vec::new();
     for member in group.members.iter().filter(|member| member.id != me) {
@@ -2429,10 +2429,10 @@ pub async fn social_edit_group_message(
         }
         let groups: GroupsResponse = request(reqwest::Method::GET, "/groups", None)?;
         let group = groups.groups.into_iter().find(|group| group.id == group_id).ok_or("Group chat not found.")?;
-        let _vault_guard = social_vault_io().lock().map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+        let _vault_guard = social_vault_io().lock().map_err(|_| "Delight Social's local message store is busy.".to_string())?;
         let mut vault = load_vault()?;
         let account = load_account(&vault)?;
-        let me = vault.profile.as_ref().map(|user| user.id.clone()).ok_or("Bloom account profile is unavailable.")?;
+        let me = vault.profile.as_ref().map(|user| user.id.clone()).ok_or("Delight account profile is unavailable.")?;
         let original = vault.messages.iter().find(|message| {
             message.id == message_id && message.group_id.as_deref() == Some(group_id.as_str())
                 && message.kind == "message" && message.sender_id == me && message.text.is_some()
@@ -2482,14 +2482,14 @@ pub async fn social_pin_group_message(
         let group = groups.groups.into_iter().find(|group| group.id == group_id).ok_or("Group chat not found.")?;
         let _vault_guard = social_vault_io()
             .lock()
-            .map_err(|_| "Bloom Social's local message store is busy.".to_string())?;
+            .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
         let mut vault = load_vault()?;
         let message = vault.messages.iter().find(|message| message.id == message_id && message.group_id.as_deref() == Some(group_id.as_str()) && message.kind == "message").cloned().ok_or("Message not found.")?;
         if message.pinned == pinned { return Ok(message); }
         let event = pin_event(&message, pinned);
         let plaintext = serde_json::to_vec(&event).map_err(|error| error.to_string())?;
         let account = load_account(&vault)?;
-        let me = vault.profile.as_ref().map(|user| user.id.clone()).ok_or("Bloom account profile is unavailable.")?;
+        let me = vault.profile.as_ref().map(|user| user.id.clone()).ok_or("Delight account profile is unavailable.")?;
         let mut batches = Vec::new();
         for member in group.members.iter().filter(|member| member.id != me) {
             let label = member.display_name.as_deref().or(member.username.as_deref()).unwrap_or("A group member");
@@ -2519,7 +2519,7 @@ pub async fn social_pin_group_message(
 #[tauri::command]
 pub async fn social_sign_out() -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(|| {
-        let _guard = social_credential_io().lock().map_err(|_| "Bloom account restoration is busy.".to_string())?;
+        let _guard = social_credential_io().lock().map_err(|_| "Delight account restoration is busy.".to_string())?;
         let token_name = profile_secret("tokens");
         delete_secret(&token_name)?;
         // Clear the pre-profile migration credential too, otherwise it can be

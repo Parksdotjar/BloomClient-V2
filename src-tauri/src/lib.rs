@@ -1,8 +1,15 @@
+mod platform;
+mod runtime_archive;
+mod autotune;
 mod fabric_loader;
+mod catalog_filters;
 mod launch_cache;
 mod screenshots;
 mod content_transfer;
+mod content_downloads;
 mod instance_folders;
+mod instance_actions;
+mod portal;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc, Mutex, OnceLock,
@@ -108,6 +115,10 @@ struct CatalogMod {
     version_number: String,
     file_name: String,
     file_size: u64,
+    #[serde(default)]
+    loaders: Vec<String>,
+    #[serde(default)]
+    game_versions: Vec<String>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -282,6 +293,7 @@ async fn direct_modrinth_search(
     game_version: String,
     offset: u64,
     category: &str,
+    filters: Option<&catalog_filters::Filters>,
 ) -> Result<CatalogSearchResult, String> {
     use futures_util::future::join_all;
 
@@ -293,6 +305,9 @@ async fn direct_modrinth_search(
     if category == "mods" || category == "modpacks" {
         facets.push(vec!["categories:fabric".to_string()]);
     }
+    if let Some(filters) = filters { facets = filters.facets(&game_version); }
+    let requested_loader = filters.map(|value| value.loader.as_str()).unwrap_or("fabric");
+    let index = filters.filter(|value| value.sort != "auto").map(|value| value.sort.as_str()).unwrap_or(if query.is_empty() { "downloads" } else { "relevance" });
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .user_agent(concat!(
@@ -314,11 +329,7 @@ async fn direct_modrinth_search(
             ),
             (
                 "index",
-                if query.is_empty() {
-                    "downloads"
-                } else {
-                    "relevance"
-                },
+                index,
             ),
             ("limit", "50"),
             ("offset", offset.to_string().as_str()),
@@ -343,13 +354,11 @@ async fn direct_modrinth_search(
                     "https://api.modrinth.com/v2/project/{}/version",
                     hit.project_id
                 ))
-                .query(&[
-                    ("game_versions", game_versions.as_str()),
-                    ("include_changelog", "false"),
-                ]);
+                .query(&[("include_changelog", "false")]);
+            if !game_version.is_empty() { request = request.query(&[("game_versions", game_versions.as_str())]); }
             let loaders;
-            if category == "mods" || category == "modpacks" {
-                loaders = serde_json::to_string(&["fabric"]).ok()?;
+            if (category == "mods" || category == "modpacks") && !requested_loader.is_empty() {
+                loaders = serde_json::to_string(&[requested_loader]).ok()?;
                 request = request.query(&[("loaders", loaders.as_str())]);
             }
             let versions = request
@@ -361,10 +370,8 @@ async fn direct_modrinth_search(
                 .json::<Vec<ModrinthVersion>>()
                 .await
                 .ok()?;
-            let version = versions
-                .iter()
-                .find(|version| version.version_type == "release")
-                .or_else(|| versions.first())?;
+            let version = if filters.is_some() { catalog_filters::matching_version(&versions, &game_version, requested_loader) }
+                else { versions.iter().find(|version| version.version_type == "release").or_else(|| versions.first()) }?;
             let file = primary_modrinth_file(version)?;
             let icon_source_url = hit.icon_url.clone();
             Some(CatalogMod {
@@ -377,12 +384,14 @@ async fn direct_modrinth_search(
                 icon_source_url,
                 author: hit.author,
                 downloads: hit.downloads,
-                loader: loader_label.into(),
-                game_version: game_version.clone(),
+                loader: if filters.is_some() { version.loaders.join(", ") } else { loader_label.into() },
+                game_version: if game_version.is_empty() { version.game_versions.first().cloned().unwrap_or_default() } else { game_version.clone() },
                 version_id: version.id.clone(),
                 version_number: version.version_number.clone(),
                 file_name: file.filename.clone(),
                 file_size: file.size,
+                loaders: version.loaders.clone(),
+                game_versions: version.game_versions.clone(),
             })
         }
     });
@@ -400,12 +409,12 @@ async fn get_backend_status() -> Result<BackendStatus, String> {
     bloom_backend_request(reqwest::Method::GET, "/health", 6)?
         .send()
         .await
-        .map_err(|error| format!("Bloom backend is unavailable: {error}"))?
+        .map_err(|error| format!("Delight backend is unavailable: {error}"))?
         .error_for_status()
-        .map_err(|error| format!("Bloom backend rejected the health check: {error}"))?
+        .map_err(|error| format!("Delight backend rejected the health check: {error}"))?
         .json::<BackendStatus>()
         .await
-        .map_err(|error| format!("Bloom backend returned an invalid response: {error}"))
+        .map_err(|error| format!("Delight backend returned an invalid response: {error}"))
 }
 
 #[tauri::command]
@@ -414,12 +423,19 @@ async fn search_modrinth_content(
     game_version: String,
     offset: u64,
     category: String,
+    filters: Option<catalog_filters::Filters>,
 ) -> Result<CatalogSearchResult, String> {
     catalog_category(&category)?;
-    let cache_key = format!(
+    if let Some(filters) = &filters {
+        if category != "mods" { return Err("These filters apply to mods only.".into()); }
+        filters.validate()?;
+    }
+    let filters = filters.filter(|value| !value.is_default() || game_version.is_empty());
+    let mut cache_key = format!(
         "v2-50\n{category}\n{game_version}\n{offset}\n{}",
         query.trim().to_ascii_lowercase()
     );
+    if let Some(filters) = &filters { cache_key.push_str(&format!("\nfilters:{}", serde_json::to_string(filters).map_err(|error| error.to_string())?)); }
     if let Some(mut cached) = cache::read_json::<CatalogSearchResult>(
         "catalog",
         &cache_key,
@@ -428,8 +444,8 @@ async fn search_modrinth_content(
         cache::apply_cached_catalog_artwork(&mut cached.items);
         return Ok(cached);
     }
-    if category != "mods" {
-        let mut result = direct_modrinth_search(query, game_version, offset, &category).await?;
+    if category != "mods" || filters.is_some() {
+        let mut result = direct_modrinth_search(query, game_version, offset, &category, filters.as_ref()).await?;
         let _ = cache::write_json("catalog", &cache_key, &result);
         let artwork = result.items.iter().filter_map(|item| item.icon_url.clone()).collect();
         tauri::async_runtime::spawn(cache::warm_catalog_artwork(artwork));
@@ -453,12 +469,12 @@ async fn search_modrinth_content(
         ])
         .send()
         .await
-        .map_err(|error| format!("The Bloom mod catalog is unavailable: {error}"))?
+        .map_err(|error| format!("The Delight mod catalog is unavailable: {error}"))?
         .error_for_status()
-        .map_err(|error| format!("The Bloom mod catalog rejected the search: {error}"))?
+        .map_err(|error| format!("The Delight mod catalog rejected the search: {error}"))?
         .json::<CatalogSearchResult>()
         .await
-        .map_err(|error| format!("The Bloom mod catalog returned invalid data: {error}"))?;
+        .map_err(|error| format!("The Delight mod catalog returned invalid data: {error}"))?;
     let _ = cache::write_json("catalog", &cache_key, &result);
     let artwork = result.items.iter().filter_map(|item| item.icon_url.clone()).collect();
     tauri::async_runtime::spawn(cache::warm_catalog_artwork(artwork));
@@ -471,12 +487,15 @@ async fn get_modrinth_project_details(
     project_id: String,
     game_version: String,
     category: String,
+    loader: Option<String>,
+    version_id: Option<String>,
 ) -> Result<CatalogProjectDetails, String> {
     catalog_category(&category)?;
     if !valid_modrinth_project_id(project_id.trim()) {
         return Err("That Modrinth project selection is invalid.".into());
     }
-    let cache_key = format!("v1\n{category}\n{game_version}\n{}", project_id.trim());
+    let loader = loader.unwrap_or_else(|| "fabric".into());
+    let cache_key = format!("v2\n{category}\n{game_version}\n{loader}\n{version_id:?}\n{}", project_id.trim());
     if let Some(cached) = cache::read_json::<CatalogProjectDetails>(
         "catalog-details",
         &cache_key,
@@ -498,7 +517,7 @@ async fn get_modrinth_project_details(
         .get(format!("https://api.modrinth.com/v2/project/{}", project_id.trim()))
         .send()
         .await
-        .map_err(|error| format!("Bloom could not load that project's details: {error}"))?
+        .map_err(|error| format!("Delight could not load that project's details: {error}"))?
         .error_for_status()
         .map_err(|error| format!("Modrinth rejected that project request: {error}"))?
         .json::<ModrinthProject>()
@@ -518,23 +537,22 @@ async fn get_modrinth_project_details(
         ]);
     let loaders;
     if category == "mods" {
-        loaders = serde_json::to_string(&["fabric"]).map_err(|error| error.to_string())?;
+        loaders = serde_json::to_string(&[loader.as_str()]).map_err(|error| error.to_string())?;
         request = request.query(&[("loaders", loaders.as_str())]);
     }
     let versions = request
         .send()
         .await
-        .map_err(|error| format!("Bloom could not load compatible versions: {error}"))?
+        .map_err(|error| format!("Delight could not load compatible versions: {error}"))?
         .error_for_status()
         .map_err(|error| format!("Modrinth rejected that version request: {error}"))?
         .json::<Vec<ModrinthVersion>>()
         .await
         .map_err(|error| format!("Modrinth returned invalid version data: {error}"))?;
 
-    let latest = versions
-        .iter()
-        .find(|version| version.version_type == "release")
-        .or_else(|| versions.first());
+    let latest = if let Some(id) = version_id.as_deref() {
+        Some(versions.iter().find(|version| version.id == id).ok_or("This mod version is no longer available. Refresh the search and try again.")?)
+    } else { versions.iter().find(|version| version.version_type == "release").or_else(|| versions.first()) };
     let dependency_ids: Vec<String> = latest
         .into_iter()
         .flat_map(|version| version.dependencies.iter())
@@ -634,7 +652,7 @@ async fn list_modrinth_modpack_releases(
         ])
         .send()
         .await
-        .map_err(|error| format!("Bloom could not load that modpack's releases: {error}"))?
+        .map_err(|error| format!("Delight could not load that modpack's releases: {error}"))?
         .error_for_status()
         .map_err(|error| format!("Modrinth rejected that modpack release request: {error}"))?
         .json::<Vec<ModrinthVersion>>()
@@ -709,33 +727,10 @@ struct LauncherState {
     session: Arc<Mutex<Option<MinecraftSession>>>,
     launch_active: Arc<Mutex<bool>>,
     cancel_requested: Arc<AtomicBool>,
-    content_install_queue: Arc<Mutex<std::collections::VecDeque<QueuedContentInstall>>>,
+    content_install_queue: Arc<Mutex<content_downloads::ContentQueue>>,
     content_install_active: Arc<AtomicBool>,
     content_cancel_requested: Arc<AtomicBool>,
     game_running: Arc<AtomicBool>,
-}
-
-#[derive(Clone)]
-struct QueuedContentInstall {
-    instance_id: String,
-    project_id: String,
-    category: String,
-    title: String,
-    version: String,
-    icon_url: Option<String>,
-}
-
-#[derive(serde::Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct ContentInstallFinished {
-    instance_id: String,
-    project_id: String,
-    category: String,
-    state: String,
-    message: String,
-    title: String,
-    version: String,
-    icon_url: Option<String>,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -950,17 +945,17 @@ fn save_chunked_credential(uuid: &str, kind: &str, value: &str) -> Result<(), St
             "Bloom Client",
             &account_credential_part(uuid, &format!("{kind}-{index}")),
         )
-        .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+        .map_err(|error| format!("The system credential store could not prepare secure account storage: {error}"))?
         .set_password(chunk)
-        .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+        .map_err(|error| format!("The system credential store could not save this account securely: {error}"))?;
     }
     keyring::Entry::new(
         "Bloom Client",
         &account_credential_part(uuid, &format!("{kind}-count")),
     )
-    .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+    .map_err(|error| format!("The system credential store could not prepare secure account storage: {error}"))?
     .set_password(&chunks.len().to_string())
-    .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    .map_err(|error| format!("The system credential store could not save this account securely: {error}"))?;
     for index in chunks.len()..32 {
         delete_credential_entry(&account_credential_part(uuid, &format!("{kind}-{index}")))?;
     }
@@ -1050,9 +1045,9 @@ fn save_account_session(session: &MinecraftSession, make_active: bool) -> Result
         "Bloom Client",
         &account_credential_part(&session.uuid, "profile"),
     )
-    .map_err(|error| format!("Windows could not prepare secure account storage: {error}"))?
+    .map_err(|error| format!("The system credential store could not prepare secure account storage: {error}"))?
     .set_password(&serde_json::to_string(&profile).map_err(|error| error.to_string())?)
-    .map_err(|error| format!("Windows could not save this account securely: {error}"))?;
+    .map_err(|error| format!("The system credential store could not save this account securely: {error}"))?;
     delete_credential_entry(&account_credential_name(&session.uuid))?;
     let mut store = read_account_store();
     if let Some(account) = store
@@ -1085,7 +1080,7 @@ fn delete_legacy_session() -> Result<(), String> {
             Ok(()) | Err(keyring::Error::NoEntry) => {}
             Err(error) => {
                 return Err(format!(
-                    "Windows could not remove the saved sign-in: {error}"
+                    "The system credential store could not remove the saved sign-in: {error}"
                 ))
             }
         }
@@ -1135,7 +1130,7 @@ async fn sign_out_minecraft(
             return Ok(None);
         };
         delete_account_credentials(&active_id)
-            .map_err(|error| format!("Windows could not remove the saved account: {error}"))?;
+            .map_err(|error| format!("The system credential store could not remove the saved account: {error}"))?;
         store.accounts.retain(|account| account.id != active_id);
         store.active_id = store.accounts.first().map(|account| account.id.clone());
         write_account_store(&store)?;
@@ -1151,7 +1146,7 @@ async fn sign_out_minecraft(
 
 #[tauri::command]
 fn greet(name: &str) -> String {
-    format!("Welcome to Bloom Client, {name}!")
+    format!("Welcome to Delight Client, {name}!")
 }
 
 #[tauri::command]
@@ -1167,7 +1162,7 @@ fn copy_text_to_clipboard(text: String) -> Result<(), String> {
                     std::thread::sleep(std::time::Duration::from_millis(15));
                     match clipboard.get_text() {
                         Ok(copied) if copied == text => return Ok(()),
-                        Ok(_) => last_error = Some("Windows replaced the clipboard contents".into()),
+                        Ok(_) => last_error = Some("The system replaced the clipboard contents".into()),
                         Err(error) => last_error = Some(format!("clipboard verification failed: {error}")),
                     }
                 }
@@ -1178,7 +1173,7 @@ fn copy_text_to_clipboard(text: String) -> Result<(), String> {
         std::thread::sleep(std::time::Duration::from_millis(40));
     }
     Err(format!(
-        "Windows could not copy the code: {}",
+        "The system could not copy the code: {}",
         last_error.unwrap_or_else(|| "the clipboard is unavailable".into())
     ))
 }
@@ -1613,29 +1608,13 @@ fn adoptium_architecture() -> Result<&'static str, String> {
         "x86_64" => Ok("x64"),
         "aarch64" => Ok("aarch64"),
         architecture => Err(format!(
-            "Automatic Java installation is not available for {architecture} Windows yet."
+            "Automatic Java installation is not available for architecture {architecture}."
         )),
     }
 }
 
 fn find_java_executable(folder: &std::path::Path) -> Option<std::path::PathBuf> {
-    let mut pending = vec![folder.to_path_buf()];
-    while let Some(current) = pending.pop() {
-        let entries = std::fs::read_dir(current).ok()?;
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.eq_ignore_ascii_case("javaw.exe"))
-            {
-                return Some(path);
-            }
-        }
-    }
-    None
+    runtime_archive::find_java(folder, platform::JAVA_EXECUTABLE)
 }
 
 fn download_managed_java(
@@ -1674,13 +1653,14 @@ fn download_managed_java(
         .build()
         .map_err(|error| error.to_string())?;
     let mut package = None;
+    let provider_os = platform::JAVA_PROVIDER_OS;
     for image in ["jre", "jdk"] {
-        let url = format!("https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture={architecture}&heap_size=normal&image_type={image}&jvm_impl=hotspot&os=windows&project=jdk&vendor=eclipse");
-        let assets: serde_json::Value = client
-            .get(url)
-            .send()
-            .map_err(|error| format!("Java provider could not be reached: {error}"))?
-            .error_for_status()
+        let url = format!("https://api.adoptium.net/v3/assets/latest/{major}/hotspot?architecture={architecture}&heap_size=normal&image_type={image}&jvm_impl=hotspot&os={provider_os}&project=jdk&vendor=eclipse");
+        let response = client.get(url).send()
+            .map_err(|error| format!("Java provider could not be reached: {error}"))?;
+        // Some supported OS/Java combinations ship only a JDK, not a standalone JRE.
+        if response.status() == reqwest::StatusCode::NOT_FOUND { continue; }
+        let assets: serde_json::Value = response.error_for_status()
             .map_err(|error| format!("Java provider rejected the request: {error}"))?
             .json()
             .map_err(|error| format!("Java provider returned invalid data: {error}"))?;
@@ -1694,7 +1674,7 @@ fn download_managed_java(
             break;
         }
     }
-    let package = package.ok_or_else(|| format!("No supported Windows Java {major} runtime is currently available from Eclipse Adoptium."))?;
+    let package = package.ok_or_else(|| format!("No supported {provider_os} Java {major} runtime is currently available from Eclipse Adoptium."))?;
     let url = package["link"]
         .as_str()
         .ok_or("The Java provider response did not include a download link.")?;
@@ -1703,8 +1683,9 @@ fn download_managed_java(
         .ok_or("The Java provider response did not include a SHA-256 checksum.")?
         .to_ascii_lowercase();
     let total = package["size"].as_u64().unwrap_or(0);
-    let archive = root.join(format!("temurin-{major}-{architecture}.zip"));
-    let partial = archive.with_extension("zip.part");
+    let extension = platform::JAVA_ARCHIVE_EXTENSION;
+    let archive = root.join(format!("temurin-{major}-{architecture}.{extension}"));
+    let partial = root.join(format!("temurin-{major}-{architecture}.{extension}.part"));
     let mut response = client
         .get(url)
         .send()
@@ -1773,31 +1754,12 @@ fn download_managed_java(
         std::fs::remove_dir_all(&staging).map_err(|error| error.to_string())?;
     }
     std::fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
-    let file = std::fs::File::open(&archive).map_err(|error| error.to_string())?;
-    let mut zip = zip::ZipArchive::new(file)
-        .map_err(|error| format!("Java archive could not be opened: {error}"))?;
-    for index in 0..zip.len() {
-        if cancel.load(Ordering::SeqCst) {
-            let _ = std::fs::remove_dir_all(&staging);
-            return Err("__cancelled__".into());
-        }
-        let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
-        let relative = entry
-            .enclosed_name()
-            .ok_or("The Java archive contained an unsafe path.")?;
-        let target = staging.join(relative);
-        if entry.is_dir() {
-            std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
-        } else {
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-            }
-            let mut file = std::fs::File::create(target).map_err(|error| error.to_string())?;
-            std::io::copy(&mut entry, &mut file).map_err(|error| error.to_string())?;
-        }
+    if let Err(error) = runtime_archive::extract(&archive, &staging, extension, cancel) {
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(error);
     }
     let staged_java = find_java_executable(&staging)
-        .ok_or("The installed Java package did not contain javaw.exe.")?;
+        .ok_or("The installed Java package did not contain its Java executable.")?;
     let relative_java = staged_java
         .strip_prefix(&staging)
         .map_err(|error| error.to_string())?
@@ -1823,17 +1785,6 @@ fn download_managed_java(
     Ok(java)
 }
 
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WindowsHardware {
-    cpu: String,
-    cores: u32,
-    threads: u32,
-    ram_bytes: u64,
-    gpus: Vec<String>,
-    refresh_rate: Option<u32>,
-}
-
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HardwareReport {
@@ -1851,19 +1802,7 @@ struct HardwareReport {
 }
 
 fn detect_hardware_report_blocking() -> Result<HardwareReport, String> {
-    let script = r#"$cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $system=Get-CimInstance Win32_ComputerSystem; $video=@(Get-CimInstance Win32_VideoController); [pscustomobject]@{cpu=[string]$cpu.Name;cores=[uint32]$cpu.NumberOfCores;threads=[uint32]$cpu.NumberOfLogicalProcessors;ramBytes=[uint64]$system.TotalPhysicalMemory;gpus=@($video | ForEach-Object {[string]$_.Name});refreshRate=[uint32](($video | Measure-Object CurrentRefreshRate -Maximum).Maximum)} | ConvertTo-Json -Compress"#;
-    let output = command_without_console("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
-        .output()
-        .map_err(|error| format!("Hardware scan could not start: {error}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "Hardware scan failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    let hardware: WindowsHardware = serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("Hardware scan returned invalid data: {error}"))?;
+    let hardware = platform::detect_hardware()?;
     let ram_gb = hardware.ram_bytes / 1_073_741_824;
     let recommended_memory_mb = match ram_gb {
         0..=7 => 2048,
@@ -1922,11 +1861,21 @@ async fn detect_hardware_report() -> Result<HardwareReport, String> {
         .map_err(|error| format!("The hardware scan stopped unexpectedly: {error}"))?
 }
 
+// Reject retired instance formats rather than silently treating them as Java.
+#[derive(Default, serde::Deserialize, serde::Serialize, Clone)]
+#[serde(rename_all = "lowercase")]
+enum InstanceEngine {
+    #[default]
+    Java,
+}
+
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct InstanceConfig {
     id: String,
     name: String,
+    #[serde(default)]
+    engine: InstanceEngine,
     #[serde(default)]
     icon: Option<String>,
     #[serde(default = "default_loader")]
@@ -1971,13 +1920,11 @@ fn bloom_data_dir() -> Result<std::path::PathBuf, String> {
             return Err("BLOOM_DEV_DATA_DIR must be an absolute development-only path.".into());
         }
         std::fs::create_dir_all(path.join("instances")).map_err(|error| {
-            format!("Could not create the isolated Bloom development profile: {error}")
+            format!("Could not create the isolated Delight development profile: {error}")
         })?;
         return Ok(path);
     }
-    let appdata = std::env::var("APPDATA")
-        .map_err(|_| "APPDATA is unavailable on this computer.".to_string())?;
-    let path = std::path::PathBuf::from(appdata).join("BloomClient");
+    let path = platform::data_directory()?;
     std::fs::create_dir_all(path.join("instances")).map_err(|error| error.to_string())?;
     Ok(path)
 }
@@ -2090,7 +2037,11 @@ fn autotune_jvm_arguments(profile: &str) -> String {
 }
 
 fn patch_options(path: &std::path::Path, updates: &[(&str, String)]) -> Result<(), String> {
-    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let existing = match std::fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.to_string()),
+    };
     let mut handled = std::collections::HashSet::new();
     let mut output = Vec::new();
     for line in existing.lines() {
@@ -2163,10 +2114,8 @@ fn apply_autotune_to_config(
         &std::path::PathBuf::from(&config.directory).join("options.txt"),
         &[
             ("graphicsPreset", format!("\"{preset}\"")),
-            ("maxFps", "260".into()),
-            ("enableVsync", "false".into()),
-            ("fullscreen", "true".into()),
-            ("exclusiveFullscreen", "false".into()),
+            ("maxFps", profile.target_fps.clamp(30, 260).to_string()),
+            ("graphicsMode", if preset == "fast" { "0" } else if preset == "fabulous" { "2" } else { "1" }.into()),
             ("ao", ao.into()),
             ("biomeBlendRadius", blend.into()),
             ("prioritizeChunkUpdates", updates.into()),
@@ -2197,41 +2146,143 @@ fn apply_autotune_to_config(
 }
 
 fn apply_autotune_profile_blocking(profile: AutoTuneProfile) -> Result<usize, String> {
-    let data = bloom_data_dir()?;
-    std::fs::write(
-        data.join("autotune-profile.json"),
-        serde_json::to_vec_pretty(&profile).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
-    let folder = data.join("instances");
-    let mut applied = 0;
-    for entry in std::fs::read_dir(folder)
-        .map_err(|error| error.to_string())?
-        .flatten()
-    {
-        if entry.path().extension().and_then(|value| value.to_str()) != Some("json") {
-            continue;
-        }
-        let Ok(mut config) = serde_json::from_slice::<InstanceConfig>(
-            &std::fs::read(entry.path()).unwrap_or_default(),
-        ) else {
-            continue;
-        };
-        if !config.visible || config.id == AUTOTUNE_INSTANCE_ID {
-            continue;
-        }
-        apply_autotune_to_config(&mut config, &profile)?;
-        write_instance(&config)?;
-        applied += 1;
+    let measured = get_autotune_benchmark_result()?.ok_or("Run the benchmark before applying a profile.")?;
+    if measured["completedAt"].as_u64() != Some(profile.benchmark_completed_at)
+        || !(1024..=8192).contains(&profile.memory_mb) || !(30..=1000).contains(&profile.target_fps)
+        || !(2..=32).contains(&profile.render_distance) || !(5..=32).contains(&profile.simulation_distance)
+        || !matches!(profile.jvm_profile.as_str(), "Default" | "Performance")
+        || !matches!(profile.graphics.as_str(), "Fast" | "Balanced" | "High") {
+        return Err("The tuning profile is outdated or invalid. Build it again from the latest test.".into());
     }
-    Ok(applied)
+    apply_autotune_profile_in(&bloom_data_dir()?, &profile)
+}
+
+fn apply_autotune_profile_in(data: &std::path::Path, profile: &AutoTuneProfile) -> Result<usize, String> {
+    let mut configs = Vec::new();
+    let mut snapshots: Vec<(std::path::PathBuf, Option<Vec<u8>>)> = Vec::new();
+    for entry in std::fs::read_dir(data.join("instances")).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        if entry.path().extension().and_then(|value| value.to_str()) != Some("json") { continue; }
+        let bytes = std::fs::read(entry.path()).map_err(|error| error.to_string())?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| format!("Could not read an instance: {error}"))?;
+        if value.get("engine").is_some_and(|engine| engine != "java") { continue; }
+        let config: InstanceConfig = serde_json::from_value(value).map_err(|error| format!("Could not read an instance: {error}"))?;
+        if !config.visible || config.id == AUTOTUNE_INSTANCE_ID { continue; }
+        let options_path = std::path::PathBuf::from(&config.directory).join("options.txt");
+        let options = match std::fs::read(&options_path) {
+            Ok(bytes) => Some(bytes), Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(format!("Could not read settings for {}: {error}", config.name)),
+        };
+        snapshots.push((entry.path(), Some(bytes)));
+        snapshots.push((options_path, options));
+        configs.push((entry.path(), config));
+    }
+    let saved_profile = data.join("autotune-profile.json");
+    let previous_profile = match std::fs::read(&saved_profile) {
+        Ok(bytes) => Some(bytes), Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.to_string()),
+    };
+    snapshots.push((saved_profile.clone(), previous_profile));
+    let result = (|| -> Result<usize, String> {
+        for (path, config) in &mut configs {
+            apply_autotune_to_config(config, profile)?;
+            std::fs::write(path, serde_json::to_vec_pretty(config).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        }
+        // Publish future defaults only once every eligible instance has saved successfully.
+        std::fs::write(saved_profile, serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        Ok(configs.len())
+    })();
+    if let Err(error) = result {
+        let mut rollback_failed = false;
+        for (path, bytes) in snapshots.into_iter().rev() {
+            if bytes.as_ref().is_some_and(|original| std::fs::read(&path).ok().as_ref() == Some(original)) { continue; }
+            let restored = match bytes {
+                Some(bytes) => std::fs::write(path, bytes),
+                None => match std::fs::remove_file(path) { Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), outcome => outcome },
+            };
+            rollback_failed |= restored.is_err();
+        }
+        return Err(format!("AutoTune could not save: {error}. {}", if rollback_failed { "Some settings could not be restored; review your instance settings before playing." } else { "Previous settings were restored." }));
+    }
+    result
 }
 
 #[tauri::command]
-async fn apply_autotune_profile(profile: AutoTuneProfile) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || apply_autotune_profile_blocking(profile))
-        .await
-        .map_err(|error| format!("The AutoTune writer stopped unexpectedly: {error}"))?
+fn get_applied_autotune_profile() -> Option<AutoTuneProfile> { saved_autotune_profile() }
+
+#[cfg(test)]
+mod autotune_application_tests {
+    use super::*;
+    fn fixture() -> (std::path::PathBuf, AutoTuneProfile) {
+        let root = std::env::temp_dir().join(format!("bloom-autotune-apply-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("instances")).unwrap();
+        for (id, engine, visible) in [("java", "java", true), ("native", "retired", true), ("hidden", "java", false)] {
+            let dir = root.join(id);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("options.txt"), "fullscreen:false\nenableVsync:true\nrenderDistance:20\ncustomSetting:keep\n").unwrap();
+            let config = serde_json::json!({"id":id,"name":id,"engine":engine,"version":"26.3","directory":dir,"java":"Automatic","memory":4096,"jvmArguments":"custom","mods":true,"resourcePacks":true,"shaderPacks":true,"config":true,"customResolution":false,"visible":visible,"shortcut":false});
+            std::fs::write(root.join("instances").join(format!("{id}.json")), config.to_string()).unwrap();
+        }
+        let profile = serde_json::from_value(serde_json::json!({"targetFps":144,"memoryMb":3072,"jvmProfile":"Default","graphics":"Fast","renderDistance":8,"simulationDistance":5,"averageFps":100,"onePercentLow":60,"lowRatio":0.6,"confidence":"Measured","benchmarkCompletedAt":123,"reasons":[]})).unwrap();
+        (root, profile)
+    }
+    #[test]
+    fn autotune_apply_counts_only_java_and_preserves_window_preferences() {
+        let (root, profile) = fixture();
+        let native_before = std::fs::read(root.join("instances/native.json")).unwrap();
+        let hidden_before = std::fs::read(root.join("hidden/options.txt")).unwrap();
+        assert_eq!(apply_autotune_profile_in(&root, &profile).unwrap(), 1);
+        let options = std::fs::read_to_string(root.join("java/options.txt")).unwrap();
+        for line in ["fullscreen:false", "enableVsync:true", "customSetting:keep", "maxFps:144", "renderDistance:8", "graphicsMode:0"] { assert!(options.contains(line)); }
+        assert_eq!(native_before, std::fs::read(root.join("instances/native.json")).unwrap());
+        assert_eq!(hidden_before, std::fs::read(root.join("hidden/options.txt")).unwrap());
+        assert!(root.join("autotune-profile.json").is_file());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn instance_format_accepts_legacy_java_and_rejects_unknown_engines() {
+        let (root, profile) = fixture();
+        let path = root.join("instances/java.json");
+        let mut java: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(serde_json::from_value::<InstanceConfig>(java.clone()).is_ok());
+        java.as_object_mut().unwrap().remove("engine");
+        assert!(serde_json::from_value::<InstanceConfig>(java.clone()).is_ok());
+        std::fs::write(&path, serde_json::to_vec(&java).unwrap()).unwrap();
+        assert!(serde_json::from_slice::<InstanceConfig>(&std::fs::read(root.join("instances/native.json")).unwrap()).is_err());
+        let options_before = std::fs::read(root.join("native/options.txt")).unwrap();
+        assert_eq!(apply_autotune_profile_in(&root, &profile).unwrap(), 1);
+        assert_eq!(options_before, std::fs::read(root.join("native/options.txt")).unwrap());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[cfg(windows)]
+    #[test]
+    fn autotune_failed_save_restores_options_and_does_not_publish_defaults() {
+        let (root, profile) = fixture();
+        let path = root.join("instances/java.json");
+        let before = std::fs::read(root.join("java/options.txt")).unwrap();
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true); std::fs::set_permissions(&path, permissions.clone()).unwrap();
+        let result = apply_autotune_profile_in(&root, &profile);
+        permissions.set_readonly(false); std::fs::set_permissions(&path, permissions).unwrap();
+        assert!(result.unwrap_err().contains("Previous settings were restored"));
+        assert_eq!(before, std::fs::read(root.join("java/options.txt")).unwrap());
+        assert!(!root.join("autotune-profile.json").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[tauri::command]
+async fn apply_autotune_profile(profile: AutoTuneProfile, state: tauri::State<'_, LauncherState>) -> Result<usize, String> {
+    let active = state.launch_active.clone();
+    {
+        let mut guard = active.lock().map_err(|_| "The launcher is busy.")?;
+        if *guard || state.game_running.load(Ordering::SeqCst) { return Err("Close Minecraft and wait for downloads to finish before applying AutoTune.".into()); }
+        *guard = true;
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || apply_autotune_profile_blocking(profile))
+        .await.map_err(|error| format!("The AutoTune writer stopped unexpectedly: {error}"));
+    if let Ok(mut guard) = active.lock() { *guard = false; }
+    result?
 }
 
 fn java_major(path: &str) -> Option<u32> {
@@ -2268,29 +2319,7 @@ fn detect_java_installations_blocking() -> Vec<JavaInstallation> {
         .map(|runtime| (runtime.java_path.clone(), runtime.major_version))
         .collect::<std::collections::HashMap<_, _>>();
     candidates.extend(managed.into_iter().map(|runtime| runtime.java_path));
-    if let Ok(path) = std::env::var("PATH") {
-        for entry in std::env::split_paths(&path) {
-            let java = entry.join("java.exe");
-            if java.exists() {
-                candidates.push(java.to_string_lossy().to_string());
-            }
-        }
-    }
-    for root in ["ProgramFiles", "ProgramFiles(x86)"] {
-        if let Ok(base) = std::env::var(root) {
-            for folder in ["Java", "Eclipse Adoptium", "Microsoft"] {
-                let parent = std::path::PathBuf::from(&base).join(folder);
-                if let Ok(entries) = std::fs::read_dir(parent) {
-                    for entry in entries.flatten() {
-                        let java = entry.path().join("bin").join("java.exe");
-                        if java.exists() {
-                            candidates.push(java.to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
+    candidates.extend(platform::discover_java());
     candidates.sort();
     candidates.dedup();
     let installations = candidates
@@ -2300,9 +2329,10 @@ fn detect_java_installations_blocking() -> Vec<JavaInstallation> {
                 .get(&path)
                 .copied()
                 .or_else(|| java_major(&path));
+            let usable = major_version.is_some() && platform::java_matches_host(std::path::Path::new(&path));
             JavaInstallation {
                 path,
-                usable: major_version.is_some(),
+                usable,
                 major_version,
             }
         })
@@ -2342,17 +2372,9 @@ fn resolve_instance_target(
     directory: &str,
     instance_id: &str,
 ) -> Result<std::path::PathBuf, String> {
-    let game_dir = if directory.starts_with(".minecraft") {
-        std::env::var("APPDATA")
-            .map_err(|_| "APPDATA is unavailable.".to_string())?
-            .into()
-    } else {
-        std::path::PathBuf::from(directory)
-    };
-    let mut target = if directory.starts_with(".minecraft") {
-        game_dir.join(directory)
-    } else {
-        game_dir.join(instance_id)
+    let mut target = match platform::default_game_alias(directory)? {
+        Some(path) => path,
+        None => std::path::PathBuf::from(directory).join(instance_id),
     };
     if target
         .file_name()
@@ -2475,7 +2497,7 @@ fn copy_instance_directory(source: &std::path::Path, target: &std::path::Path) -
         let entry = entry.map_err(|error| error.to_string())?;
         let file_type = entry.file_type().map_err(|error| error.to_string())?;
         if file_type.is_symlink() {
-            return Err("Bloom refused to duplicate an instance containing a symbolic link.".into());
+            return Err("Delight refused to duplicate an instance containing a symbolic link.".into());
         }
         let destination = target.join(entry.file_name());
         if file_type.is_dir() {
@@ -2491,15 +2513,15 @@ fn duplicate_instance_blocking(instance_id: String) -> Result<InstanceConfig, St
     if instance_id.is_empty()
         || !instance_id.chars().all(|character| character.is_ascii_alphanumeric() || character == '-')
     {
-        return Err("Bloom refused to duplicate an invalid instance identifier.".into());
+        return Err("Delight refused to duplicate an invalid instance identifier.".into());
     }
     let source_config = load_instance(&instance_id)?;
     let source = std::path::PathBuf::from(&source_config.directory);
-    let source_name = source.file_name().and_then(|name| name.to_str()).ok_or("Bloom could not verify this instance folder.")?;
+    let source_name = source.file_name().and_then(|name| name.to_str()).ok_or("Delight could not verify this instance folder.")?;
     if !source_name.eq_ignore_ascii_case(&instance_id) || !source.is_dir() {
-        return Err("Bloom refused to duplicate an unsafe or missing instance folder.".into());
+        return Err("Delight refused to duplicate an unsafe or missing instance folder.".into());
     }
-    let parent = source.parent().ok_or("Bloom could not find the instance parent folder.")?;
+    let parent = source.parent().ok_or("Delight could not find the instance parent folder.")?;
     let records = bloom_data_dir()?.join("instances");
     let mut suffix = 1u32;
     let (name, id, target) = loop {
@@ -2507,11 +2529,11 @@ fn duplicate_instance_blocking(instance_id: String) -> Result<InstanceConfig, St
         let id = name.to_lowercase().chars().map(|character| if character.is_ascii_alphanumeric() { character } else { '-' }).collect::<String>().trim_matches('-').to_string();
         let target = parent.join(&id);
         if !target.exists() && !records.join(format!("{id}.json")).exists() { break (name, id, target); }
-        suffix = suffix.checked_add(1).ok_or("Bloom could not choose a unique duplicate name.")?;
+        suffix = suffix.checked_add(1).ok_or("Delight could not choose a unique duplicate name.")?;
     };
     if let Err(error) = copy_instance_directory(&source, &target) {
         let _ = std::fs::remove_dir_all(&target);
-        return Err(format!("Bloom could not duplicate the instance files: {error}"));
+        return Err(format!("Delight could not duplicate the instance files: {error}"));
     }
     let mut duplicate = source_config;
     duplicate.id = id.clone();
@@ -2523,7 +2545,7 @@ fn duplicate_instance_blocking(instance_id: String) -> Result<InstanceConfig, St
         .and_then(|bytes| std::fs::write(&record, bytes).map_err(|error| error.to_string()))
     {
         let _ = std::fs::remove_dir_all(&target);
-        return Err(format!("The files were copied, but Bloom could not save the duplicate: {error}"));
+        return Err(format!("The files were copied, but Delight could not save the duplicate: {error}"));
     }
     Ok(duplicate)
 }
@@ -2541,31 +2563,31 @@ fn delete_instance_blocking(instance_id: String) -> Result<(), String> {
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || character == '-')
     {
-        return Err("Bloom refused to delete an invalid instance identifier.".into());
+        return Err("Delight refused to delete an invalid instance identifier.".into());
     }
     let config = load_instance(&instance_id)?;
     let target = std::path::PathBuf::from(&config.directory);
     let target_name = target
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or("Bloom could not verify this instance folder.")?;
+        .ok_or("Delight could not verify this instance folder.")?;
     if !target_name.eq_ignore_ascii_case(&instance_id) {
-        return Err("Bloom refused to delete this folder because it does not match the instance identifier.".into());
+        return Err("Delight refused to delete this folder because it does not match the instance identifier.".into());
     }
     if target.exists() {
         let metadata = std::fs::symlink_metadata(&target).map_err(|error| error.to_string())?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            return Err("Bloom refused to recursively delete an unsafe instance path.".into());
+            return Err("Delight refused to recursively delete an unsafe instance path.".into());
         }
         std::fs::remove_dir_all(&target)
-            .map_err(|error| format!("Bloom could not delete the instance files: {error}"))?;
+            .map_err(|error| format!("Delight could not delete the instance files: {error}"))?;
     }
     let record = bloom_data_dir()?
         .join("instances")
         .join(format!("{instance_id}.json"));
     if record.exists() {
         std::fs::remove_file(record)
-            .map_err(|error| format!("The instance files were deleted, but Bloom could not remove its library record: {error}"))?;
+            .map_err(|error| format!("The instance files were deleted, but Delight could not remove its library record: {error}"))?;
     }
     Ok(())
 }
@@ -2831,11 +2853,13 @@ async fn set_instance_icon(instance_id: String, icon: String) -> Result<Instance
 }
 
 #[tauri::command]
-fn update_instance_settings(
+async fn update_instance_settings(
+    state: tauri::State<'_, LauncherState>,
     instance_id: String,
     name: String,
     memory: u32,
     jvm_arguments: String,
+    loader_version: Option<String>,
 ) -> Result<InstanceConfig, String> {
     if name.trim().is_empty() {
         return Err("Instance name cannot be empty.".into());
@@ -2843,7 +2867,23 @@ fn update_instance_settings(
     if !(1024..=16384).contains(&memory) {
         return Err("Memory must be between 1024 MB and 16384 MB.".into());
     }
+    let expected = load_instance(&instance_id)?;
+    let change = fabric_loader::requested_change(&expected, loader_version.as_deref())?;
+    if let Some(version) = &change {
+        if state.game_running.load(Ordering::SeqCst) || state.content_install_active.load(Ordering::SeqCst)
+            || *state.launch_active.lock().map_err(|error| error.to_string())? {
+            return Err("Close Minecraft and wait for active downloads before changing Fabric Loader.".into());
+        }
+        fabric_loader::check_available(version, &fabric_loader::available(&expected.version).await?)?;
+    }
+    // Re-read after metadata resolves; keep artwork and other independently edited fields.
+    // Holding the launch gate through the write prevents a launch starting with a half-applied change.
+    let launch_guard = state.launch_active.lock().map_err(|error| error.to_string())?;
     let mut config = load_instance(&instance_id)?;
+    if let Some(version) = change {
+        fabric_loader::apply_change(&mut config, &expected, version, *launch_guard
+            || state.game_running.load(Ordering::SeqCst) || state.content_install_active.load(Ordering::SeqCst))?;
+    }
     config.name = name.trim().to_string();
     config.memory = memory;
     config.jvm_arguments = jvm_arguments;
@@ -2862,10 +2902,10 @@ fn open_instance_folder(instance_id: String, category: Option<String>) -> Result
     std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
     let target = target
         .canonicalize()
-        .map_err(|error| format!("Bloom could not resolve this instance folder: {error}"))?;
+        .map_err(|error| format!("Delight could not resolve this instance folder: {error}"))?;
 
     tauri_plugin_opener::open_path(&target, None::<&str>)
-        .map_err(|error| format!("Bloom could not open this instance folder: {error}"))
+        .map_err(|error| format!("Delight could not open this instance folder: {error}"))
 }
 
 fn content_import_details(category: &str) -> Result<(&'static str, &'static str), String> {
@@ -3006,24 +3046,24 @@ async fn import_instance_content_files(
 fn open_game_folder() -> Result<(), String> {
     let target = bloom_data_dir()?.join("minecraft");
     std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
-    command_without_console("explorer.exe")
-        .arg(target)
-        .spawn()
-        .map_err(|error| error.to_string())?;
-    Ok(())
+    platform::open_folder(&target)
 }
 
 const AUTOTUNE_INSTANCE_ID: &str = "bloom-autotune-benchmark";
-const AUTOTUNE_VERSION: &str = "26.2";
-const AUTOTUNE_FABRIC_LOADER: &str = "0.19.3";
-const AUTOTUNE_FABRIC_API: &str = "0.154.0+26.2";
-const AUTOTUNE_MOD: &[u8] = include_bytes!("../resources/bloom-autotune-benchmark-26.2.jar");
+const AUTOTUNE_VERSION: &str = autotune::VERSION;
+const AUTOTUNE_FABRIC_LOADER: &str = "0.19.5";
+const AUTOTUNE_FABRIC_API: &str = "0.163.0+26.3";
+const AUTOTUNE_MOD: &[u8] = include_bytes!("../resources/bloom-autotune-benchmark-26.3.jar");
 
 fn write_autotune_options(game_directory: &std::path::Path) -> Result<(), String> {
     let options = concat!(
         "version:4903\n",
         "enableVsync:false\n",
-        "fullscreen:true\n",
+        "fullscreen:false\n",
+        "pauseOnLostFocus:false\n",
+        "renderDistance:12\n",
+        "simulationDistance:8\n",
+        "graphicsPreset:\"fancy\"\n",
         "maxFps:260\n",
         "narrator:0\n",
         "narratorHotkey:false\n",
@@ -3048,14 +3088,13 @@ fn install_autotune_benchmark(
     app: tauri::AppHandle,
     state: tauri::State<'_, LauncherState>,
 ) -> Result<String, String> {
-    let appdata = std::env::var("APPDATA").map_err(|_| "APPDATA is unavailable.")?;
-    let game_directory = std::path::PathBuf::from(appdata)
-        .join(".minecraft")
+    let game_directory = platform::game_directory()?
         .join("instances")
         .join(AUTOTUNE_INSTANCE_ID);
-    let config = InstanceConfig {
+    let mut config = InstanceConfig {
         id: AUTOTUNE_INSTANCE_ID.into(),
-        name: "Bloom AutoTune Benchmark".into(),
+        name: "Delight AutoTune Benchmark".into(),
+        engine: InstanceEngine::Java,
         icon: None,
         loader: "Fabric".into(),
         loader_version: Some(AUTOTUNE_FABRIC_LOADER.into()),
@@ -3068,11 +3107,10 @@ fn install_autotune_benchmark(
         resource_packs: false,
         shader_packs: false,
         config: true,
-        custom_resolution: false,
+        custom_resolution: true,
         visible: false,
         shortcut: false,
     };
-    write_instance(&config)?;
     {
         let mut active = state
             .launch_active
@@ -3087,6 +3125,7 @@ fn install_autotune_benchmark(
     let active = state.launch_active.clone();
     let cancel = state.cancel_requested.clone();
     let instance_id = AUTOTUNE_INSTANCE_ID.to_string();
+    emit_launch(&app, &instance_id, "installing", 0, "Preparing the private AutoTune instance");
     std::thread::spawn(move || {
         let result = (|| -> Result<(), String> {
             emit_launch(
@@ -3096,15 +3135,18 @@ fn install_autotune_benchmark(
                 1,
                 "Preparing the private AutoTune instance",
             );
+            config.memory = autotune::benchmark_memory(detect_hardware_report_blocking()?.ram_bytes)?;
             if game_directory.exists() {
+                autotune::require_managed_directory(&game_directory)?;
                 std::fs::remove_dir_all(&game_directory).map_err(|error| error.to_string())?;
             }
             let mods = game_directory.join("mods");
             std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
             std::fs::write(game_directory.join(".bloom-autotune-managed"), b"managed")
                 .map_err(|error| error.to_string())?;
+            write_instance(&config)?;
             write_autotune_options(&game_directory)?;
-            std::fs::write(mods.join("bloom-autotune-benchmark-26.2.jar"), AUTOTUNE_MOD)
+            std::fs::write(mods.join("bloom-autotune-benchmark-26.3.jar"), AUTOTUNE_MOD)
                 .map_err(|error| error.to_string())?;
             let mut plan = mc_launcher_core::net::download::DownloadPlan::default();
             plan.tasks.push(mc_launcher_core::net::download::DownloadTask {
@@ -3153,14 +3195,16 @@ fn install_autotune_benchmark(
 #[tauri::command]
 fn get_autotune_benchmark_result() -> Result<Option<serde_json::Value>, String> {
     let config = load_instance(AUTOTUNE_INSTANCE_ID)?;
-    let path = std::path::PathBuf::from(config.directory).join("bloom-benchmark-result.json");
+    let path = std::path::PathBuf::from(&config.directory).join("bloom-benchmark-result.json");
     if !path.exists() {
         return Ok(None);
     }
     let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-    serde_json::from_slice(&bytes)
-        .map(Some)
-        .map_err(|error| format!("Benchmark result is invalid: {error}"))
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| format!("Benchmark result is invalid: {error}"))?;
+    autotune::validate_result(&value)?;
+    let run_id = std::fs::read_to_string(std::path::PathBuf::from(config.directory).join("bloom-benchmark-run-id.txt")).map_err(|error| error.to_string())?;
+    if value["runId"].as_str() != Some(run_id.trim()) { return Err("The benchmark result belongs to an earlier run.".into()); }
+    Ok(Some(value))
 }
 
 #[tauri::command]
@@ -3176,10 +3220,24 @@ fn get_autotune_benchmark_status() -> Result<Option<serde_json::Value>, String> 
         .map_err(|error| format!("Benchmark status is invalid: {error}"))
 }
 
+#[tauri::command]
+fn cancel_autotune_benchmark(state: tauri::State<'_, LauncherState>) -> Result<(), String> {
+    let launch = current_launch().lock().map_err(|_| "The benchmark status is busy.")?;
+    if launch.instance_id != AUTOTUNE_INSTANCE_ID || !matches!(launch.state.as_str(), "installing" | "launching" | "running") {
+        return Err("There is no active AutoTune test to stop.".into());
+    }
+    // A simultaneous resource-pack download must not redirect this cancellation.
+    state.cancel_requested.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
 fn safe_pack_path(raw: &str) -> Result<std::path::PathBuf, String> {
     use std::path::Component;
-    let path = std::path::Path::new(raw);
-    if path.is_absolute()
+    // Modpacks move between operating systems. Interpret both separator styles
+    // and reject Windows drive/stream syntax even when running on Unix.
+    let normalized = raw.replace('\\', "/");
+    let path = std::path::Path::new(&normalized);
+    if raw.contains(':') || raw.chars().any(char::is_control) || path.is_absolute()
         || path.components().any(|component| {
             matches!(
                 component,
@@ -3258,11 +3316,11 @@ fn import_fabric_modpack_path_with_icon(
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|_| "Choose a valid .mrpack or ZIP containing modrinth.index.json.".to_string())?;
     let mut index_text = String::new();
-    archive.by_name("modrinth.index.json").map_err(|_| "This ZIP is not a Modrinth modpack. Bloom currently imports Fabric Modrinth packs only.".to_string())?.read_to_string(&mut index_text).map_err(|error| error.to_string())?;
+    archive.by_name("modrinth.index.json").map_err(|_| "This ZIP is not a Modrinth modpack. Delight currently imports Fabric Modrinth packs only.".to_string())?.read_to_string(&mut index_text).map_err(|error| error.to_string())?;
     let index: serde_json::Value = serde_json::from_str(&index_text)
         .map_err(|_| "The modrinth.index.json file is invalid.".to_string())?;
     if index["game"] != "minecraft" {
-        return Err("Bloom only imports Minecraft modpacks.".into());
+        return Err("Delight only imports Minecraft modpacks.".into());
     }
     let dependencies = index["dependencies"]
         .as_object()
@@ -3318,13 +3376,13 @@ fn import_fabric_modpack_path_with_icon(
         suffix += 1;
     }
     let game_directory =
-        std::path::PathBuf::from(std::env::var("APPDATA").map_err(|_| "APPDATA is unavailable.")?)
-            .join(".minecraft")
+        platform::game_directory()?
             .join("instances")
             .join(&id);
     let mut config = InstanceConfig {
         id: id.clone(),
         name,
+        engine: InstanceEngine::Java,
         icon,
         loader: "Fabric".into(),
         loader_version: Some(fabric_version),
@@ -3512,7 +3570,7 @@ async fn import_modrinth_modpack(
         ))
         .send()
         .await
-        .map_err(|error| format!("Bloom could not resolve that Modrinth pack: {error}"))?
+        .map_err(|error| format!("Delight could not resolve that Modrinth pack: {error}"))?
         .error_for_status()
         .map_err(|error| format!("Modrinth rejected that pack version: {error}"))?
         .json::<ModrinthVersion>()
@@ -3522,23 +3580,23 @@ async fn import_modrinth_modpack(
         .ok_or("That Modrinth release has no downloadable pack file.")?;
     if !file.filename.to_ascii_lowercase().ends_with(".mrpack") || !allowed_pack_download(&file.url)
     {
-        return Err("Bloom only imports trusted Modrinth .mrpack downloads.".into());
+        return Err("Delight only imports trusted Modrinth .mrpack downloads.".into());
     }
     if file.size > 512 * 1024 * 1024 {
-        return Err("That Modrinth pack is larger than Bloom's 512 MB import limit.".into());
+        return Err("That Modrinth pack is larger than Delight's 512 MB import limit.".into());
     }
     let bytes = client
         .get(&file.url)
         .send()
         .await
-        .map_err(|error| format!("Bloom could not download that Modrinth pack: {error}"))?
+        .map_err(|error| format!("Delight could not download that Modrinth pack: {error}"))?
         .error_for_status()
         .map_err(|error| format!("The Modrinth pack download failed: {error}"))?
         .bytes()
         .await
-        .map_err(|error| format!("Bloom could not read that Modrinth pack: {error}"))?;
+        .map_err(|error| format!("Delight could not read that Modrinth pack: {error}"))?;
     if bytes.len() > 512 * 1024 * 1024 {
-        return Err("That Modrinth pack exceeded Bloom's 512 MB import limit.".into());
+        return Err("That Modrinth pack exceeded Delight's 512 MB import limit.".into());
     }
     let imports = bloom_data_dir()?.join("imports");
     std::fs::create_dir_all(&imports).map_err(|error| error.to_string())?;
@@ -3556,7 +3614,7 @@ async fn import_modrinth_modpack(
         .collect::<String>();
     let pack_path = imports.join(format!("{}-{}.mrpack", safe_project, safe_version));
     std::fs::write(&pack_path, bytes)
-        .map_err(|error| format!("Bloom could not save the downloaded pack: {error}"))?;
+        .map_err(|error| format!("Delight could not save the downloaded pack: {error}"))?;
     // Keep the canonical project artwork with the instance, including during installation.
     let icon = async {
         let project: serde_json::Value = client
@@ -3675,7 +3733,28 @@ fn execute_download_plan(
     stage: &str,
     assets: bool,
 ) -> Result<(), String> {
+    execute_content_download_plan(app, instance_id, plan, cancel, start, end, stage, assets, None)
+}
+
+fn execute_content_download_plan(
+    app: &tauri::AppHandle,
+    instance_id: &str,
+    plan: &mc_launcher_core::net::download::DownloadPlan,
+    cancel: &AtomicBool,
+    start: u8,
+    end: u8,
+    stage: &str,
+    assets: bool,
+    content_task: Option<&str>,
+) -> Result<(), String> {
     use std::io::{Read, Write};
+    let report = |progress: u8, message: String, received: u64, total: u64, speed: u64| {
+        if let Some(id) = content_task {
+            content_downloads::progress(app, id, progress, message, received, total, speed);
+        } else {
+            emit_download(app, instance_id, progress, message, received, total, speed);
+        }
+    };
     let client = reqwest::blocking::Client::builder()
         .user_agent("BloomClient/0.1.0 (https://bloomclient.org)")
         .build()
@@ -3753,9 +3832,7 @@ fn execute_download_plan(
                             };
                             let overall = start as f64
                                 + ((base + fraction) / total_tasks) * (end - start) as f64;
-                            emit_download(
-                                app,
-                                instance_id,
+                            report(
                                 overall.round() as u8,
                                 if assets {
                                     "Loading assets".into()
@@ -3795,9 +3872,7 @@ fn execute_download_plan(
                             let done = finished.fetch_add(1, Ordering::SeqCst) + 1;
                             let progress =
                                 start as f64 + (done as f64 / total_tasks) * (end - start) as f64;
-                            emit_download(
-                                app,
-                                instance_id,
+                            report(
                                 progress.round() as u8,
                                 if assets {
                                     "Loading assets".into()
@@ -3840,9 +3915,7 @@ fn execute_download_plan(
             .map_err(|error| error.to_string())?
         {
             let progress = start as f64 + ((index + 1) as f64 / total_tasks) * (end - start) as f64;
-            emit_download(
-                app,
-                instance_id,
+            report(
                 progress.round() as u8,
                 if assets {
                     "Loading assets".into()
@@ -3901,9 +3974,7 @@ fn execute_download_plan(
             };
             let overall = start as f64
                 + ((index as f64 + file_fraction) / total_tasks) * (end - start) as f64;
-            emit_download(
-                app,
-                instance_id,
+            report(
                 overall.round() as u8,
                 if assets {
                     "Loading assets".into()
@@ -4010,7 +4081,7 @@ fn dependency_is_already_installed(
 
 fn perform_modrinth_content_install(
     app: &tauri::AppHandle,
-    task: &QueuedContentInstall,
+    task: &content_downloads::ContentDownload,
     cancel: &AtomicBool,
 ) -> Result<String, String> {
     let config = load_instance(&task.instance_id)?;
@@ -4018,13 +4089,7 @@ fn perform_modrinth_content_install(
     if task.category == "mods" && !config.loader.eq_ignore_ascii_case("fabric") {
         return Err("Modrinth mod installation currently supports Fabric instances only.".into());
     }
-    emit_launch(
-        app,
-        &task.instance_id,
-        "installing",
-        1,
-        format!("Resolving Modrinth {}", content_label.to_lowercase()),
-    );
+    if cancel.load(Ordering::SeqCst) { return Err("__cancelled__".into()); }
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
@@ -4151,7 +4216,7 @@ fn perform_modrinth_content_install(
                 label: file.file_name,
             });
     }
-    execute_download_plan(
+    execute_content_download_plan(
         app,
         &task.instance_id,
         &downloads,
@@ -4160,6 +4225,7 @@ fn perform_modrinth_content_install(
         99,
         &format!("Installing {}", plan.title),
         false,
+        Some(&task.id),
     )?;
     Ok(plan.title)
 }
@@ -4174,7 +4240,7 @@ fn install_modrinth_content(
     title: String,
     version: String,
     icon_url: Option<String>,
-) -> Result<(), String> {
+) -> Result<content_downloads::QueueSnapshot, String> {
     let config = load_instance(&instance_id)?;
     catalog_category(&category)?;
     if category == "mods" && state.game_running.load(Ordering::SeqCst) {
@@ -4200,42 +4266,36 @@ fn install_modrinth_content(
                 .map(|host| host == "cdn.modrinth.com" || host.ends_with(".modrinth.com"))
                 .unwrap_or(false)
     });
-    let task = QueuedContentInstall {
+    let mut queue = state.content_install_queue.lock().map_err(|_| "The content queue is busy.")?;
+    if queue.contains(&instance_id, &project_id, &category) { return Ok(queue.snapshot()); }
+    let task = content_downloads::ContentDownload {
+        id: uuid::Uuid::new_v4().to_string(),
         instance_id,
+        instance_name: config.name,
         project_id,
         category,
         title: title.chars().take(160).collect(),
         version: version.chars().take(100).collect(),
         icon_url,
+        state: "queued".into(), message: "Waiting in queue".into(), progress: 0,
+        downloaded_bytes: 0, total_bytes: 0, bytes_per_second: 0, completed_at: None, revision: 0,
     };
-    let mut queue = state
-        .content_install_queue
-        .lock()
-        .map_err(|_| "The content queue is busy.")?;
-    if queue.iter().any(|queued| {
-        queued.instance_id == task.instance_id
-            && queued.project_id == task.project_id
-            && queued.category == task.category
-    }) {
-        return Ok(());
-    }
     let start_worker = !state.content_install_active.load(Ordering::SeqCst);
     if start_worker {
-        let mut active = state
-            .launch_active
-            .lock()
-            .map_err(|_| "The task manager is busy.")?;
+        let mut active = state.launch_active.lock().map_err(|_| "The task manager is busy.")?;
         validate_content_install_activity(&task.category, *active, state.game_running.load(Ordering::SeqCst))?;
+        queue.enqueue(task)?;
         *active = true;
         state.content_cancel_requested.store(false, Ordering::SeqCst);
         state.content_install_active.store(true, Ordering::SeqCst);
+    } else {
+        queue.enqueue(task)?;
     }
-    queue.push_back(task);
+    let snapshot = queue.snapshot();
     drop(queue);
+    content_downloads::publish(&app, &snapshot);
+    if !start_worker { return Ok(snapshot); }
 
-    if !start_worker {
-        return Ok(());
-    }
     let active = state.launch_active.clone();
     let game_running = state.game_running.clone();
     let cancel = state.content_cancel_requested.clone();
@@ -4243,88 +4303,33 @@ fn install_modrinth_content(
     let install_active = state.content_install_active.clone();
     std::thread::spawn(move || loop {
         let next = {
-            let mut queue = match install_queue.lock() {
-                Ok(queue) => queue,
-                Err(_) => break,
-            };
-            if queue.is_empty() {
-                if let Ok(mut value) = active.lock() {
-                    install_active.store(false, Ordering::SeqCst);
-                    *value = game_running.load(Ordering::SeqCst);
-                }
-                None
-            } else {
-                queue.pop_front()
+            let mut queue = match install_queue.lock() { Ok(queue) => queue, Err(_) => break };
+            let task = queue.begin_next();
+            if task.is_none() {
+                install_active.store(false, Ordering::SeqCst);
+                if let Ok(mut value) = active.lock() { *value = game_running.load(Ordering::SeqCst); }
             }
+            task.map(|task| (task, queue.snapshot()))
         };
-        let Some(task) = next else { break };
-        let _ = app.emit(
-            "content-install-state",
-            ContentInstallFinished {
-                instance_id: task.instance_id.clone(),
-                project_id: task.project_id.clone(),
-                category: task.category.clone(),
-                state: "installing".into(),
-                message: format!("Installing {}", task.title),
-                title: task.title.clone(),
-                version: task.version.clone(),
-                icon_url: task.icon_url.clone(),
-            },
-        );
+        let Some((task, snapshot)) = next else { break };
+        content_downloads::publish(&app, &snapshot);
         let result = perform_modrinth_content_install(&app, &task, &cancel);
-        let (state_name, message, stop_queue) = match result {
-            Ok(title) => {
-                let message = format!("Installed {title}");
-                emit_launch(&app, &task.instance_id, "complete", 100, &message);
-                ("installed", message, false)
-            }
-            Err(error) if error == "__cancelled__" => {
-                let message = format!("{} installation cancelled", task.title);
-                emit_launch(&app, &task.instance_id, "cancelled", 0, &message);
-                ("cancelled", message, true)
-            }
-            Err(error) => {
-                emit_launch(&app, &task.instance_id, "error", 0, &error);
-                ("error", error, false)
-            }
+        let (state_name, message) = match result {
+            Ok(title) => ("installed", format!("Installed {title}")),
+            Err(error) if error == "__cancelled__" || cancel.load(Ordering::SeqCst) => ("cancelled", format!("{} installation cancelled", task.title)),
+            Err(error) => ("error", error),
         };
-        let _ = app.emit(
-            "content-install-state",
-            ContentInstallFinished {
-                instance_id: task.instance_id,
-                project_id: task.project_id,
-                category: task.category,
-                state: state_name.into(),
-                message,
-                title: task.title,
-                version: task.version,
-                icon_url: task.icon_url,
-            },
-        );
-        if stop_queue {
-            let cancelled = install_queue
-                .lock()
-                .map(|mut queue| queue.drain(..).collect::<Vec<_>>())
-                .unwrap_or_default();
-            for queued in cancelled {
-                let _ = app.emit(
-                    "content-install-state",
-                    ContentInstallFinished {
-                        instance_id: queued.instance_id,
-                        project_id: queued.project_id,
-                        category: queued.category,
-                        state: "cancelled".into(),
-                        message: "Installation queue cancelled".into(),
-                        title: queued.title,
-                        version: queued.version,
-                        icon_url: queued.icon_url,
-                    },
-                );
-            }
+        let snapshot = {
+            let mut queue = match install_queue.lock() { Ok(queue) => queue, Err(_) => break };
+            queue.finish(&task.id, state_name, message);
+            // Clear only this task's token while holding the queue lock. A cancellation
+            // cannot leak into the next item or discard the remaining queue.
             cancel.store(false, Ordering::SeqCst);
-        }
+            queue.snapshot()
+        };
+        content_downloads::publish(&app, &snapshot);
     });
-    Ok(())
+    Ok(snapshot)
 }
 
 fn install_instance_files(app: &tauri::AppHandle, instance_id: &str, config: &InstanceConfig, root: &std::path::Path, cancel: &AtomicBool, start: u8, end: u8) -> Result<String, String> {
@@ -4492,7 +4497,7 @@ fn install_instance_files_internal(
         extract_natives_cached(&vanilla.libraries, minecraft_dir, &version_id, repair)
         .map_err(|error| error.to_string())?;
     }
-    cosmetics::reconcile(config)?;
+    if config.id != AUTOTUNE_INSTANCE_ID { cosmetics::reconcile(config)?; }
     prepared_paths.push(minecraft_dir.join("versions").join(&config.version).join(format!("{}.json", config.version)));
     prepared_paths.push(minecraft_dir.join("versions").join(&version_id).join(format!("{version_id}.json")));
     let natives = mc_launcher_core::install::natives::natives_directory(minecraft_dir, &version_id);
@@ -4512,7 +4517,7 @@ fn prepare_instance_files(app: &tauri::AppHandle, instance_id: &str, config: &In
     if launch_cache::reusable(config) {
         if let Some(receipt) = cache::read_json::<launch_cache::Receipt>("launch-installations", &launch_cache::key(config, root), None) {
             if receipt.valid() {
-                cosmetics::reconcile(config)?;
+                if config.id != AUTOTUNE_INSTANCE_ID { cosmetics::reconcile(config)?; }
                 emit_launch(app, instance_id, "installing", end, "Using verified Minecraft installation");
                 return Ok(receipt.version_id);
             }
@@ -4534,10 +4539,8 @@ fn selected_java(app: &tauri::AppHandle, instance_id: &str, config: &InstanceCon
     if let Some(path) = cached_selected_java(config, required) { return Ok(path); }
     let path = selected_java_uncached(app, instance_id, config, required, cancel)?;
     let mut files = vec![path.clone()];
-    if let Some(bin) = path.parent() {
-        let jvm = bin.join("server").join("jvm.dll");
-        if jvm.is_file() { files.push(jvm); }
-    }
+    let jvm = platform::java_library_stamp(&path);
+    if jvm.is_file() { files.push(jvm); }
     if let Some(receipt) = launch_cache::Receipt::capture(path.to_string_lossy().into_owned(), files) {
         let _ = cache::write_json("launch-java", &key, &receipt);
     }
@@ -4564,8 +4567,8 @@ fn selected_java_uncached(
             return Err(format!("Minecraft {} needs Java {required} or newer, but this instance is set to Java {found}.", config.version));
         }
         let path = std::path::PathBuf::from(configured_path);
-        let javaw = path.with_file_name("javaw.exe");
-        return Ok(if javaw.is_file() { javaw } else { path });
+        if !platform::java_matches_host(&path) { return Err("Choose a Java runtime matching this Mac’s architecture, or select Automatic.".into()); }
+        return Ok(platform::launch_java(path));
     }
     if let Some(java) = detect_java_installations_blocking()
         .into_iter()
@@ -4578,8 +4581,8 @@ fn selected_java_uncached(
         })
     {
         let path = std::path::PathBuf::from(java.path);
-        let javaw = path.with_file_name("javaw.exe");
-        return Ok(if javaw.is_file() { javaw } else { path });
+        if !platform::java_matches_host(&path) { return Err("Choose a Java runtime matching this Mac’s architecture, or select Automatic.".into()); }
+        return Ok(platform::launch_java(path));
     }
     download_managed_java(app, instance_id, required, cancel)
 }
@@ -4592,12 +4595,20 @@ async fn launch_minecraft(
     launch_method: String,
     download_workers: u8,
     debug_logging: bool,
+    portal_target: Option<portal::Target>,
 ) -> Result<(), String> {
     let launch_started = std::time::Instant::now();
     if !matches!(download_workers, 1 | 3 | 5) {
         return Err("Download workers must be 1, 3, or 5.".into());
     }
     DOWNLOAD_WORKERS.store(download_workers as usize, Ordering::Relaxed);
+    let initial_config = load_instance(&instance_id)?;
+    if let Some(target) = &portal_target {
+        if !list_instances_blocking()?.iter().any(|instance| instance.id == instance_id) {
+            return Err("This instance is no longer available in Portal.".into());
+        }
+        portal::validate_target(&initial_config, target)?;
+    }
     {
         let mut active = state
             .launch_active
@@ -4621,6 +4632,20 @@ async fn launch_minecraft(
             }
             "Sign in with Microsoft before launching Minecraft.".to_string()
         })?;
+    if instance_id == AUTOTUNE_INSTANCE_ID {
+        let prepared = (|| -> Result<(), String> {
+            let config = load_instance(&instance_id)?;
+            if config.version != AUTOTUNE_VERSION { return Err("Reinstall the Minecraft 26.3 benchmark before running this test.".into()); }
+            let directory = std::path::Path::new(&config.directory);
+            autotune::prepare_run(directory)?;
+            write_autotune_options(directory)?;
+            Ok(())
+        })();
+        if let Err(error) = prepared {
+            if let Ok(mut active) = state.launch_active.lock() { *active = false; }
+            return Err(error);
+        }
+    }
     let session_store = state.session.clone();
     let authentication_id = instance_id.clone();
     let authentication_error = Arc::new(Mutex::new(None::<String>));
@@ -4638,9 +4663,9 @@ async fn launch_minecraft(
         let auth_ms = auth_started.elapsed().as_millis();
         let cosmetics_started = std::time::Instant::now();
         let cosmetic_session = session.clone();
-        let token = tauri::async_runtime::spawn_blocking(move || {
+        let token = if authentication_id == AUTOTUNE_INSTANCE_ID { None } else { tauri::async_runtime::spawn_blocking(move || {
             load_instance(&authentication_id).ok().and_then(|config| cosmetics::prepare_session(&config, &cosmetic_session))
-        }).await.map_err(|_| "Cosmetics preparation stopped unexpectedly.")?;
+        }).await.map_err(|_| "Cosmetics preparation stopped unexpectedly.")? };
         Ok::<_, String>((session, token, auth_ms, cosmetics_started.elapsed().as_millis()))
         }.await;
         if let Err(error) = &outcome {
@@ -4653,6 +4678,7 @@ async fn launch_minecraft(
     let cancel_requested = state.cancel_requested.clone();
     let game_running = state.game_running.clone();
     let content_active = state.content_install_active.clone();
+    emit_launch(&app, &instance_id, "launching", 0, "Preparing Minecraft launch");
     std::thread::spawn(move || {
         let preparation_started = std::time::Instant::now();
         let config = match load_instance(&instance_id) {
@@ -4665,7 +4691,7 @@ async fn launch_minecraft(
                 return;
             }
         };
-        if let Err(error) = utilities::apply_active_setup_to_instance(&config) {
+        if let Err(error) = if config.id == AUTOTUNE_INSTANCE_ID { Ok(()) } else { utilities::apply_active_setup_to_instance(&config) } {
             emit_launch(
                 &app,
                 &instance_id,
@@ -4798,7 +4824,7 @@ async fn launch_minecraft(
                 account,
                 java_executable: Some(java),
                 game_directory: Some(config.directory.clone().into()),
-                launcher_name: "Bloom Client".into(),
+                launcher_name: "Delight Client".into(),
                 launcher_version: env!("CARGO_PKG_VERSION").into(),
                 custom_resolution: if config.custom_resolution {
                     Some((1280, 720))
@@ -4816,6 +4842,14 @@ async fn launch_minecraft(
                 .position(|arg| version.main_class.as_deref() == Some(arg.as_str()))
                 .ok_or("Minecraft launch metadata did not include a main class.")?;
             let mut args = command.args;
+            let quick_play = portal::supports_quick_play(&version) && instance_id != AUTOTUNE_INSTANCE_ID;
+            if let Some(target) = &portal_target {
+                if !quick_play { return Err("This Minecraft version does not support direct play. Open the instance to play normally.".into()); }
+                portal::validate_target(&config, target)?;
+                portal::append_target(&mut args, target);
+            }
+            let mut portal_tracker = quick_play.then(|| portal::JoinTracker::new(&config.directory));
+            if let Some(tracker) = &portal_tracker { tracker.append_args(&mut args); }
             args.insert(main_index, format!("-Xmx{}M", config.memory));
             for argument in config.jvm_arguments.split_whitespace().rev() {
                 args.insert(main_index, argument.to_string());
@@ -4870,7 +4904,22 @@ async fn launch_minecraft(
             }
             drop(log_sender);
             let mut ready = false;
+            let mut portal_poll = std::time::Instant::now();
+            let mut portal_error_reported = false;
             loop {
+                if portal_poll.elapsed() >= std::time::Duration::from_secs(1) {
+                    if let Some(tracker) = &mut portal_tracker {
+                        match tracker.observe(&config) {
+                            Ok(true) => { let _ = app.emit("portal-changed", ()); },
+                            Err(error) if !portal_error_reported => {
+                                emit_game_log(&app, &instance_id, "launcher", format!("Portal history could not be saved: {error}"));
+                                portal_error_reported = true;
+                            },
+                            _ => {},
+                        }
+                    }
+                    portal_poll = std::time::Instant::now();
+                }
                 if cancel_requested.load(Ordering::SeqCst) {
                     let _ = child.kill();
                     return Err("Minecraft launch was cancelled.".into());
@@ -4916,6 +4965,9 @@ async fn launch_minecraft(
                     }
                 }
                 if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+                    if let Some(tracker) = &mut portal_tracker {
+                        if matches!(tracker.observe(&config), Ok(true)) { let _ = app.emit("portal-changed", ()); }
+                    }
                     if !ready && !status.success() {
                         return Err(format!(
                             "Minecraft exited before opening (exit code {}).",
@@ -5026,8 +5078,8 @@ pub fn run() {
                 menu::{Menu, MenuItem},
                 tray::TrayIconBuilder,
             };
-            let show = MenuItem::with_id(app, "show", "Show Bloom Client", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit Bloom Client", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "Show Delight Client", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Delight Client", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
             let mut tray = TrayIconBuilder::new()
                 .menu(&menu)
@@ -5069,6 +5121,7 @@ pub fn run() {
             load_custom_background,
             clear_custom_background,
             search_modrinth_content,
+            catalog_filters::get_catalog_filter_choices,
             get_modrinth_project_details,
             list_modrinth_modpack_releases,
             request_microsoft_device_code,
@@ -5079,12 +5132,17 @@ pub fn run() {
             remove_managed_java_runtime,
             detect_hardware_report,
             apply_autotune_profile,
+            get_applied_autotune_profile,
             get_minecraft_releases,
             save_instance,
             list_instances,
+            portal::list_portal,
+            portal::change_portal,
             instance_folders::list_instance_folders,
             instance_folders::change_instance_folder,
             duplicate_instance,
+            instance_actions::rename_instance,
+            instance_actions::export_instance,
             delete_instance,
             list_instance_content,
             content_transfer::preview_content_transfer,
@@ -5093,6 +5151,7 @@ pub fn run() {
             delete_instance_content,
             set_instance_icon,
             update_instance_settings,
+            fabric_loader::list_instance_fabric_loaders,
             open_instance_folder,
             import_instance_mod_files,
             import_instance_content_files,
@@ -5100,6 +5159,7 @@ pub fn run() {
             install_autotune_benchmark,
             get_autotune_benchmark_result,
             get_autotune_benchmark_status,
+            cancel_autotune_benchmark,
             import_fabric_modpack,
             import_modrinth_modpack,
             modpack_sharing::create_modpack_share,
@@ -5119,6 +5179,9 @@ pub fn run() {
             modpack_sharing::list_pack_channel_memberships,
             modpack_sharing::apply_pack_channel_update,
             install_modrinth_content,
+            content_downloads::get_content_downloads,
+            content_downloads::cancel_content_download,
+            content_downloads::dismiss_content_download,
             launch_minecraft,
             choose_game_directory,
             exit_application,
@@ -5175,7 +5238,7 @@ pub fn run() {
             social::social_sign_out
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Bloom Client");
+        .expect("error while running Delight Client");
 }
 
 #[cfg(test)]
@@ -5212,6 +5275,12 @@ mod tests {
         assert!(safe_pack_path("mods/example.jar").is_ok());
         assert!(safe_pack_path("../outside.jar").is_err());
         assert!(safe_pack_path("C:\\outside.jar").is_err());
+        assert!(safe_pack_path("C:/outside.jar").is_err());
+        assert!(safe_pack_path("C:outside.jar").is_err());
+        assert!(safe_pack_path("..\\outside.jar").is_err());
+        assert!(safe_pack_path("\\\\server\\share\\outside.jar").is_err());
+        assert!(safe_pack_path("mods/example.jar:stream").is_err());
+        assert_eq!(safe_pack_path("mods\\example.jar").unwrap(), std::path::Path::new("mods/example.jar"));
         assert!(safe_pack_path("/outside.jar").is_err());
     }
 

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import "./utilities.css";
 import { InfoTip } from "./InfoTip";
+import { useToggleFeedback } from "../services/toggle-feedback";
 
 export type UtilityInstance = {
   id: string;
@@ -83,7 +84,8 @@ const sourceKeys: Record<"options" | "servers" | "voicechat", keyof GlobalFileSy
 };
 
 function UtilityToggle({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
-  return <button type="button" className={`utility-toggle ${checked ? "on" : ""}`} aria-pressed={checked} aria-label={label} onClick={() => onChange(!checked)}><span /></button>;
+  const feedbackRef = useToggleFeedback(checked);
+  return <button ref={feedbackRef} type="button" className={`utility-toggle ${checked ? "on" : ""}`} aria-pressed={checked} aria-label={label} onClick={() => onChange(!checked)}><span /></button>;
 }
 
 export function UtilitiesPage({

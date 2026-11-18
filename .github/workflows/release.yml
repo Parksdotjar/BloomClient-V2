@@ -1,4 +1,4 @@
-name: Release Bloom Client
+name: Release Delight Client
 
 on:
   push:
@@ -54,9 +54,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
-          releaseName: Bloom Client v__VERSION__
+          releaseName: Delight Client v__VERSION__
           releaseBody: |
-            A new Bloom Client update is ready.
+            A new Delight Client update is ready.
 
             Publish this draft after adding the user-facing release notes. Once published, installed clients will discover it automatically.
           releaseDraft: true

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, CirclePlus, ListFilter, RotateCcw } from "lucide-react";
 import { ToolbarIconSwap, ToolbarSegments } from "./ConnectedToolbar";
 import "./content-toolbar.css";
@@ -19,30 +19,35 @@ type Props = {
   onFilterChange: (value: string) => void;
   onAdd: () => void;
   onBack: () => void;
+  catalogControls?: (owner: string) => ReactNode;
+  catalogFiltered?: boolean;
 };
 
 export function ContentToolbar({ category, total, enabled, visible, ready, searching, browsing,
-  version, loader, sort, filter, onSortChange, onFilterChange, onAdd, onBack }: Props) {
+  version, loader, sort, filter, onSortChange, onFilterChange, onAdd, onBack, catalogControls, catalogFiltered = false }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const drawerId = useId();
-  const expanded = filtersOpen && !browsing;
-  const filtered = sort !== "Name" || filter !== "All";
+  const catalogFilters = browsing && Boolean(catalogControls);
+  const expanded = filtersOpen && (!browsing || catalogFilters);
+  const filtered = browsing ? catalogFiltered : sort !== "Name" || filter !== "All";
   const mode = browsing ? "catalog" : "installed";
   const summary = browsing ? `Minecraft ${version} · ${loader}`
     : !ready ? "Loading installed content…"
     : searching || filter !== "All" ? `${visible.toLocaleString()} of ${total.toLocaleString()}${filter !== "All" ? ` · ${filter}` : " matching"}`
     : `${total.toLocaleString()} installed · ${enabled.toLocaleString()} enabled`;
 
-  useEffect(() => { if (browsing) setFiltersOpen(false); }, [browsing]);
+  useEffect(() => { setFiltersOpen(false); }, [browsing]);
   useEffect(() => {
     if (!expanded) return;
     const outside = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(`[data-content-filter-owner="${CSS.escape(drawerId)}"]`)) return;
       if (event.target instanceof Node && !root.current?.contains(event.target)) setFiltersOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (document.querySelector(`[data-content-filter-owner="${CSS.escape(drawerId)}"]`)) return;
       setFiltersOpen(false);
       trigger.current?.focus();
     };
@@ -52,18 +57,18 @@ export function ContentToolbar({ category, total, enabled, visible, ready, searc
       document.removeEventListener("pointerdown", outside);
       document.removeEventListener("keydown", escape);
     };
-  }, [expanded]);
+  }, [expanded, drawerId]);
 
-  return <div ref={root} className="manager-heading content-toolbar" data-mode={mode} data-filters-open={expanded}>
+  return <div ref={root} className="manager-heading content-toolbar" data-mode={mode} data-filters-open={expanded} data-catalog-filters={catalogFilters}>
     <div className="content-toolbar-face">
       <div className="content-toolbar-identity">
         <h2 key={mode}>{browsing ? `${category} Library` : category}</h2>
         <div className="content-toolbar-readout"><span key={summary}>{summary}</span></div>
       </div>
       <div className="manager-tools">
-        <div className="content-toolbar-filter-slot" inert={browsing} aria-hidden={browsing}>
+        <div className="content-toolbar-filter-slot" inert={browsing && !catalogFilters} aria-hidden={browsing && !catalogFilters}>
           <button ref={trigger} type="button" className="content-filter-trigger"
-            data-filtered={filtered} aria-label={`Filter content: sorted by ${sort}, showing ${filter.toLowerCase()}`}
+            data-filtered={filtered} aria-label={catalogFilters ? "Filter mods" : `Filter content: sorted by ${sort}, showing ${filter.toLowerCase()}`}
             aria-expanded={expanded} aria-controls={drawerId} title="Sort and filter"
             onClick={() => setFiltersOpen(value => !value)}><ListFilter size={19} strokeWidth={2.2} /></button>
         </div>
@@ -77,10 +82,12 @@ export function ContentToolbar({ category, total, enabled, visible, ready, searc
     </div>
     <div id={drawerId} className="content-toolbar-drawer" inert={!expanded} aria-hidden={!expanded}>
       <div className="content-toolbar-drawer-body">
+        {catalogFilters ? catalogControls?.(drawerId) : <>
         <ToolbarSegments label="Show" options={["All", "Enabled", "Disabled"]} value={filter} onChange={onFilterChange} />
         <ToolbarSegments label="Sort by" options={["Name", "Size"]} value={sort} onChange={onSortChange} />
         <button type="button" className="content-toolbar-reset" disabled={!filtered}
           onClick={() => { onSortChange("Name"); onFilterChange("All"); }}><RotateCcw size={14} />Reset</button>
+        </>}
       </div>
     </div>
   </div>;

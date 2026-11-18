@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class BloomWingService {
-    private static final Logger LOGGER = LoggerFactory.getLogger("Bloom Cosmetics");
+    private static final Logger LOGGER = LoggerFactory.getLogger("Delight Cosmetics");
     private static final BloomWingService INSTANCE = new BloomWingService();
 
     private final ConcurrentHashMap<UUID, Long> observedPlayers = new ConcurrentHashMap<>();
@@ -39,7 +39,7 @@ public final class BloomWingService {
     public void start() {
         if (!started.compareAndSet(false, true)) return;
         BloomCosmeticsRuntime.scheduleRefresh(this::refreshObservedPlayers);
-        LOGGER.info("Bloom Cosmetics is ready for live torso-anchored wing updates.");
+        LOGGER.info("Delight Cosmetics is ready for live torso-anchored wing updates.");
     }
 
     public WingAsset assetFor(int entityId) {

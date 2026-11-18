@@ -48,9 +48,9 @@ pub fn load_settings() -> Result<ClientCacheSettings, String> {
     }
     let mut settings: ClientCacheSettings = serde_json::from_slice(
         &fs::read(&path)
-            .map_err(|error| format!("Bloom could not read cache settings: {error}"))?,
+            .map_err(|error| format!("Delight could not read cache settings: {error}"))?,
     )
-    .map_err(|error| format!("Bloom cache settings are invalid: {error}"))?;
+    .map_err(|error| format!("Delight cache settings are invalid: {error}"))?;
     settings.capacity_bytes = settings
         .capacity_bytes
         .clamp(MIN_CAPACITY_BYTES, MAX_CAPACITY_BYTES);
@@ -61,7 +61,7 @@ fn cache_root() -> Result<PathBuf, String> {
     let path = PathBuf::from(load_settings()?.directory);
     validate_cache_directory(&path)?;
     fs::create_dir_all(&path)
-        .map_err(|error| format!("Bloom could not create the cache folder: {error}"))?;
+        .map_err(|error| format!("Delight could not create the cache folder: {error}"))?;
     Ok(path)
 }
 
@@ -74,7 +74,7 @@ fn validate_cache_directory(path: &Path) -> Result<(), String> {
         })
         .unwrap_or(false);
     if !path.is_absolute() || path.parent().is_none() || !allowed_name {
-        return Err("Bloom's cache must use a dedicated BloomCache folder.".into());
+        return Err("Delight's cache must use a dedicated BloomCache folder.".into());
     }
     Ok(())
 }
@@ -110,26 +110,26 @@ pub fn write_json<T: Serialize>(namespace: &str, key: &str, value: &T) -> Result
     let path = cache_file(namespace, key)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
-            .map_err(|error| format!("Bloom could not create a cache section: {error}"))?;
+            .map_err(|error| format!("Delight could not create a cache section: {error}"))?;
     }
     let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
     fs::write(
         &temporary,
         serde_json::to_vec(value).map_err(|error| error.to_string())?,
     )
-    .map_err(|error| format!("Bloom could not write cached data: {error}"))?;
+    .map_err(|error| format!("Delight could not write cached data: {error}"))?;
     if path.exists() {
         fs::remove_file(&path)
-            .map_err(|error| format!("Bloom could not replace stale cached data: {error}"))?;
+            .map_err(|error| format!("Delight could not replace stale cached data: {error}"))?;
     }
     fs::rename(&temporary, &path)
-        .map_err(|error| format!("Bloom could not finish caching data: {error}"))?;
+        .map_err(|error| format!("Delight could not finish caching data: {error}"))?;
     static LAST_PRUNE: OnceLock<Mutex<std::time::Instant>> = OnceLock::new();
     let last_prune =
         LAST_PRUNE.get_or_init(|| Mutex::new(std::time::Instant::now() - Duration::from_secs(10)));
     let mut last = last_prune
         .lock()
-        .map_err(|_| "Bloom cache cleanup is busy.".to_string())?;
+        .map_err(|_| "Delight cache cleanup is busy.".to_string())?;
     if last.elapsed() >= Duration::from_secs(5) {
         prune_to_capacity()?;
         *last = std::time::Instant::now();
@@ -389,7 +389,7 @@ pub fn save_client_cache_settings(
             return Err("Choose a cache folder outside the current cache folder.".into());
         }
         copy_tree(&previous, &destination)
-            .map_err(|error| format!("Bloom could not move the cache: {error}"))?;
+            .map_err(|error| format!("Delight could not move the cache: {error}"))?;
     }
     let settings = ClientCacheSettings {
         directory: destination.to_string_lossy().into_owned(),
@@ -399,7 +399,7 @@ pub fn save_client_cache_settings(
         settings_path()?,
         serde_json::to_vec_pretty(&settings).map_err(|error| error.to_string())?,
     )
-    .map_err(|error| format!("Bloom could not save cache settings: {error}"))?;
+    .map_err(|error| format!("Delight could not save cache settings: {error}"))?;
     if previous != destination {
         let _ = fs::remove_dir_all(previous);
     }
@@ -412,9 +412,9 @@ pub fn clear_client_cache() -> Result<ClientCacheStatus, String> {
     let root = cache_root()?;
     if root.exists() {
         fs::remove_dir_all(&root)
-            .map_err(|error| format!("Bloom could not clear the cache: {error}"))?;
+            .map_err(|error| format!("Delight could not clear the cache: {error}"))?;
     }
     fs::create_dir_all(root)
-        .map_err(|error| format!("Bloom could not recreate the cache folder: {error}"))?;
+        .map_err(|error| format!("Delight could not recreate the cache folder: {error}"))?;
     get_client_cache_status()
 }

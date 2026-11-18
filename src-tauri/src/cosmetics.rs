@@ -120,7 +120,7 @@ fn reconcile_with_preference(config: &InstanceConfig, enabled: bool) -> Result<(
                     && (old.exists() || old_disabled.exists()))
             {
                 return Err(
-                    "Duplicate Bloom cape files; close Minecraft and resolve them before retrying."
+                    "Duplicate Delight cape files; close Minecraft and resolve them before retrying."
                         .into(),
                 );
             }
@@ -135,7 +135,7 @@ fn reconcile_with_preference(config: &InstanceConfig, enabled: bool) -> Result<(
                 let actual = digest(&fs::read(source).map_err(|e| e.to_string())?);
                 if actual != record.sha256 && Some(&actual) != record.previous_sha256.as_ref() {
                     return Err(
-                        "The managed Bloom cape mod was modified; no files were changed.".into(),
+                        "The managed Delight cape mod was modified; no files were changed.".into(),
                     );
                 }
                 fs::rename(source, target).map_err(|e| e.to_string())?;
@@ -169,10 +169,10 @@ fn reconcile_with_preference(config: &InstanceConfig, enabled: bool) -> Result<(
             let actual = digest(&fs::read(path).map_err(|e| e.to_string())?);
             actual != record.sha256 && Some(&actual) != record.previous_sha256.as_ref()
         } {
-            return Err("The managed Bloom cape mod was modified. Move it out of mods before repairing; it was not overwritten.".into());
+            return Err("The managed Delight cape mod was modified. Move it out of mods before repairing; it was not overwritten.".into());
         }
         if installed.exists() && disabled.exists() {
-            return Err("Both enabled and disabled Bloom cape files exist. Close Minecraft and resolve the duplicate before retrying.".into());
+            return Err("Both enabled and disabled Delight cape files exist. Close Minecraft and resolve the duplicate before retrying.".into());
         }
         // Only an explicit disabled record or its owned `.disabled` file means the
         // player opted out. An enabled manifest with both files missing is an
@@ -184,7 +184,7 @@ fn reconcile_with_preference(config: &InstanceConfig, enabled: bool) -> Result<(
     if !enabled {
         if ownership.is_some() && installed.exists() {
             if disabled.exists() {
-                return Err("Both enabled and disabled Bloom cape files exist.".into());
+                return Err("Both enabled and disabled Delight cape files exist.".into());
             }
             let mut record = ownership.unwrap();
             record.global_disabled = true;
@@ -216,14 +216,14 @@ fn reconcile_with_preference(config: &InstanceConfig, enabled: bool) -> Result<(
         if mod_id(&path).as_deref() == Some("bloom_cosmetics")
             && (path != installed || ownership.is_none())
         {
-            return Err("Another Bloom cosmetics mod is already in this instance. Move it out of mods, then retry; no user files were removed.".into());
+            return Err("Another Delight cosmetics mod is already in this instance. Move it out of mods, then retry; no user files were removed.".into());
         }
     }
     if let Some(version) = config.loader_version.as_deref() {
         let numbers: Vec<u32> = version.split('.').map(|v| v.parse().unwrap_or(0)).collect();
         let minimum = match config.version.as_str() { "26.3" => 5, "26.2" => 3, _ => 2 };
         if numbers.as_slice() < [0, 19, minimum].as_slice() {
-            return Err(format!("Bloom cosmetics for Minecraft {} need Fabric Loader 0.19.{minimum} or newer. Update the instance loader or disable Bloom cosmetics.", config.version));
+            return Err(format!("Delight cosmetics for Minecraft {} need Fabric Loader 0.19.{minimum} or newer. Update the instance loader or disable Delight cosmetics.", config.version));
         }
     }
     if bundled_jar.is_empty() {

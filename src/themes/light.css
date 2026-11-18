@@ -60,7 +60,7 @@
 /* Image controls and color sampling retain real pixel/spectrum colors. */
 :root[data-theme="light"] :is(.profile-settings-avatar, .instance-icon-picker, .background-image-picker.has-image) > span { color: #fff; }
 :root[data-theme="light"] :is(.profile-settings-avatar, .instance-icon-picker, .background-image-picker)::after { background: #000; }
-:root[data-theme="light"] :is(.onboarding-brand img, .onboarding-step-logo, .locker-state-mark img, .social-auth-flower, .social-invite-art img[src$="bloom-logo.png"]) { filter: brightness(0); }
+:root[data-theme="light"] :is(.onboarding-brand img, .onboarding-step-logo, .locker-state-mark img, .social-auth-flower, .social-invite-art img[src$="delight-logo.png"]) { filter: brightness(0); }
 :root[data-theme="light"] .accent-saturation-field i,
 :root[data-theme="light"] .accent-hue-control input[type="range"]::-webkit-slider-thumb,
 :root[data-theme="light"] .accent-hue-control input[type="range"]::-moz-range-thumb { box-shadow: 0 0 0 1px #556172; }

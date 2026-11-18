@@ -188,7 +188,7 @@ fn normalize_code(input: &str) -> Result<String, String> {
             .chars()
             .all(|value| "23456789ABCDEFGHJKLMNPQRSTUVWXYZ".contains(value))
     {
-        return Err("Enter a valid Bloom pack code or link.".into());
+        return Err("Enter a valid Delight pack code or link.".into());
     }
     Ok(code)
 }
@@ -312,11 +312,11 @@ fn create_modpack_share_blocking(instance_id: String) -> Result<ModpackShareCrea
         ))
         .json(&manifest)
         .send()
-        .map_err(|error| format!("Bloom's sharing service is unavailable: {error}"))?
+        .map_err(|error| format!("Delight's sharing service is unavailable: {error}"))?
         .error_for_status()
-        .map_err(|error| format!("Bloom could not publish this pack: {error}"))?
+        .map_err(|error| format!("Delight could not publish this pack: {error}"))?
         .json::<ModpackShareCreated>()
-        .map_err(|error| format!("Bloom returned an invalid share code: {error}"))
+        .map_err(|error| format!("Delight returned an invalid share code: {error}"))
 }
 
 #[tauri::command]
@@ -371,18 +371,18 @@ pub(crate) async fn import_modpack_share(
         super::bloom_backend_request(reqwest::Method::GET, &format!("/v1/packs/{code}"), 20)?
             .send()
             .await
-            .map_err(|error| format!("Bloom's sharing service is unavailable: {error}"))?
+            .map_err(|error| format!("Delight's sharing service is unavailable: {error}"))?
             .error_for_status()
             .map_err(|error| {
                 if error.status() == Some(reqwest::StatusCode::NOT_FOUND) {
                     "That pack code was not found or has expired.".to_string()
                 } else {
-                    format!("Bloom could not load that pack: {error}")
+                    format!("Delight could not load that pack: {error}")
                 }
             })?
             .json::<ModpackShareLoaded>()
             .await
-            .map_err(|error| format!("Bloom returned an invalid shared pack: {error}"))?;
+            .map_err(|error| format!("Delight returned an invalid shared pack: {error}"))?;
     let archive = write_share_archive(&loaded.code, &loaded.manifest)?;
     let instance_id = super::import_fabric_modpack_path(app, &state, archive)?;
     Ok(ModpackShareImport {
@@ -436,9 +436,9 @@ pub(crate) async fn create_pack_channel(instance_id: String) -> Result<PackChann
             ))
             .json(&manifest)
             .send()
-            .map_err(|error| format!("Bloom's sharing service is unavailable: {error}"))?
+            .map_err(|error| format!("Delight's sharing service is unavailable: {error}"))?
             .error_for_status()
-            .map_err(|error| format!("Bloom could not create the group pack: {error}"))?
+            .map_err(|error| format!("Delight could not create the group pack: {error}"))?
             .json::<Created>()
             .map_err(|error| error.to_string())?;
         save_channel_token(&created.code, &created.owner_token)?;
@@ -486,7 +486,7 @@ pub(crate) async fn create_pack_access_invite(
             .send()
             .map_err(|error| error.to_string())?
             .error_for_status()
-            .map_err(|error| format!("Bloom could not create that access invitation: {error}"))?
+            .map_err(|error| format!("Delight could not create that access invitation: {error}"))?
             .json::<PackAccessInviteCreated>()
             .map_err(|error| error.to_string())
     })
@@ -588,12 +588,12 @@ pub(crate) async fn publish_pack_channel(
             .send()
             .map_err(|error| error.to_string())?
             .error_for_status()
-            .map_err(|error| format!("Bloom could not publish this revision: {error}"))?
+            .map_err(|error| format!("Delight could not publish this revision: {error}"))?
             .json::<serde_json::Value>()
             .map_err(|error| error.to_string())?;
         record.revision = response["revision"]
             .as_u64()
-            .ok_or("Bloom returned an invalid revision.")?;
+            .ok_or("Delight returned an invalid revision.")?;
         record.managed_files = manifest.files;
         save_channel_record(record.clone())?;
         Ok(PackChannelCreated {
@@ -670,7 +670,7 @@ pub(crate) async fn get_pack_access_overview(
             .get(format!("{}/v1/pack-channels/{}/access", super::BACKEND_URL.trim_end_matches('/'), record.code))
             .bearer_auth(token)
             .send().map_err(|error| error.to_string())?
-            .error_for_status().map_err(|error| format!("Bloom could not load pack access: {error}"))?
+            .error_for_status().map_err(|error| format!("Delight could not load pack access: {error}"))?
             .json::<PackAccessOverview>().map_err(|error| error.to_string())
     }).await.map_err(|error| error.to_string())?
 }
@@ -683,7 +683,7 @@ pub(crate) async fn enable_pack_managed_access(instance_id: String) -> Result<()
         reqwest::blocking::Client::new()
             .post(format!("{}/v1/pack-channels/{}/access/enable", super::BACKEND_URL.trim_end_matches('/'), record.code))
             .bearer_auth(token).send().map_err(|error| error.to_string())?
-            .error_for_status().map_err(|error| format!("Bloom could not enable managed access: {error}"))?;
+            .error_for_status().map_err(|error| format!("Delight could not enable managed access: {error}"))?;
         Ok(())
     }).await.map_err(|error| error.to_string())?
 }
@@ -696,7 +696,7 @@ pub(crate) async fn update_pack_member_role(instance_id: String, access_id: Stri
         reqwest::blocking::Client::new()
             .patch(format!("{}/v1/pack-channels/{}/access/{}", super::BACKEND_URL.trim_end_matches('/'), record.code, access_id))
             .bearer_auth(token).json(&serde_json::json!({"role": role})).send().map_err(|error| error.to_string())?
-            .error_for_status().map_err(|error| format!("Bloom could not change that permission: {error}"))?
+            .error_for_status().map_err(|error| format!("Delight could not change that permission: {error}"))?
             .json::<PackAccessMember>().map_err(|error| error.to_string())
     }).await.map_err(|error| error.to_string())?
 }
@@ -708,7 +708,7 @@ pub(crate) async fn revoke_pack_member(instance_id: String, access_id: String) -
         reqwest::blocking::Client::new()
             .delete(format!("{}/v1/pack-channels/{}/access/{}", super::BACKEND_URL.trim_end_matches('/'), record.code, access_id))
             .bearer_auth(token).send().map_err(|error| error.to_string())?
-            .error_for_status().map_err(|error| format!("Bloom could not remove that person: {error}"))?;
+            .error_for_status().map_err(|error| format!("Delight could not remove that person: {error}"))?;
         Ok(())
     }).await.map_err(|error| error.to_string())?
 }
@@ -720,7 +720,7 @@ pub(crate) async fn invalidate_pack_invite(instance_id: String, invite_id: Strin
         reqwest::blocking::Client::new()
             .delete(format!("{}/v1/pack-channels/{}/invites/{}", super::BACKEND_URL.trim_end_matches('/'), record.code, invite_id))
             .bearer_auth(token).send().map_err(|error| error.to_string())?
-            .error_for_status().map_err(|error| format!("Bloom could not invalidate that invitation: {error}"))?;
+            .error_for_status().map_err(|error| format!("Delight could not invalidate that invitation: {error}"))?;
         Ok(())
     }).await.map_err(|error| error.to_string())?
 }

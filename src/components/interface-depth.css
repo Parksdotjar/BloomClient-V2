@@ -1,0 +1,26 @@
+/* Ceramic is reserved for the instance identity header. Lower tools and
+   controls retain their established flat styling and configured click-pop. */
+.instance-workspace {
+  --depth-face-top: var(--panel-strong);
+  --depth-face-bottom: color-mix(in srgb, var(--panel-strong) 25%, var(--page));
+  --depth-edge: var(--theme-highlight, #ffffff0c);
+  --depth-surface: linear-gradient(160deg, var(--depth-face-top) 20%, var(--depth-face-bottom));
+}
+:root[data-theme="light"] .instance-workspace {
+  --depth-face-top: #f5f5f5;
+  --depth-face-bottom: #eeeeee;
+  --depth-edge: var(--theme-highlight);
+}
+.app-shell .instance-workspace .instance-hero-main {
+  background: var(--depth-surface);
+  box-shadow: inset 1px 2px 2px var(--depth-edge),
+    inset -1px -2px 3px var(--theme-shadow-soft, #0005),
+    0 12px 18px -10px var(--theme-shadow, #000d),
+    0 28px 38px -24px var(--theme-shadow, #000b);
+}
+.app-shell .instance-workspace .instance-icon-picker { background: var(--depth-surface); }
+.app-shell[data-custom-background="on"] .instance-workspace .instance-hero-main {
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--depth-face-top) var(--custom-surface-opacity), transparent) 20%,
+    color-mix(in srgb, var(--depth-face-bottom) var(--custom-surface-opacity), transparent)) !important;
+}

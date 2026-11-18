@@ -1,6 +1,6 @@
 // Apply before React mounts, including onboarding and portaled dialogs.
 const preventBrowserMenu = (event: Event) => {
-  // Keep propagation intact so Bloom's own context menus still work.
+  // Keep propagation intact so Delight's own context menus still work.
   event.preventDefault();
 };
 

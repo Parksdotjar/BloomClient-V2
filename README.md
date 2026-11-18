@@ -1,12 +1,12 @@
-# Bloom Client V2
+# Delight Client V2
 
 > A modern, open-source Minecraft launcher built to make creating, customizing, and optimizing instances feel effortless.
 
-Bloom Client is a clean desktop launcher for Minecraft: Java Edition. It brings instances, mods, downloads, account management, performance tools, and launch settings together in one polished interface—without making the simple things complicated.
+Delight Client is a clean desktop launcher for Minecraft: Java Edition. It brings instances, mods, downloads, account management, performance tools, and launch settings together in one polished interface—without making the simple things complicated.
 
-V2 is a ground-up rebuild of the original Bloom Client. It is designed around speed, reliability, a consistent visual language, and a codebase that can grow without becoming difficult to maintain.
+V2 is a ground-up rebuild of the original Delight Client. It is designed around speed, reliability, a consistent visual language, and a codebase that can grow without becoming difficult to maintain.
 
-## What Bloom can do
+## What Delight can do
 
 - Create and launch isolated Vanilla and Fabric instances
 - Browse and install compatible mods from Modrinth
@@ -19,29 +19,29 @@ V2 is a ground-up rebuild of the original Bloom Client. It is designed around sp
 - Save multiple Microsoft Minecraft accounts securely, switch between them, and keep the active session available between launches
 - Personalize the client with multiple themes and accent colors
 
-## Bloom AutoTune
+## Delight AutoTune
 
-Bloom AutoTune is an experimental performance system that uses real measurements instead of relying only on generic hardware recommendations.
+Delight AutoTune is an experimental performance system that uses real measurements instead of relying only on generic hardware recommendations.
 
-Its fixed-seed Minecraft benchmark records average FPS, 1% lows, frame times, and Java memory usage in a consistent environment. Bloom can use those results to create a performance profile and apply matching Minecraft graphics, memory, and JVM settings across instances.
+Its fixed-seed Minecraft benchmark records average FPS, 1% lows, frame times, and Java memory usage in a consistent environment. Delight can use those results to create a performance profile and apply matching Minecraft graphics, memory, and JVM settings across instances.
 
 The benchmark runs locally, and its results remain on the user's computer.
 
 ## Built for a better launcher experience
 
-Bloom keeps every Minecraft setup in its own instance. Each instance can have a separate game version, mod loader, memory limit, Java runtime, icon, mods, resource packs, shaders, and launch configuration. This makes it easier to experiment with modpacks or different versions without turning one Minecraft folder into a mess.
+Delight keeps every Minecraft setup in its own instance. Each instance can have a separate game version, mod loader, memory limit, Java runtime, icon, mods, resource packs, shaders, and launch configuration. This makes it easier to experiment with modpacks or different versions without turning one Minecraft folder into a mess.
 
 The client is currently focused on Windows, with a responsive interface designed specifically for a desktop launcher rather than a web page placed inside a window.
 
 ## Project status
 
-Bloom Client V2 is under active development. Core launching, instance management, Fabric support, Modrinth integration, downloads, logs, Microsoft authentication, and AutoTune are being developed and refined as part of the V2 foundation.
+Delight Client V2 is under active development. Core launching, instance management, Fabric support, Modrinth integration, downloads, logs, Microsoft authentication, and AutoTune are being developed and refined as part of the V2 foundation.
 
 Expect interfaces and internal APIs to evolve before the first stable release.
 
 ## Technical overview
 
-Bloom Client uses a native desktop architecture:
+Delight Client uses a native desktop architecture:
 
 ```text
 React + TypeScript interface
@@ -67,7 +67,7 @@ Windows, files, downloads, Java, and Minecraft
 | --- | --- |
 | `src/` | React screens, interface components, frontend services, and shared types |
 | `src-tauri/` | Rust launcher implementation and native platform integration |
-| `benchmark-mod/` | Fabric mod used by the Bloom AutoTune Minecraft benchmark |
+| `benchmark-mod/` | Fabric mod used by the Delight AutoTune Minecraft benchmark |
 | `bloom-cosmetics-mod/` | Dormant Fabric cosmetics renderer retained for the future VPS restoration |
 | `SHOP_LOCKER_RESTORATION.md` | Shop/Locker behavior, API contracts, migration order, and restoration tests |
 | `COSMETICS_RENDERING_ARCHITECTURE.md` | Manager-to-game rendering flow, 3D attachment/pivots, wing bones, and cape animation atlases |
@@ -83,7 +83,7 @@ Windows, files, downloads, Java, and Minecraft
 - Tauri's Windows prerequisites
 - Git
 
-### Run Bloom locally
+### Run Delight locally
 
 ```powershell
 npm install
@@ -100,7 +100,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## Publishing an update
 
-Bloom Client updates are built, signed, and distributed through GitHub Releases.
+Delight Client updates are built, signed, and distributed through GitHub Releases.
 
 1. Change the value in [`VERSION`](VERSION), using a tag such as `v1.0.1`.
 2. Commit and push that version change with the release's code.
@@ -123,6 +123,6 @@ For interface changes, include screenshots or a short recording whenever possibl
 
 ## License
 
-Bloom Client is released under the [MIT License](LICENSE).
+Delight Client is released under the [MIT License](LICENSE).
 
 Development runs (`npm.cmd run tauri dev`) do not check for or install production updates. The native updater is registered only in release builds; the development update-preview shortcut remains a local simulation.

@@ -76,6 +76,6 @@ export function AnimatedAccentEditor({ value, onChange, slider }: {
     <div className="accent-stop-controls"><span className="accent-stop-hex">{stop.color.toUpperCase()}</span><label>Position <input type="number" min={0} max={100} value={stop.position} onChange={e => { if (e.target.value !== "") updateStop(stop.id, { position: Math.max(0, Math.min(100, Number(e.target.value))) }); }} />%</label><button type="button" className="accent-stop-remove" aria-label="Remove selected color stop" disabled={value.accentStops.length <= 2} onClick={() => { onChange({ accentStops: value.accentStops.filter(s => s.id !== stop.id) }); }}><Trash2 size={15} /></button></div>
     <div className="accent-motion-control"><span>Cycle duration</span>{slider(value.accentDuration, accentDuration => onChange({ accentDuration }), "Accent cycle duration", 4, 60, "s")}</div>
     <div className="accent-motion-control"><span>Intensity</span>{slider(value.accentIntensity, accentIntensity => onChange({ accentIntensity }), "Accent color intensity", 0, 100, "%")}</div>
-    <p className="accent-motion-note">One shared color cycle across Bloom. Motion pauses with reduced motion, animations off, or Ultra Performance.</p>
+    <p className="accent-motion-note">One shared color cycle across Delight. Motion pauses with reduced motion, animations off, or Ultra Performance.</p>
   </div>;
 }

@@ -22,10 +22,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/** Shared, low-overhead infrastructure for every live Bloom cosmetic type. */
+/** Shared, low-overhead infrastructure for every live Delight cosmetic type. */
 final class BloomCosmeticsRuntime {
     static final String API_BASE = "https://api.north.bloomclient.org/minecraft";
-    static final String USER_AGENT = "Bloom-Cosmetics/1.6.1";
+    static final String USER_AGENT = "Delight-Cosmetics/1.6.1";
     static final long ACTIVE_PLAYER_WINDOW_MS = 20_000L;
     static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(4))
@@ -33,7 +33,7 @@ final class BloomCosmeticsRuntime {
         .build();
 
     private static final ScheduledExecutorService REFRESH_WORKER = Executors.newSingleThreadScheduledExecutor(task -> {
-        Thread thread = new Thread(task, "Bloom-Cosmetics-Refresh");
+        Thread thread = new Thread(task, "Delight-Cosmetics-Refresh");
         thread.setDaemon(true);
         thread.setPriority(Thread.MIN_PRIORITY);
         return thread;
@@ -181,7 +181,7 @@ final class BloomCosmeticsRuntime {
                         category,
                         cosmeticId,
                         textureRevision,
-                        "Bloom " + category + " " + cosmeticId,
+                        "Delight " + category + " " + cosmeticId,
                         image
                     );
                 } catch (Exception error) {

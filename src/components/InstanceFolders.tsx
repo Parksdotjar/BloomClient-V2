@@ -32,7 +32,7 @@ export function InstanceFolders<T extends Item>({ instances, query, loader, crea
     try {
       const next = await invoke<LibraryFolder[]>("list_instance_folders");
       if (!alive.current || sequence !== generation.current) return;
-      if (!Array.isArray(next)) throw new Error("Instance folders are unavailable. Restart Bloom after updating.");
+      if (!Array.isArray(next)) throw new Error("Instance folders are unavailable. Restart Delight after updating.");
       setFolders(next); setReady(true); setError("");
     } catch (e) { if (alive.current && sequence === generation.current) setError(String(e)); }
   };
@@ -44,7 +44,7 @@ export function InstanceFolders<T extends Item>({ instances, query, loader, crea
     try {
       const next = await invoke<LibraryFolder[]>("change_instance_folder", { change: request });
       if (!alive.current) return null;
-      if (!Array.isArray(next)) throw new Error("Bloom could not confirm the saved folders. Please retry.");
+      if (!Array.isArray(next)) throw new Error("Delight could not confirm the saved folders. Please retry.");
       setFolders(next); setAnnouncement(message); return next;
     } catch (e) { if (alive.current) setError(String(e)); return null; }
     finally { pending.current = false; if (alive.current) setBusy(false); }

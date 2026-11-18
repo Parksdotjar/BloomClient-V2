@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Bloom Client",
+  "productName": "Delight Client",
   "version": "1.1.11",
   "identifier": "dev.bloomclient.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Bloom Client",
+        "title": "Delight Client",
         "width": 1600,
         "height": 960,
         "minWidth": 900,
@@ -42,7 +42,8 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "template": "windows/installer.nsi"
       }
     }
   },

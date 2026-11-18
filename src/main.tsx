@@ -1,9 +1,15 @@
+import { useContentDownloads, contentPending, contentKind, type ContentDownload } from "./services/use-content-downloads";
+import { DownloadHistory } from "./components/DownloadHistory";
+import { AutoTuneWorkflow } from "./components/AutoTune";
 import "./services/desktop-interactions";
+import { useToggleFeedback } from "./services/toggle-feedback";
 import { WallpaperSourceContext } from "./components/WallpaperAccents";
 import { userError } from "./services/user-error";
 import { AppearancePresets } from "./components/AppearancePresets";
 import { ContentTransferContext, useContentTransfer, useContentTransferController } from "./components/ContentTransfer";
 import { InstanceFolders } from "./components/InstanceFolders";
+import { PortalPage } from "./components/PortalPage";
+import type { PortalTarget } from "./services/portal";
 
 import { QuickSwitcher, type SwitchTarget } from "./components/QuickSwitcher";
 import { ContentToolbar } from "./components/ContentToolbar";
@@ -14,6 +20,10 @@ import { AnimatedAccentEditor, useAnimatedAccent } from "./components/AnimatedAc
 import { LIVE_BACKGROUNDS, OrganicBackground } from "./components/OrganicBackground";
 import { accentGradient, defaultAnimatedAccent, normalizeAnimatedAccent, type AnimatedAccent } from "./services/animated-accent";
 import { InfoTip } from "./components/InfoTip";
+import { UndoLogoutButton } from "./components/UndoLogoutButton";
+import { FabricLoaderSetting } from "./components/FabricLoaderSetting";
+import { CatalogFilterControls } from "./components/CatalogFilterControls";
+import { defaultCatalogFilters, catalogFiltersChanged, catalogInstallRestriction, type CatalogFilters } from "./services/catalog-filters";
 import { ScreenshotShelf } from "./components/ScreenshotShelf";
 import {
   StrictMode,
@@ -50,11 +60,11 @@ import {
   Cpu,
   Cuboid,
   Copy,
+  Pencil,
   Database,
   Feather,
   Download,
   ExternalLink,
-  History,
   House,
   FileDown,
   FolderPlus,
@@ -67,6 +77,7 @@ import {
   MessageCircle,
   Menu,
   PackageOpen,
+  Orbit,
   Palette,
   Play,
   Plus,
@@ -88,16 +99,25 @@ import {
   WandSparkles,
   Wrench,
   LockKeyhole,
-  LogOut,
   ArrowLeft as X,
   X as CloseIcon,
 } from "lucide-react";
 import "./styles.css";
+import "./components/toggle-feedback.css";
+import "./components/instance-controls.css";
+import { InstanceName } from "./components/InstanceName";
+import { FloatingInstancePlayer } from "./components/FloatingInstancePlayer";
 import "./themes/light.css";
 import "./components/dropdowns.css";
 import "./components/interface-details.css";
 import { FolderOpen } from "lucide-react";
 import "./components/sidebar-navigation.css";
+import "./components/interface-depth.css";
+import "./components/account-depth.css";
+import "./components/ceramic-actions.css";
+import { SidebarNavigation } from "./components/SidebarNavigation";
+import { PixelPlayButton } from "./components/PixelPlayButton";
+import { useLauncherActivity } from "./services/use-launcher-activity";
 import { monitorBackend } from "./services/backend";
 import { Locker } from "./components/Locker";
 import { UtilitiesPage } from "./components/UtilitiesPage";
@@ -110,7 +130,7 @@ type Theme = "oled" | "light";
 const themeLabel = { oled: "OLED Black", light: "Light" };
 const themeBackground = { oled: "#000000", light: "#f5f6f8" };
 type HomeLayout = "Dashboard" | "Spotlight";
-type AppPage = "screenshots" | "home" | "settings" | "autotune" | "utilities" | "social" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker";
+type AppPage = "portal" | "screenshots" | "home" | "settings" | "autotune" | "utilities" | "social" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker";
 type WindowMenuName = "file" | "edit" | "view" | "help" | "compact";
 const PROFILE_ICON_STORAGE_KEY = "bloom-profile-icon";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "bloom-sidebar-collapsed";
@@ -174,7 +194,6 @@ export type SettingsState = AnimatedAccent & {
   doubleClickToPlay: boolean;
   downloadWorkers: 1 | 3 | 5;
   recommendations: boolean;
-  recentModSearches: boolean;
   gameDirectory: string;
 };
 const defaults: SettingsState = {
@@ -215,7 +234,6 @@ const defaults: SettingsState = {
   doubleClickToPlay: false,
   downloadWorkers: 3,
   recommendations: true,
-  recentModSearches: false,
   gameDirectory: ".minecraft/instances/",
 };
 const spotlightDefaultMigrationKey = "bloom-home-layout-spotlight-v1";
@@ -227,7 +245,7 @@ const nav = [
   [MessageCircle, "Social", "social"],
   [ImagePlus, "Screenshots", "screenshots"],
   [Wrench, "Utilities", "utilities"],
-  [SettingsIcon, "Settings", "settings"],
+  [Orbit, "Portal", "portal"],
 ] as const;
 const settingTabs = [
   [SettingsIcon, "General"],
@@ -267,17 +285,22 @@ export function Toggle({
   value,
   onChange,
   disabled = false,
+  label,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
+  label?: string;
 }) {
+  const feedbackRef = useToggleFeedback(value);
   return (
     <button
+      ref={feedbackRef}
       type="button"
       className={"toggle " + (value ? "on" : "off")}
       onClick={() => onChange(!value)}
       aria-pressed={value}
+      aria-label={label}
       disabled={disabled}
     >
       <span />
@@ -325,8 +348,8 @@ function fitFloatingMenu(
   const maxHeight = Math.min(330, availableHeight);
   const renderedHeight = Math.min(desiredHeight, maxHeight);
   const top = openAbove
-    ? Math.max(viewportPadding, bounds.top - renderedHeight + 1)
-    : Math.min(bounds.bottom - 1, viewportHeight - viewportPadding - renderedHeight);
+    ? Math.max(viewportPadding, bounds.top - renderedHeight)
+    : Math.min(bounds.bottom, viewportHeight - viewportPadding - renderedHeight);
 
   return {
     top,
@@ -351,7 +374,16 @@ function fitActionMenuBelow(
   };
 }
 
-function revealDropdown(menu: HTMLDivElement) {
+function revealDropdown(menu: HTMLDivElement, trigger?: HTMLElement | null) {
+  // Portals live outside app-shell, so they must receive the owner's glass material explicitly.
+  const owner = trigger?.closest<HTMLElement>(".app-shell") ?? document.querySelector<HTMLElement>(".app-shell");
+  if (owner?.dataset.blurredButtons === "on") {
+    const material = getComputedStyle(trigger ?? owner);
+    menu.dataset.glass = "true";
+    menu.style.setProperty("--menu-glass-fill", trigger ? material.backgroundColor : `color-mix(in srgb, ${material.getPropertyValue("--theme-base") || "#050607"} ${material.getPropertyValue("--custom-control-opacity") || "35%"}, transparent)`);
+    menu.style.setProperty("--menu-glass-frost", material.getPropertyValue("--custom-element-frost") || "0px");
+    if (trigger) menu.style.setProperty("--menu-glass-border", material.borderBottomColor);
+  }
   const items = Array.from(menu.querySelectorAll<HTMLButtonElement>(":scope > button"));
   const motionEnabled = document.documentElement.dataset.animations === "on"
     && document.documentElement.dataset.performance !== "ultra";
@@ -424,6 +456,10 @@ export function Select({
   variant = "default",
   disabledOptions = [],
   menuAnchorRef,
+  disabled = false,
+  ariaLabel,
+  menuOwner,
+  menuPortalRef,
 }: {
   value: string;
   options: string[];
@@ -431,11 +467,16 @@ export function Select({
   variant?: "default" | "filter";
   disabledOptions?: string[];
   menuAnchorRef?: { readonly current: HTMLDivElement | null };
+  disabled?: boolean;
+  ariaLabel?: string;
+  menuOwner?: string;
+  menuPortalRef?: { readonly current: HTMLElement | null };
 }) {
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 184, maxHeight: 330 });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   useEffect(() => {
     if (!open) return;
     const place = () => {
@@ -459,7 +500,7 @@ export function Select({
     return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeOnEscape); };
   }, [open, options.length, variant, menuAnchorRef]);
   useEffect(() => {
-    if (open && menuRef.current) revealDropdown(menuRef.current);
+    if (open && menuRef.current) revealDropdown(menuRef.current, triggerRef.current);
   }, [open, options.length]);
   return (
     <div className={`select-wrap ${variant === "filter" ? `filter-select ${value !== "All" ? "filtered" : ""}` : ""}`}>
@@ -467,23 +508,24 @@ export function Select({
         type="button"
         ref={triggerRef}
         className="select-trigger"
+        disabled={disabled}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         data-menu-side={menuPosition.top < (triggerRef.current?.getBoundingClientRect().top ?? 0) ? "above" : "below"}
-        aria-label={variant === "filter" ? `Filter instances: ${value}` : undefined}
+        aria-label={ariaLabel ?? (variant === "filter" ? `Filter instances: ${value}` : undefined)}
         title={variant === "filter" ? `Filter: ${value}` : undefined}
       >
         {variant === "filter" ? <SlidersHorizontal size={17} /> : <><span className="select-value">{value}</span><ChevronDown size={15} className={open ? "rotated" : ""} /></>}
       </button>
       {open && createPortal(
-        <div ref={menuRef} className="select-menu select-menu-portal" style={{ ...closedDropdownStyle, position: "fixed", top: menuPosition.top, left: menuPosition.left, right: "auto", width: menuPosition.width, maxHeight: menuPosition.maxHeight }}>
+        <div ref={menuRef} data-content-filter-owner={menuOwner} className="select-menu select-menu-portal" style={{ ...closedDropdownStyle, position: "fixed", top: menuPosition.top, left: menuPosition.left, right: "auto", width: menuPosition.width, maxHeight: menuPosition.maxHeight }}>
           {options.map((option) => (
             <button
         type="button"
               style={{ opacity: 0 }}
               className={option === value ? "chosen" : ""}
               key={option}
-              disabled={disabledOptions.includes(option)}
+              disabled={disabled || disabledOptions.includes(option)}
               onClick={() => {
                 onChange(option);
                 setOpen(false);
@@ -492,7 +534,7 @@ export function Select({
               {option}
             </button>
           ))}
-        </div>, document.body
+        </div>, menuPortalRef?.current ?? document.body
       )}
     </div>
   );
@@ -582,7 +624,7 @@ function ManagedJavaControl() {
       {runtimes.length ? runtimes.map((runtime) => (
         <span key={`${runtime.majorVersion}-${runtime.architecture}`}>
           Java {runtime.majorVersion}
-          <button disabled={busy !== null} onClick={() => void remove(runtime.majorVersion)} aria-label={`Remove Bloom-managed Java ${runtime.majorVersion}`}>
+          <button disabled={busy !== null} onClick={() => void remove(runtime.majorVersion)} aria-label={`Remove Delight-managed Java ${runtime.majorVersion}`}>
             <Trash2 size={13} />
           </button>
         </span>
@@ -600,7 +642,6 @@ function ClientCacheControl() {
   const [capacityGb, setCapacityGb] = useState(2);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [hasRecentModSearches, setHasRecentModSearches] = useState(() => readRecentModSearches().length > 0);
   const saveTimer = useRef<number | null>(null);
   const refresh = async () => {
     const next = await invoke<ClientCacheStatus>("get_client_cache_status");
@@ -633,7 +674,6 @@ function ClientCacheControl() {
     setMessage("");
     try {
       clearTransientClientCaches();
-      setHasRecentModSearches(false);
       setStatus(await invoke<ClientCacheStatus>("clear_client_cache"));
       setMessage("Cache cleared.");
     } catch (error) {
@@ -652,11 +692,11 @@ function ClientCacheControl() {
       <output>{capacityGb.toFixed(capacityGb % 1 ? 1 : 0)} GB</output>
     </div>
     <div className="cache-location-row"><div><b>Cache folder</b><span title={status?.directory}>{status?.directory || "Loading…"}</span></div><button disabled={!status || busy} onClick={() => void chooseDirectory()}><FolderOpen size={16} />Change</button></div>
-    <div className="cache-actions"><button disabled={!status || busy || (status.usedBytes === 0 && !hasRecentModSearches)} onClick={() => void clear()}><Trash2 size={16} />Clear cache</button>{message && <span>{message}</span>}</div>
+    <div className="cache-actions"><button disabled={!status || busy || status.usedBytes === 0} onClick={() => void clear()}><Trash2 size={16} />Clear cache</button>{message && <span>{message}</span>}</div>
   </div>;
 }
 
-// Temporary: Prism's recognized public client ID. Replace with Bloom's approved ID via VITE_MICROSOFT_CLIENT_ID later.
+// Temporary: Prism's recognized public client ID. Replace with Delight's approved ID via VITE_MICROSOFT_CLIENT_ID later.
 const MICROSOFT_CLIENT_ID =
   import.meta.env.VITE_MICROSOFT_CLIENT_ID ||
   "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
@@ -722,10 +762,10 @@ function CosmeticsSettings({ profile }: { profile: MinecraftProfile | null }) {
   };
 
   return <div className="settings-card cosmetics-settings-card">
-    <SettingRow title="Bloom Cosmetics" description="Install and maintain Bloom capes for supported Fabric 1.21.11 instances.">
+    <SettingRow title="Delight Cosmetics" description="Install and maintain Delight capes for supported Fabric 1.21.11 instances.">
       <Toggle value={preferences?.enabled ?? false} disabled={!preferences?.available || busy || !preferences} onChange={value => void setIntegration(value)} />
     </SettingRow>
-    <SettingRow title="Nametag Badge" description={profile ? "Show the Bloom flower beside your name while playing through Bloom." : "Sign in to choose whether your Bloom badge is visible."}>
+    <SettingRow title="Nametag Badge" description={profile ? "Show the Delight wing beside your name while playing through Delight." : "Sign in to choose whether your Delight badge is visible."}>
       <Toggle value={accountState?.badgeVisible ?? false} disabled={!profile || !accountState || busy || !preferences?.enabled} onChange={value => void setBadge(value)} />
     </SettingRow>
     {message && <div className="cosmetics-settings-message" role="status">{message}</div>}
@@ -736,10 +776,12 @@ type MinecraftAccountList = { activeId: string | null; accounts: MinecraftProfil
 function SignInPanel({
   open,
   onSignedIn,
+  onSettings,
   variant = "drawer",
 }: {
   open: boolean;
   onSignedIn: (profile: MinecraftProfile) => void;
+  onSettings?: () => void;
   variant?: "drawer" | "inline";
 }) {
   const loginStarted = useRef(false);
@@ -802,6 +844,9 @@ function SignInPanel({
           <div><b>Open Microsoft sign-in</b></div>
           <ChevronRight size={16} aria-hidden="true" />
         </button>
+        {onSettings && <button role="menuitem" aria-label="Client settings" tabIndex={open ? 0 : -1} onClick={onSettings}>
+          <span><SettingsIcon size={17} /></span><div><b>Client settings</b></div><ChevronRight size={16} aria-hidden="true" />
+        </button>}
       </div>
     </div>
   );
@@ -917,7 +962,7 @@ function SettingsPage({
     if (!["image/png", "image/jpeg"].includes(file.type) || file.size > 2_500_000) { setProfileMessage("Choose a PNG or JPEG smaller than 2.5 MB."); return; }
     const reader = new FileReader();
     reader.onload = () => { onProfileIconChange(String(reader.result)); setProfileMessage("Profile picture updated for every account."); };
-    reader.onerror = () => setProfileMessage("Bloom could not read that profile picture.");
+    reader.onerror = () => setProfileMessage("Delight could not read that profile picture.");
     reader.readAsDataURL(file);
   };
   const chooseBackground = async (file?: File) => {
@@ -930,7 +975,7 @@ function SettingsPage({
       const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
         const image = new Image();
         image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-        image.onerror = () => reject(new Error("Bloom could not read that image."));
+        image.onerror = () => reject(new Error("Delight could not read that image."));
         image.src = objectUrl;
       });
       const image = new Image();
@@ -978,11 +1023,11 @@ function SettingsPage({
         <div className="settings-content">
           <div className="settings-section" {...section("General")}>
             <h2>General</h2>
-            <p className="section-subtitle">Basic settings for Bloom Client.</p>
+            <p className="section-subtitle">Basic settings for Delight Client.</p>
             <div className="settings-card">
               <SettingRow
                 title="Startup Behavior"
-                description="Choose what happens when Bloom Client starts."
+                description="Choose what happens when Delight Client starts."
               >
                 <Select
                   value={settings.startupBehavior}
@@ -992,7 +1037,7 @@ function SettingsPage({
               </SettingRow>
               <SettingRow
                 title="Minimize to System Tray"
-                description="Close button will minimize Bloom Client to your system tray."
+                description="Close button will minimize Delight Client to your system tray."
               >
                 <Toggle
                   value={settings.tray}
@@ -1004,7 +1049,7 @@ function SettingsPage({
           <div className="settings-section" {...section("Appearance")}>
             <h2>Appearance</h2>
             <p className="section-subtitle">
-              Customize how Bloom Client looks.
+              Customize how Delight Client looks.
             </p>
             <div className="settings-card">
               <AppearancePresets positionMenu={fitFloatingMenu} revealMenu={revealDropdown} settings={settings} backgroundImage={backgroundImage} onApply={(appearance, image) => { onBackgroundImageChange(image); setSettings(current => ({ ...current, ...appearance })); }} />
@@ -1154,8 +1199,8 @@ function SettingsPage({
                 />
               </SettingRow>
               <SettingRow
-                title="Bloom-managed Java"
-                description="Private runtimes downloaded by Bloom. They do not change Windows or your PATH."
+                title="Delight-managed Java"
+                description="Private runtimes downloaded by Delight. They do not change your system Java or your PATH."
               >
                 <ManagedJavaControl />
               </SettingRow>
@@ -1170,11 +1215,6 @@ function SettingsPage({
           <div className="settings-section" {...section("Cache")}>
             <h2>Cache</h2>
             <p className="section-subtitle">Keep instance content and nearby catalog pages ready to open.</p>
-            <div className="settings-card cache-preferences-card">
-              <SettingRow title="Recent mod searches" description="Show your five most recent Mods searches above the instance search bar.">
-                <Toggle value={settings.recentModSearches} onChange={value => update("recentModSearches", value)} />
-              </SettingRow>
-            </div>
             <ClientCacheControl />
           </div>
           <div className="settings-section" {...section("Minecraft")}>
@@ -1207,18 +1247,18 @@ function SettingsPage({
           </div>
           <div className="settings-section" {...section("Cosmetics")}>
             <h2>Cosmetics</h2>
-            <p className="section-subtitle">Control capes and your in-game Bloom identity.</p>
+            <p className="section-subtitle">Control capes and your in-game Delight identity.</p>
             <CosmeticsSettings profile={profile} />
           </div>
           <div className="settings-section" {...section("Launcher")}>
             <h2>Launcher</h2>
             <p className="section-subtitle">
-              Control how Bloom Client starts and launches games.
+              Control how Delight Client starts and launches games.
             </p>
             <div className="settings-card">
               <SettingRow
                 title="Home Layout"
-                description="Choose between Bloom's full dashboard and a focused traditional launcher."
+                description="Choose between Delight's full dashboard and a focused traditional launcher."
               >
                 <Select
                   value={settings.homeLayout}
@@ -1247,7 +1287,7 @@ function SettingsPage({
               </SettingRow>
               <SettingRow
                 title="Close Launcher After Launch"
-                description="Automatically close Bloom Client after Minecraft starts."
+                description="Automatically close Delight Client after Minecraft starts."
               >
                 <Toggle
                   value={settings.closeAfterLaunch}
@@ -1273,7 +1313,7 @@ function SettingsPage({
           <div className="settings-section" {...section("Privacy")}>
             <h2>Privacy</h2>
             <p className="section-subtitle">
-              Choose what Bloom Client stores and shares.
+              Choose what Delight Client stores and shares.
             </p>
             <div className="settings-card">
               <SettingRow
@@ -1308,9 +1348,9 @@ function SettingsPage({
           </div>
           <div className="settings-section" {...section("Updates")}>
             <h2>Updates</h2>
-            <p className="section-subtitle">Keep Bloom Client secure and up to date.</p>
+            <p className="section-subtitle">Keep Delight Client secure and up to date.</p>
             <div className="settings-card updates-settings-card">
-              <SettingRow title="Automatic Checks" description="Check GitHub Releases once whenever Bloom Client opens.">
+              <SettingRow title="Automatic Checks" description="Check GitHub Releases once whenever Delight Client opens.">
                 <Toggle value={settings.updates} onChange={(v) => update("updates", v)} />
               </SettingRow>
               <SettingRow title="Current Version" description="The version currently installed on this computer.">
@@ -1318,7 +1358,7 @@ function SettingsPage({
               </SettingRow>
               <SettingRow
                 title={availableVersion ? `Version ${availableVersion} available` : "Update Status"}
-                description={availableVersion ? `Bloom can update from v${currentVersion} to v${availableVersion}.` : "Bloom automatically checks once whenever the launcher opens."}
+                description={availableVersion ? `Delight can update from v${currentVersion} to v${availableVersion}.` : "Delight automatically checks once whenever the launcher opens."}
               >
                 {availableVersion
                   ? <button className="settings-update-button available" onClick={onOpenUpdate}><Download size={15} />Download update</button>
@@ -1391,7 +1431,7 @@ function SettingsPage({
               </SettingRow>
               <SettingRow
                 title="Reset Preferences"
-                description="Return Bloom Client settings to their defaults."
+                description="Return Delight Client settings to their defaults."
               >
                 <button
                   className="danger-button"
@@ -1493,7 +1533,7 @@ function NewInstancePage({
       });
       setDraft(saved);
       setMessage(
-        `${saved.loader} instance created and ready to install.`,
+        `${saved.loader} instance created and ready to play.`,
       );
       onCreated("home");
     } catch (error) {
@@ -1520,7 +1560,7 @@ function NewInstancePage({
         setDraft((current) => ({ ...current, directory: chosen }));
       }
     } catch (error) {
-      setMessage(`Bloom could not open the folder picker: ${String(error)}`);
+      setMessage(`Delight could not open the folder picker: ${String(error)}`);
     }
   };
   const components: Array<[keyof InstanceDraft, string, string]> = [
@@ -1590,7 +1630,7 @@ function NewInstancePage({
               <button
                 type="button"
                 onClick={() => void chooseDirectory()}
-                title="Choose where Bloom should create this instance"
+                title="Choose where Delight should create this instance"
                 aria-label="Choose game directory"
               >
                 <FolderOpen size={18} />
@@ -1720,7 +1760,7 @@ function NewInstancePage({
           <button className="secondary-action" onClick={onCancel}>
             Cancel
           </button>
-          <button className="create-instance-action" onClick={create}>
+          <button className="create-instance-action" onClick={create} disabled={!draft.name.trim()}>
             Create Instance
           </button>
         </div>
@@ -1731,28 +1771,13 @@ function NewInstancePage({
   );
 }
 type InstanceContentItem = { id: string; name: string; version: string; fileName: string; size: number; enabled: boolean; icon?: string | null };
-type CatalogItem = { provider: string; projectId: string; slug: string; title: string; summary: string; iconUrl?: string | null; iconSourceUrl?: string | null; author: string; downloads: number; loader: string; gameVersion: string; versionId: string; versionNumber: string; fileName: string; fileSize: number };
+
+type CatalogItem = { provider: string; projectId: string; slug: string; title: string; summary: string; iconUrl?: string | null; iconSourceUrl?: string | null; author: string; downloads: number; loader: string; gameVersion: string; versionId: string; versionNumber: string; fileName: string; fileSize: number; loaders?: string[]; gameVersions?: string[] };
 type CatalogSearchResult = { items: CatalogItem[]; offset: number; limit: number; total: number };
 const instanceContentMemoryCache = new Map<string, InstanceContentItem[]>();
 const catalogMemoryCache = new Map<string, CatalogSearchResult>();
-const RECENT_MOD_SEARCHES_STORAGE_KEY = "bloom-cache-recent-mod-searches";
-const readRecentModSearches = () => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(RECENT_MOD_SEARCHES_STORAGE_KEY) || "[]");
-    return Array.isArray(saved) ? saved.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).slice(0, 5) : [];
-  } catch {
-    return [];
-  }
-};
-const rememberRecentModSearch = (value: string) => {
-  const search = value.trim().replace(/\s+/g, " ");
-  if (search.length < 2) return readRecentModSearches();
-  const next = [search, ...readRecentModSearches().filter(item => item.toLocaleLowerCase() !== search.toLocaleLowerCase())].slice(0, 5);
-  localStorage.setItem(RECENT_MOD_SEARCHES_STORAGE_KEY, JSON.stringify(next));
-  return next;
-};
 const instanceContentCacheKey = (instanceId: string, category: Exclude<InstanceTab, "settings">) => `${instanceId}:${category}`;
-const catalogCacheKey = (category: string, gameVersion: string, query: string, page: number) => `${category}:${gameVersion}:${query.trim().toLowerCase()}:${page}`;
+const catalogCacheKey = (category: string, gameVersion: string, query: string, page: number, filters?: CatalogFilters) => `${category}:${gameVersion}:${query.trim().toLowerCase()}:${page}${filters ? `:${JSON.stringify(filters)}` : ""}`;
 function warmCatalogImages(result: CatalogSearchResult) { for (const item of result.items) if (item.iconUrl) { const image = new Image(); image.src = item.iconUrl; } }
 async function waitForCatalogFirstBatch(items: CatalogItem[]) {
   await Promise.all(items.slice(0, 10).map(item => new Promise<void>(resolve => {
@@ -1780,7 +1805,6 @@ function CatalogLoadingState({ label }: { label: string }) {
 function clearTransientClientCaches() {
   instanceContentMemoryCache.clear();
   catalogMemoryCache.clear();
-  localStorage.removeItem(RECENT_MOD_SEARCHES_STORAGE_KEY);
   window.dispatchEvent(new Event("bloom-clear-transient-caches"));
 }
 type ModrinthModpackRelease = { id: string; versionNumber: string; versionType: string; gameVersions: string[]; datePublished: string; fileName: string; fileSize: number };
@@ -1918,7 +1942,6 @@ function ModrinthPackBrowser({ gameVersion, onClose, onImported }: { gameVersion
     </div>
   </div>;
 }
-type ContentInstallState = { instanceId: string; projectId: string; category: Exclude<InstanceTab, "settings">; state: "installing" | "installed" | "cancelled" | "error"; message: string; title: string; version: string; iconUrl?: string | null };
 type InstanceTab = "mods" | "resourcepacks" | "shaderpacks" | "settings";
 const JVM_PRESETS = {
   Default: "",
@@ -1989,26 +2012,34 @@ function ContentEmptyState({ title, description, actions }: { title: string; des
   </div>;
 }
 
-function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialCatalog = false, recentSearchesEnabled, onPlay, onShare, onDuplicate, onDelete, onChanged, onInstallContent, onMessage }: { onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; recentSearchesEnabled: boolean; onPlay: () => void; onShare: () => void; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
+function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "mods", initialCatalog = false, onPopOut, floating, onPlay, onRename, onExport, onShare, onDuplicate, onDelete, onChanged, onInstallContent, onMessage }: { onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; contentTasks: ContentDownload[]; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; onPopOut: () => void; floating: boolean; onPlay: () => void; onRename: (name: string) => Promise<void>; onExport: () => Promise<void>; onShare: () => void; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
   const contentTransfer = useContentTransfer();
   const [tab, setTab] = useState<InstanceTab>(initialTab);
   const [items, setItems] = useState<InstanceContentItem[]>(() => initialTab === "settings" ? [] : instanceContentMemoryCache.get(instanceContentCacheKey(instance.id, initialTab)) || []);
   const [contentReady, setContentReady] = useState(() => initialTab === "settings" || instanceContentMemoryCache.has(instanceContentCacheKey(instance.id, initialTab)));
   const [search, setSearch] = useState("");
-  const [recentModSearches, setRecentModSearches] = useState<string[]>(readRecentModSearches);
-  const [recentSearchesOpen, setRecentSearchesOpen] = useState(false);
   const [sort, setSort] = useState("Name");
   const [filter, setFilter] = useState("All");
   const [contentPage, setContentPage] = useState(1);
   const [browsingCatalog, setBrowsingCatalog] = useState(initialCatalog && instance.loader.toLowerCase().includes("fabric"));
   const [catalog, setCatalog] = useState<CatalogSearchResult>({ items: [], offset: 0, limit: 50, total: 0 });
   const [catalogLoading, setCatalogLoading] = useState(initialCatalog && instance.loader.toLowerCase().includes("fabric"));
+  const [catalogFilters, setCatalogFilters] = useState(defaultCatalogFilters);
+  const [catalogVersion, setCatalogVersion] = useState(instance.version);
+  const catalogFiltered = catalogFiltersChanged(catalogFilters, catalogVersion, instance.version);
+  const activeCatalogFilters = tab === "mods" && catalogFiltered ? catalogFilters : undefined;
+  const catalogGameVersion = tab === "mods" ? catalogVersion : instance.version;
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogRetry, setCatalogRetry] = useState(0);
   const [renderedItemCount, setRenderedItemCount] = useState(10);
-  const [pendingCatalogItems, setPendingCatalogItems] = useState<Set<string>>(() => new Set());
+  const [pendingRequests, setPendingCatalogItems] = useState<Set<string>>(() => new Set());
+  const pendingCatalogItems = new Set([...pendingRequests, ...contentTasks.filter(task => task.instanceId === instance.id && contentPending(task)).map(task => `${task.category}:${task.projectId}`)]);
+  const contentCompletions = contentTasks.filter(task => task.instanceId === instance.id && task.category === tab && task.state === "installed");
+  const contentCompletionKey = contentCompletions.map(task => task.id).join(":");
   const [draggingContent, setDraggingContent] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [instanceMenuPosition, setInstanceMenuPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 320, maxHeight: 420 });
-  const [instanceMenuBusy, setInstanceMenuBusy] = useState<"duplicate" | "delete" | null>(null);
+  const [instanceMenuBusy, setInstanceMenuBusy] = useState<"duplicate" | "delete" | "export" | null>(null);
   const [confirmInstanceDelete, setConfirmInstanceDelete] = useState(false);
 
   const [modDrawer, setModDrawer] = useState<ModDrawerSelection | null>(null);
@@ -2018,7 +2049,10 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   const [savingSettings, setSavingSettings] = useState(false);
   const [advancedJvmOpen, setAdvancedJvmOpen] = useState(false);
   const [name, setName] = useState(instance.name);
+  useEffect(() => setName(instance.name), [instance.name]);
   const [memory, setMemory] = useState(instance.memory);
+  const [loaderVersion, setLoaderVersion] = useState<string>();
+  useEffect(() => setLoaderVersion(undefined), [instance.id, instance.loaderVersion]);
   const [jvmArguments, setJvmArguments] = useState(instance.jvmArguments);
   const instanceSegmentIndicator = useRef<HTMLSpanElement>(null);
   const previousContentTab = useRef<Exclude<InstanceTab, "settings">>("mods");
@@ -2050,39 +2084,28 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   };
   useEffect(() => { void loadContent(); const focus = () => { if (!document.hidden) void loadContent(); }; window.addEventListener("focus", focus); return () => window.removeEventListener("focus", focus); }, [tab, instance.id]);
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void listen<ContentInstallState>("content-install-state", (event) => {
-      const update = event.payload;
-      if (update.instanceId !== instance.id || update.state === "installing") return;
-      const key = `${update.category}:${update.projectId}`;
-      const clearPending = () => setPendingCatalogItems(current => { const next = new Set(current); next.delete(key); return next; });
-      if (update.state === "installed" && update.category === tab) {
-        setModDrawer(current => current?.projectId === update.projectId
-          ? { ...current, installed: true, canInstall: false, installedVersion: update.version || current.installedVersion }
-          : current);
-        void loadContent().finally(clearPending);
-      }
-      else {
-        clearPending();
-        if (update.state === "error") onMessage(update.message, "error");
-      }
-    }).then(value => { unlisten = value; });
-    return () => unlisten?.();
-  }, [instance.id, tab]);
+    if (!contentCompletions.length) return;
+    setModDrawer(current => {
+      const installed = contentCompletions.find(task => task.projectId === current?.projectId);
+      return current && installed ? { ...current, installed: true, canInstall: false, installedVersion: installed.version || current.installedVersion } : current;
+    });
+    void loadContent();
+  }, [instance.id, tab, contentCompletionKey]);
   useEffect(() => { setName(instance.name); setMemory(instance.memory); setJvmArguments(instance.jvmArguments); }, [instance]);
-  useEffect(() => { setModDrawer(null); setModDrawerDetails(null); setModDrawerError(""); }, [instance.id, tab, browsingCatalog]);
+  useEffect(() => { setModDrawer(null); setModDrawerDetails(null); setModDrawerError(""); }, [instance.id, tab, browsingCatalog, catalogFilters, catalogVersion]);
+  const drawerCatalogItem = browsingCatalog ? catalog.items.find(item => item.projectId === modDrawer?.projectId) : undefined;
   useEffect(() => {
     if (!modDrawer?.projectId) { setModDrawerDetails(null); setModDrawerLoading(false); return; }
     let current = true;
     setModDrawerDetails(null);
     setModDrawerError("");
     setModDrawerLoading(true);
-    void invoke<ModProjectDetails>("get_modrinth_project_details", { projectId: modDrawer.projectId, gameVersion: instance.version, category: "mods" })
+    void invoke<ModProjectDetails>("get_modrinth_project_details", { projectId: modDrawer.projectId, gameVersion: drawerCatalogItem?.gameVersion || instance.version, category: "mods", loader: drawerCatalogItem?.loaders?.[0] || drawerCatalogItem?.loader.toLowerCase().split(",")[0], versionId: drawerCatalogItem?.versionId })
       .then(details => { if (current) setModDrawerDetails(details); })
       .catch(error => { if (current) setModDrawerError(String(error)); })
       .finally(() => { if (current) setModDrawerLoading(false); });
     return () => { current = false; };
-  }, [modDrawer?.projectId, instance.version]);
+  }, [modDrawer?.projectId, instance.version, drawerCatalogItem?.versionId]);
   useEffect(() => {
     if (!menuOpen) return;
     const place = () => {
@@ -2098,11 +2121,13 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       const target = event.target as Node;
       if (!instanceMenuTriggerRef.current?.contains(target) && !instanceMenuRef.current?.contains(target)) setMenuOpen(false);
     };
+    const key = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setMenuOpen(false); instanceMenuTriggerRef.current?.focus(); } };
+    document.addEventListener("keydown", key);
     place();
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
     document.addEventListener("pointerdown", dismiss);
-    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", dismiss); };
+    return () => { document.removeEventListener("keydown", key); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("pointerdown", dismiss); };
   }, [menuOpen]);
   useEffect(() => { if (menuOpen && instanceMenuRef.current) revealDropdown(instanceMenuRef.current); }, [menuOpen]);
   useEffect(() => { if (!menuOpen) setConfirmInstanceDelete(false); }, [menuOpen]);
@@ -2114,17 +2139,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   useEffect(() => {
     setRenderedItemCount(10);
     if (contentListRef.current) contentListRef.current.scrollTop = 0;
-  }, [tab, browsingCatalog, search, contentPage, instance.id]);
-  useEffect(() => {
-    const clearRecent = () => { setRecentModSearches([]); setRecentSearchesOpen(false); };
-    window.addEventListener("bloom-clear-transient-caches", clearRecent);
-    return () => window.removeEventListener("bloom-clear-transient-caches", clearRecent);
-  }, []);
-  useEffect(() => {
-    if (!recentSearchesEnabled || tab !== "mods" || browsingCatalog || search.trim().length < 2) return;
-    const timer = window.setTimeout(() => setRecentModSearches(rememberRecentModSearch(search)), 650);
-    return () => window.clearTimeout(timer);
-  }, [recentSearchesEnabled, tab, browsingCatalog, search]);
+  }, [tab, browsingCatalog, search, contentPage, instance.id, catalogFilters, catalogVersion]);
   useEffect(() => {
     const indicator = instanceSegmentIndicator.current;
     if (!indicator) return;
@@ -2147,30 +2162,32 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
     if (!browsingCatalog || tab === "settings") return;
     const category = tab;
     const page = contentPage;
-    const key = catalogCacheKey(category, instance.version, search, page);
+    let cancelled = false;
+    setCatalogError("");
+    const key = catalogCacheKey(category, catalogGameVersion, search, page, activeCatalogFilters);
     const cached = catalogMemoryCache.get(key);
-    if (cached) { setCatalog(cached); setCatalogLoading(false); } else setCatalogLoading(true);
+    if (cached) { setCatalog(cached); setCatalogLoading(false); } else { setCatalogLoading(true); setCatalog({ items: [], total: 0, offset: 0, limit: 50 }); }
     const request = ++catalogLoadSequence.current;
     const timer = window.setTimeout(() => {
-      void invoke<CatalogSearchResult>("search_modrinth_content", { query: search, gameVersion: instance.version, offset: (page - 1) * 50, category })
+      void invoke<CatalogSearchResult>("search_modrinth_content", { query: search, gameVersion: catalogGameVersion, offset: (page - 1) * 50, category, ...(activeCatalogFilters ? { filters: activeCatalogFilters } : {}) })
         .then(async (result) => {
           catalogMemoryCache.set(key, result);
           warmCatalogImages(result);
-          if (recentSearchesEnabled && category === "mods" && search.trim().length >= 2) setRecentModSearches(rememberRecentModSearch(search));
+          if (cancelled || request !== catalogLoadSequence.current) return;
           const pages = Math.ceil(result.total / Math.max(1, result.limit));
           for (const nextPage of [page + 1, page + 2].filter(value => value <= pages)) {
-            const nextKey = catalogCacheKey(category, instance.version, search, nextPage);
+            const nextKey = catalogCacheKey(category, catalogGameVersion, search, nextPage, activeCatalogFilters);
             if (catalogMemoryCache.has(nextKey)) continue;
-            void invoke<CatalogSearchResult>("search_modrinth_content", { query: search, gameVersion: instance.version, offset: (nextPage - 1) * 50, category }).then(next => { catalogMemoryCache.set(nextKey, next); warmCatalogImages(next); }).catch(() => {});
+            void invoke<CatalogSearchResult>("search_modrinth_content", { query: search, gameVersion: catalogGameVersion, offset: (nextPage - 1) * 50, category, ...(activeCatalogFilters ? { filters: activeCatalogFilters } : {}) }).then(next => { catalogMemoryCache.set(nextKey, next); warmCatalogImages(next); }).catch(() => {});
           }
           if (!cached && request === catalogLoadSequence.current) await waitForCatalogFirstBatch(result.items);
-          if (request === catalogLoadSequence.current) { setCatalog(result);  }
+          if (!cancelled && request === catalogLoadSequence.current) { setCatalog(result); }
         })
-        .catch((error) => { if (request === catalogLoadSequence.current && !cached) onMessage(String(error), "error"); })
-        .finally(() => { if (request === catalogLoadSequence.current) setCatalogLoading(false); });
+        .catch((error) => { if (!cancelled && request === catalogLoadSequence.current && !cached) { setCatalogError(String(error)); onMessage(String(error), "error"); } })
+        .finally(() => { if (!cancelled && request === catalogLoadSequence.current) setCatalogLoading(false); });
     }, search ? 320 : 0);
-    return () => window.clearTimeout(timer);
-  }, [browsingCatalog, tab, search, contentPage, instance.version, recentSearchesEnabled]);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [browsingCatalog, tab, search, contentPage, instance.version, catalogFilters, catalogVersion, catalogRetry]);
   const toggleItem = async (item: InstanceContentItem, enabled: boolean) => { try { await invoke("toggle_instance_content", { instanceId: instance.id, category: tab, fileName: item.fileName, enabled }); await loadContent(); } catch (error) { onMessage(String(error), "error"); } };
   const deleteItem = async (item: InstanceContentItem) => {
     if (tab === "settings") return;
@@ -2181,12 +2198,9 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
     } catch (error) { onMessage(String(error), "error"); }
   };
   const chooseIcon = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { void invoke<InstanceDraft>("set_instance_icon", { instanceId: instance.id, icon: String(reader.result) }).then(onChanged).catch(error => onMessage(String(error), "error")); }; reader.readAsDataURL(file); };
-  const saveSettings = async () => { if (savingSettings) return; setSavingSettings(true); try { const saved = await invoke<InstanceDraft>("update_instance_settings", { instanceId: instance.id, name, memory, jvmArguments }); onChanged(saved); onMessage("Instance settings saved."); } catch (error) { onMessage(String(error), "error"); } finally { setSavingSettings(false); } };
+  const saveSettings = async () => { if (savingSettings || (busy && loaderVersion !== undefined)) return; setSavingSettings(true); try { const saved = await invoke<InstanceDraft>("update_instance_settings", { instanceId: instance.id, name, memory, jvmArguments, ...(loaderVersion !== undefined ? { loaderVersion } : {}) }); onChanged(saved); setLoaderVersion(undefined); onMessage("Instance settings saved."); } catch (error) { onMessage(String(error), "error"); } finally { setSavingSettings(false); } };
   const applyJvmPreset = (preset: string) => { if (preset === "Custom") setAdvancedJvmOpen(true); if (preset in JVM_PRESETS) setJvmArguments(JVM_PRESETS[preset as keyof typeof JVM_PRESETS]); };
   const categoryLabel = tab === "mods" ? "Mods" : tab === "resourcepacks" ? "Resource Packs" : "Shaders";
-  const matchingRecentModSearches = recentSearchesEnabled && tab === "mods"
-    ? recentModSearches.filter(item => item.toLocaleLowerCase() !== search.trim().toLocaleLowerCase() && (!search.trim() || item.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())))
-    : [];
   const catalogKey = (item: CatalogItem, category: Exclude<InstanceTab, "settings"> = tab as Exclude<InstanceTab, "settings">) => `${category}:${item.projectId}`;
   const normalizedIdentity = (value: string) => value.toLowerCase().replace(/\.disabled$/i, "").replace(/\.(jar|zip)$/i, "").replace(/[^a-z0-9]+/g, "");
   const matchingInstalledItem = (item: CatalogItem) => {
@@ -2216,7 +2230,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
       fileName: item.fileName,
       fileSize: item.fileSize,
       projectUrl: `https://modrinth.com/mod/${encodeURIComponent(item.slug || item.projectId)}`,
-      canInstall: !installedItem,
+      canInstall: !installedItem && !catalogInstallRestriction(item, instance),
       installed: Boolean(installedItem),
     });
   };
@@ -2239,15 +2253,16 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
     });
   };
   const queueCatalogInstall = async (item: CatalogItem) => {
-    if (tab === "settings" || catalogItemInstalled(item)) return;
+    if (tab === "settings" || catalogItemInstalled(item) || (tab === "mods" && catalogInstallRestriction(item, instance))) return;
     const key = catalogKey(item, tab);
     if (pendingCatalogItems.has(key)) return;
     setPendingCatalogItems(current => new Set(current).add(key));
     try {
       await onInstallContent(item, tab);
     } catch (error) {
-      setPendingCatalogItems(current => { const next = new Set(current); next.delete(key); return next; });
       onMessage(String(error), "error");
+    } finally {
+      setPendingCatalogItems(current => { const next = new Set(current); next.delete(key); return next; });
     }
   };
   const visibleItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()) && (filter === "All" || (filter === "Enabled" ? item.enabled : !item.enabled))).sort((a, b) => sort === "Size" ? b.size - a.size : a.name.localeCompare(b.name));
@@ -2266,7 +2281,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   };
   const changeCatalogPage = (nextPage: number) => {
     if (tab === "settings") return;
-    const cached = catalogMemoryCache.get(catalogCacheKey(tab, instance.version, search, nextPage));
+    const cached = catalogMemoryCache.get(catalogCacheKey(tab, catalogGameVersion, search, nextPage, activeCatalogFilters));
     if (cached) { setCatalog(cached); setCatalogLoading(false); } else setCatalogLoading(true);
     setContentPage(nextPage);
   };
@@ -2276,7 +2291,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   };
   const openCatalog = () => {
     if (tab === "mods" && !instance.loader.toLowerCase().includes("fabric")) { onMessage("The built-in mod catalog currently supports Fabric instances only."); return; }
-    const cached = tab === "settings" ? undefined : catalogMemoryCache.get(catalogCacheKey(tab, instance.version, "", 1));
+    const cached = tab === "settings" ? undefined : catalogMemoryCache.get(catalogCacheKey(tab, catalogGameVersion, "", 1, activeCatalogFilters));
     if (cached) { setCatalog(cached); setCatalogLoading(false); } else setCatalogLoading(true);
     setSearch(""); setContentPage(1); setBrowsingCatalog(true);
   };
@@ -2285,7 +2300,7 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
     setSearch(value);
     setContentPage(1);
     if (!browsingCatalog || tab === "settings") return;
-    const cached = catalogMemoryCache.get(catalogCacheKey(tab, instance.version, value, 1));
+    const cached = catalogMemoryCache.get(catalogCacheKey(tab, catalogGameVersion, value, 1, activeCatalogFilters));
     if (cached) { setCatalog(cached); setCatalogLoading(false); } else setCatalogLoading(true);
   };
   useEffect(() => {
@@ -2319,15 +2334,17 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
   };
   return <div className="instance-workspace">
     {draggingContent && <div className="content-drop-overlay" role="status" aria-label={`Drop files into ${categoryLabel}`}><FileDown className="content-drop-symbol" size={58} strokeWidth={1.75} aria-hidden="true" /></div>}
-    <section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} strokeWidth={2.4} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1>{instance.name}</h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy} onClick={onPlay}><Play size={17} fill="currentColor" />Play</button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
+    <section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} strokeWidth={2.4} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1 aria-label={instance.name}><InstanceName name={instance.name} onRename={onRename} disabled={savingSettings} /></h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy} onClick={onPlay}><Play size={17} fill="currentColor" />Play</button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
       <div className="instance-menu-identity"><span>{instance.icon ? <img src={instance.icon} alt="" /> : <b aria-hidden="true">?</b>}</span><div><strong title={instance.name}>{instance.name}</strong><small>{instance.version} <i>•</i> {instance.loader}</small></div></div>
+      <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onPopOut(); }}><ExternalLink size={18} /><span><b>{floating ? "Put away floating controls" : "Pop out Play controls"}</b></span></button>
       <span className="instance-menu-label">INSTANCE FILES</span>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id }); }}><FolderOpen size={18} /><span><b>Open folder</b></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id, category: "mods" }); }}><PackageOpen size={18} /><span><b>Open mods folder</b></span></button>
       <span className="instance-menu-divider" />
-      <button className="instance-menu-action described" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onShare(); }}><Share2 size={18} /><span><b>Share instance</b><small>Invite Bloom friends to a copy or synced pack.</small></span></button>
+      <button className="instance-menu-action described" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onShare(); }}><Share2 size={18} /><span><b>Share instance</b><small>Invite Delight friends to a copy or synced pack.</small></span></button>
       <button className="instance-menu-action described" style={{ opacity: 0 }} disabled={instanceMenuBusy !== null || busy} onClick={() => { setInstanceMenuBusy("duplicate"); void onDuplicate().finally(() => { setInstanceMenuBusy(null); setMenuOpen(false); }); }}><Copy size={18} /><span><b>{instanceMenuBusy === "duplicate" ? "Duplicating…" : "Duplicate instance"}</b><small>Copy this setup and its local files.</small></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setTab("settings"); setMenuOpen(false); }}><SettingsIcon size={18} /><span><b>Instance settings</b></span></button>
+      <button className="instance-menu-action" style={{ opacity: 0 }} disabled={busy || instanceMenuBusy !== null} onClick={() => { setInstanceMenuBusy("export"); void onExport().catch(() => {}).finally(() => { setInstanceMenuBusy(null); setMenuOpen(false); }); }}><Download size={18} /><span><b>{instanceMenuBusy === "export" ? "Exporting…" : "Export ZIP"}</b></span></button>
       <span className="instance-menu-divider danger" />
       <button className={`instance-menu-action instance-menu-delete ${confirmInstanceDelete ? "confirm" : ""}`} style={{ opacity: 0 }} disabled={instanceMenuBusy !== null || busy} onClick={() => { if (!confirmInstanceDelete) { setConfirmInstanceDelete(true); return; } setInstanceMenuBusy("delete"); void onDelete().finally(() => { setInstanceMenuBusy(null); setMenuOpen(false); }); }}><Trash2 size={18} /><span><b>{instanceMenuBusy === "delete" ? "Deleting…" : confirmInstanceDelete ? "Delete instance and files?" : "Delete instance"}</b><small>{confirmInstanceDelete ? "Click again to permanently confirm." : "Permanently remove this instance."}</small></span></button>
     </div>, document.body)}</div></div></div>
@@ -2343,15 +2360,16 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
         <header className="instance-preferences-heading">
           <h2>Instance settings</h2>
           {groupRole && <span className="instance-role-badge">{groupRole === "editor" ? "Editor" : groupRole === "member" ? "Guest" : "Owner"}</span>}
-          <button className="instance-preferences-save" disabled={savingSettings || !name.trim()} onClick={() => void saveSettings()}>{savingSettings ? "Saving…" : "Save changes"}</button>
+          <button className="instance-preferences-save" disabled={savingSettings || !name.trim() || (busy && loaderVersion !== undefined)} onClick={() => void saveSettings()}>{savingSettings ? "Saving…" : "Save changes"}</button>
         </header>
         <fieldset className="instance-preferences-fields" disabled={savingSettings}>
           <div className="instance-preference-row">
             <label htmlFor="instance-display-name">Instance name</label>
             <input id="instance-display-name" value={name} onChange={event => setName(event.target.value)} />
           </div>
+          {instance.loader.toLowerCase() === "fabric" && <FabricLoaderSetting instanceId={instance.id} minecraftVersion={instance.version} currentVersion={instance.loaderVersion} value={loaderVersion} onChange={setLoaderVersion} disabled={busy || savingSettings} busy={busy} />}
           <div className="instance-preference-row">
-            <div className="instance-preference-label">Memory<InfoTip label="Minecraft memory">The maximum RAM Minecraft can use for this instance. Larger modpacks may need more. Leave enough RAM for Windows and your other apps; allocating more does not always improve performance.</InfoTip></div>
+            <div className="instance-preference-label">Memory<InfoTip label="Minecraft memory">The maximum RAM Minecraft can use for this instance. Larger modpacks may need more. Leave enough RAM for your system and other apps; allocating more does not always improve performance.</InfoTip></div>
             <PercentSlider value={memory} onChange={setMemory} label="Minecraft memory" min={1024} max={16384} step={512} unit=" MB" />
           </div>
           <div className="instance-preference-row">
@@ -2375,17 +2393,22 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
           version={instance.version} loader={instance.loader} sort={sort} filter={filter}
           onSortChange={value => { setSort(value); setContentPage(1); }}
           onFilterChange={value => { setFilter(value); setContentPage(1); }}
+          catalogFiltered={catalogFiltered}
+          catalogControls={tab === "mods" ? owner => <CatalogFilterControls owner={owner} value={catalogFilters} version={catalogVersion} instanceVersion={instance.version} changed={catalogFiltered}
+            onChange={value => { setCatalogFilters(value); setContentPage(1); }} onVersion={value => { setCatalogVersion(value); setContentPage(1); }}
+            onReset={() => { setCatalogFilters(defaultCatalogFilters()); setCatalogVersion(instance.version); setContentPage(1); }} /> : undefined}
           onAdd={openCatalog} onBack={closeCatalog} />
         <div className="instance-content-list-shell">
           <div ref={contentListRef} className="content-list" onScroll={event => revealMoreContent(event.currentTarget)}>
           {browsingCatalog ? (
-            catalogLoading ? <CatalogLoadingState label={search ? "Searching Modrinth" : `Loading featured ${categoryLabel.toLowerCase()}`} /> : catalog.items.length ? renderedCatalogItems.map((item, index) => {
+            catalogLoading ? <CatalogLoadingState label={search ? "Searching Modrinth" : `Loading featured ${categoryLabel.toLowerCase()}`} /> : catalogError ? <ContentEmptyState title="Could not load results" description={catalogError} actions={<button className="content-empty-primary" onClick={() => setCatalogRetry(value => value + 1)}>Retry search</button>} /> : catalog.items.length ? renderedCatalogItems.map((item, index) => {
               const installed = catalogItemInstalled(item);
               const pending = pendingCatalogItems.has(catalogKey(item));
-              return <div className={`content-item catalog-item progressive-content-row ${installed ? "is-installed" : ""} ${pending ? "is-pending" : ""}`} style={{ "--row-reveal-order": index % 10 } as CSSProperties} key={item.projectId}><button type="button" className="content-detail-hitarea" onClick={() => tab === "mods" ? showCatalogModDetails(item) : openCatalogProject(item)} aria-label={tab === "mods" ? `Open details for ${item.title}` : `View ${item.title} on Modrinth`}><span className="content-icon">{item.iconUrl ? <img src={item.iconUrl} alt="" loading="lazy" /> : tab === "mods" ? <Puzzle size={22} /> : tab === "resourcepacks" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="content-name"><b>{item.title}</b><small>{item.versionNumber} • by {item.author}</small></div><span className="content-loader">{item.loader}</span><span className="content-size">{formatBytes(item.fileSize)}</span></button><div className="catalog-item-actions"><button className="catalog-view-project" onClick={() => openCatalogProject(item)} aria-label={`View ${item.title} on Modrinth`} title="View on Modrinth"><ExternalLink size={16} /></button><button className="catalog-install" disabled={installed || pending} onClick={() => void queueCatalogInstall(item)} aria-label={installed ? `${item.title} is installed` : pending ? `${item.title} is queued for installation` : `Install ${item.title}`}>{pending ? <Timer size={16} /> : <Plus size={18} />}</button></div>{installed && <span className="catalog-installed-state">Installed</span>}</div>;
+              const restriction = tab === "mods" ? catalogInstallRestriction(item, instance) : undefined;
+              return <div className={`content-item catalog-item progressive-content-row ${installed ? "is-installed" : ""} ${pending ? "is-pending" : ""}`} style={{ "--row-reveal-order": index % 10 } as CSSProperties} key={item.projectId}><button type="button" className="content-detail-hitarea" onClick={() => tab === "mods" ? showCatalogModDetails(item) : openCatalogProject(item)} aria-label={tab === "mods" ? `Open details for ${item.title}` : `View ${item.title} on Modrinth`}><span className="content-icon">{item.iconUrl ? <img src={item.iconUrl} alt="" loading="lazy" /> : tab === "mods" ? <Puzzle size={22} /> : tab === "resourcepacks" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="content-name"><b>{item.title}</b><small>{item.versionNumber} • by {item.author}</small></div><span className="content-loader">{item.loader}</span><span className="content-size">{formatBytes(item.fileSize)}</span></button><div className="catalog-item-actions"><button className="catalog-view-project" onClick={() => openCatalogProject(item)} aria-label={`View ${item.title} on Modrinth`} title="View on Modrinth"><ExternalLink size={16} /></button><button className="catalog-install" disabled={installed || pending || Boolean(restriction)} title={restriction} onClick={() => void queueCatalogInstall(item)} aria-label={installed ? `${item.title} is installed` : pending ? `${item.title} is queued for installation` : restriction ? `${item.title}: ${restriction}` : `Install ${item.title}`}>{pending ? <Timer size={16} /> : <Plus size={18} />}</button></div>{installed && <span className="catalog-installed-state">Installed</span>}</div>;
             }) : <ContentEmptyState
               title={search ? `No matching ${categoryLabel.toLowerCase()}` : `No compatible ${categoryLabel.toLowerCase()} found`}
-              description={search ? `Nothing matching “${search}” supports Minecraft ${instance.version}.` : `Modrinth has no compatible results for Minecraft ${instance.version}.`}
+              description={tab === "mods" && catalogFiltered ? "No results match these filters. Try another category, environment, loader or Minecraft version." : search ? `Nothing matching “${search}” supports Minecraft ${instance.version}.` : `Modrinth has no compatible results for Minecraft ${instance.version}.`}
               actions={search ? <button className="content-empty-primary" onClick={() => updateContentSearch("")}><CloseIcon size={16} />Clear search</button> : undefined}
             />
           ) : !contentReady ? <CatalogLoadingState label={`Opening cached ${categoryLabel.toLowerCase()}`} /> : visibleItems.length ? renderedInstalledItems.map(item => <div className="content-item installed-content-item" key={item.id}>
@@ -2424,10 +2447,8 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
           ? catalog.total > catalog.limit && <PaginationControls page={contentPage} pages={catalogPages} busy={catalogLoading} onPrevious={() => changeCatalogPage(contentPage - 1)} onNext={() => changeCatalogPage(contentPage + 1)} />
           : visibleItems.length > 50 && <PaginationControls page={safePage} pages={pageCount} onPrevious={() => setContentPage(safePage - 1)} onNext={() => setContentPage(safePage + 1)} />}
         <div
-          className={`content-search ${search ? "has-query" : ""} ${recentSearchesOpen && matchingRecentModSearches.length ? "has-recent-searches" : ""}`}
+          className={`content-search ${search ? "has-query" : ""}`}
           role="search"
-          onFocusCapture={() => { if (recentSearchesEnabled && tab === "mods") setRecentSearchesOpen(true); }}
-          onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setRecentSearchesOpen(false); }}
         >
           <span className="content-search-mark" aria-hidden="true">
             <Search size={27} />
@@ -2435,23 +2456,10 @@ function InstancePage({ instance, groupRole, busy, initialTab = "mods", initialC
           <input
             value={search}
             aria-label={browsingCatalog ? `Search Modrinth ${categoryLabel.toLowerCase()}` : `Search installed ${categoryLabel.toLowerCase()}`}
-            aria-expanded={recentSearchesEnabled && tab === "mods" && recentSearchesOpen && matchingRecentModSearches.length > 0}
-            aria-haspopup={recentSearchesEnabled && tab === "mods" ? "listbox" : undefined}
             onChange={event => updateContentSearch(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === "Escape") setRecentSearchesOpen(false);
-              if (event.key === "Enter" && recentSearchesEnabled && tab === "mods" && search.trim().length >= 2) {
-                setRecentModSearches(rememberRecentModSearch(search));
-                setRecentSearchesOpen(false);
-              }
-            }}
             placeholder={browsingCatalog ? `Search Modrinth ${categoryLabel.toLowerCase()}...` : `Search ${categoryLabel.toLowerCase()}...`}
           />
           {search && <button type="button" className="content-search-clear" aria-label="Clear search" title="Clear search" onClick={() => updateContentSearch("")}><CloseIcon size={17} /></button>}
-          {recentSearchesOpen && matchingRecentModSearches.length > 0 && <div className="content-recent-searches" role="listbox" aria-label="Recent mod searches">
-            <span>Recent searches</span>
-            {matchingRecentModSearches.map(item => <button type="button" role="option" aria-selected="false" key={item} onMouseDown={event => event.preventDefault()} onClick={() => { updateContentSearch(item); setRecentModSearches(rememberRecentModSearch(item)); setRecentSearchesOpen(false); }}><History size={15} /><b>{item}</b></button>)}
-          </div>}
         </div>
 
         {modDrawer && <ModDetailDrawer
@@ -2499,7 +2507,7 @@ function AutoTunePage({ onComplete }: { onComplete: () => void }) {
       <section className="autotune-intro">
         <header>
           <h1>What is AutoTune?</h1>
-          <p>Bloom measures your PC and builds Minecraft settings that fit it. Nothing changes until you approve it.</p>
+          <p>Delight measures your PC and builds Minecraft settings that fit it. Nothing changes until you approve it.</p>
         </header>
         <div className="autotune-intro-steps">
           <article>
@@ -2516,7 +2524,7 @@ function AutoTunePage({ onComplete }: { onComplete: () => void }) {
           </article>
           <article>
             <span><Shield size={20} /></span>
-            <div><b>You stay in control</b><p>Everything stays local, and Bloom asks before applying changes to your instances.</p></div>
+            <div><b>You stay in control</b><p>Everything stays local, and Delight asks before applying changes to your instances.</p></div>
           </article>
         </div>
         <button
@@ -2572,152 +2580,11 @@ function AutoTuneBenchmark() {
   useEffect(() => () => cancelAnimationFrame(frameRef.current), []);
   useEffect(() => { if (allowed) return; const timer = window.setInterval(() => setAllowed(localStorage.getItem("bloom-autotune-accepted") === "true"), 250); return () => window.clearInterval(timer); }, [allowed]);
   if (!allowed) return null;
-  return <section className="autotune-benchmark-live"><div className="benchmark-live-heading"><div><em>Phase 2 • Measured locally</em><h2>Bloom graphics benchmark</h2><p>A consistent 30-second rendered workload measures frame throughput and frame-time stability on this device.</p></div><span className="phase-two-badge">02</span></div>{stage === "idle" && <div className="benchmark-start"><BarChart3 size={28} /><div><b>Ready to establish a performance baseline</b><span>Close heavy applications and keep Bloom visible during the test for the cleanest result.</span></div><button onClick={() => setStage("consent")}>Start benchmark</button></div>}{stage === "consent" && <div className="benchmark-consent"><Activity size={22} /><div><b>Performance test confirmation</b><span>Bloom will render a demanding animated scene for 30 seconds. Fans may briefly speed up. No files are changed and no result leaves this computer.</span></div><button className="benchmark-cancel" onClick={() => setStage(result ? "result" : "idle")}>Cancel</button><button onClick={runBenchmark}>Begin test</button></div>}{stage === "running" && <div className="benchmark-running"><canvas ref={canvasRef} /><div className="benchmark-overlay"><span><Activity size={15} />Benchmark running</span><b>{Math.ceil((100 - progress) * .3)}s</b></div><div className="benchmark-progress"><i style={{ width: `${progress}%` }} /></div><button onClick={stopBenchmark}>Stop test</button></div>}{stage === "result" && result && <div className="benchmark-results"><div className="benchmark-score"><small>Bloom score</small><b>{result.score}</b><span>{result.stability >= 95 ? "Excellent stability" : result.stability >= 88 ? "Good stability" : "Variable frame times"}</span></div><div className="benchmark-metrics"><div><small>Average FPS</small><b>{result.averageFps.toFixed(1)}</b></div><div><small>1% low</small><b>{result.onePercentLow.toFixed(1)}</b></div><div><small>Frame time</small><b>{result.averageFrameTime.toFixed(2)} ms</b></div><div><small>Stability</small><b>{result.stability.toFixed(1)}%</b></div></div><div className="benchmark-result-actions"><span><Timer size={14} />Completed {new Date(result.completedAt).toLocaleDateString()}</span><button onClick={() => setStage("consent")}><RotateCw size={14} />Run again</button></div></div>}<p className="benchmark-accuracy"><Shield size={13} />This measures Bloom’s representative graphics workload, not Minecraft FPS. In-game validation will arrive with the dedicated benchmark mod.</p></section>;
-}
-
-type MinecraftBenchmarkResult = {
-  minecraftVersion: string;
-  seed: number;
-  durationSeconds: number;
-  averageFps: number;
-  onePercentLow: number;
-  averageFrameTimeMs: number;
-  p95FrameTimeMs: number;
-  averageMemoryBytes: number;
-  peakMemoryBytes: number;
-  frames: number;
-  width: number;
-  height: number;
-  completedAt: number;
-};
-
-function AutoTuneMinecraftBenchmark({ onComplete, onReset }: { onComplete: () => void; onReset: () => void }) {
-  const [allowed, setAllowed] = useState(() => localStorage.getItem("bloom-autotune-accepted") === "true");
-  const [stage, setStage] = useState<"permission" | "installing" | "ready" | "running" | "result" | "error">("permission");
-  const [benchmarkStep, setBenchmarkStep] = useState<2 | 3>(2);
-  const [showDetails, setShowDetails] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState("Ready to install the benchmark environment");
-  const [result, setResult] = useState<MinecraftBenchmarkResult | null>(null);
-  useEffect(() => {
-    localStorage.removeItem("bloom-autotune-benchmark");
-    if (allowed) void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(value => { if (value) { setResult(value); setBenchmarkStep(3); setStage("result"); localStorage.setItem("bloom-autotune-minecraft-complete", String(value.completedAt)); onComplete(); } }).catch(() => {});
-  }, [allowed]);
-  useEffect(() => { if (allowed) return; const timer = window.setInterval(() => setAllowed(localStorage.getItem("bloom-autotune-accepted") === "true"), 250); return () => clearInterval(timer); }, [allowed]);
-  useEffect(() => {
-    if (stage !== "installing") return;
-    const timer = window.setInterval(() => void invoke<DownloadViewState>("get_minecraft_launch_status").then(next => {
-      if (next.instanceId !== "bloom-autotune-benchmark") return;
-      setProgress(next.progress); setStatus(next.message || "Installing benchmark files");
-      if (next.state === "complete") { setProgress(100); setBenchmarkStep(3); setStage("ready"); setStatus("Benchmark environment installed"); }
-      if (next.state === "error" || next.state === "cancelled") { setStage("error"); setStatus(next.message); }
-    }).catch(() => {}), 250);
-    return () => clearInterval(timer);
-  }, [stage]);
-  useEffect(() => {
-    if (stage !== "running") return;
-    const timer = window.setInterval(() => {
-      void invoke<{ state: string; progress: number; message: string } | null>("get_autotune_benchmark_status").then(next => {
-        if (!next) return; setProgress(next.progress); setStatus(next.message);
-        if (next.state === "error") { setStage("error"); return; }
-        if (next.state === "complete") void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(value => { if (value) { setResult(value); setBenchmarkStep(3); setStage("result"); localStorage.setItem("bloom-autotune-minecraft-complete", String(value.completedAt)); onComplete(); } });
-      }).catch(() => {});
-    }, 500);
-    return () => clearInterval(timer);
-  }, [stage]);
-  if (!allowed) return null;
-  const install = async () => {
-    onReset(); localStorage.removeItem("bloom-autotune-profile"); localStorage.removeItem("bloom-autotune-minecraft-complete");
-    setBenchmarkStep(2); setStage("installing"); setProgress(1); setStatus("Preparing the private benchmark instance");
-    try { await invoke("install_autotune_benchmark"); } catch (error) { setStatus(String(error)); setStage("error"); }
-  };
-  const launch = async () => {
-    setBenchmarkStep(3); setStage("running"); setProgress(0); setStatus("Starting Minecraft 26.2");
-    try { await invoke("launch_minecraft", { instanceId: "bloom-autotune-benchmark" }); } catch (error) { setStatus(String(error)); setStage("error"); }
-  };
-  const visibleBenchmarkStep = stage === "error" ? benchmarkStep : stage === "ready" || stage === "running" || stage === "result" ? 3 : 2;
-  return <><section className="autotune-step-screen"><AutoTuneStepHeader title="Test Minecraft" />
-    {stage === "permission" && <div className="autotune-action-card autotune-benchmark-permission-card"><span className="autotune-step-mark"><Cuboid size={25} /></span><div className="autotune-permission-copy"><b>Install the benchmark</b><p>Bloom creates a hidden Minecraft 26.2 test instance. Your normal instances, worlds, and settings are not changed.</p><button aria-expanded={showDetails} className="autotune-details-toggle" onClick={() => setShowDetails(value => !value)}>{showDetails ? "Hide details" : "Show details"}<ChevronDown className={showDetails ? "rotated" : ""} size={14} /></button></div><button onClick={() => void install()}>Install</button>{showDetails && <div className="autotune-details-panel"><div><Download size={16} /><span><b>What gets installed</b><small>Minecraft 26.2, Fabric API, and Bloom's benchmark mod in one private instance.</small></span></div><div><Activity size={16} /><span><b>What the test measures</b><small>About 75 seconds of real FPS, 1% lows, frame times, and Java memory in a fixed local world.</small></span></div><div><Shield size={16} /><span><b>What stays private</b><small>Results remain on this PC. Bloom does not read or upload your personal worlds or account data.</small></span></div><div><RotateCw size={16} /><span><b>If you run it again</b><small>Only the previous hidden AutoTune benchmark world is replaced.</small></span></div></div>}</div>}
-    {(stage === "installing" || stage === "running") && <div className="autotune-action-card centered"><span className="autotune-step-mark">{stage === "installing" ? <Download size={23} /> : <Play size={23} />}</span><b>{stage === "installing" ? "Installing benchmark" : "Testing Minecraft"}</b><p>{status}</p><div className="autotune-simple-progress"><i style={{ width: `${progress}%` }} /></div><small>{Math.round(progress)}%</small></div>}
-    {stage === "ready" && <div className="autotune-action-card"><span className="autotune-step-mark complete"><Check size={23} /></span><div><b>Ready to test</b><p>Minecraft opens, measures, and closes automatically.</p></div><button onClick={() => void launch()}><Play size={15} fill="currentColor" />Run test</button></div>}
-    {stage === "error" && <div className="autotune-action-card"><span className="autotune-step-mark error"><TriangleAlert size={22} /></span><div><b>Benchmark stopped</b><p>{status}</p></div><button onClick={() => { setBenchmarkStep(2); setStage("permission"); }}>Start over</button></div>}
-    {stage === "result" && result && <div className="autotune-result-card"><div className="autotune-result-lead"><span className="autotune-step-mark complete"><Check size={22} /></span><div><b>{result.averageFps.toFixed(1)} FPS</b><p>Benchmark complete</p></div></div><div className="autotune-stat-grid"><div><small>1% low</small><b>{result.onePercentLow.toFixed(1)}</b></div><div><small>Frame time</small><b>{result.averageFrameTimeMs.toFixed(2)} ms</b></div><div><small>Memory</small><b>{formatBytes(result.peakMemoryBytes)}</b></div></div><button className="autotune-secondary-action" onClick={() => { setBenchmarkStep(2); setStage("permission"); }}><RotateCw size={14} />Run again</button></div>}
-  </section><AutoTuneProgress step={visibleBenchmarkStep} /></>;
-}
-
-type AutoTuneProfile = {
-  targetFps: number;
-  memoryMb: number;
-  jvmProfile: "Default" | "Performance";
-  graphics: "Fast" | "Balanced" | "High";
-  renderDistance: number;
-  simulationDistance: number;
-  averageFps: number;
-  onePercentLow: number;
-  lowRatio: number;
-  confidence: "Measured" | "Measured with caution";
-  benchmarkCompletedAt: number;
-  reasons: Array<{ title: string; detail: string; tone: "good" | "warn" | "info" }>;
-};
-
-function AutoTuneTuner({ onComplete, onReset }: { onComplete: () => void; onReset: () => void }) {
-  const [profile, setProfile] = useState<AutoTuneProfile | null>(() => { try { return JSON.parse(localStorage.getItem("bloom-autotune-profile") || "null"); } catch { return null; } });
-  const [tuning, setTuning] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(() => { if (!profile) return; void invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result").then(benchmark => { if (benchmark && benchmark.completedAt !== profile.benchmarkCompletedAt) { localStorage.removeItem("bloom-autotune-profile"); setProfile(null); onReset(); } }).catch(() => {}); }, []);
-  useEffect(() => { if (profile) onComplete(); }, []);
-  const tune = async () => {
-    setTuning(true); setError("");
-    try {
-      const [hardware, benchmark] = await Promise.all([invoke<HardwareReport>("detect_hardware_report"), invoke<MinecraftBenchmarkResult | null>("get_autotune_benchmark_result")]);
-      if (!benchmark) throw new Error("Run the Minecraft benchmark before generating a tuning profile.");
-      const targetFps = Math.max(60, hardware.refreshRate || 60);
-      const lowRatio = benchmark.averageFps > 0 ? benchmark.onePercentLow / benchmark.averageFps : 0;
-      const totalRamMb = Math.round(hardware.ramBytes / 1048576);
-      const measuredNeed = Math.ceil((benchmark.peakMemoryBytes / 1048576 * 1.45 + 768) / 512) * 512;
-      const memoryMb = Math.max(3072, Math.min(8192, Math.floor(totalRamMb * .42 / 512) * 512, measuredNeed));
-      const severeStutter = lowRatio < .22 || benchmark.p95FrameTimeMs > 1000 / targetFps * 2.5;
-      const limitedThroughput = benchmark.averageFps < targetFps * .9;
-      const renderDistance = limitedThroughput ? Math.min(8, hardware.recommendedRenderDistance) : severeStutter ? Math.min(12, hardware.recommendedRenderDistance) : hardware.recommendedRenderDistance;
-      const simulationDistance = limitedThroughput ? Math.min(6, hardware.recommendedSimulationDistance) : severeStutter ? Math.min(8, hardware.recommendedSimulationDistance) : hardware.recommendedSimulationDistance;
-      const graphics: AutoTuneProfile["graphics"] = limitedThroughput ? "Fast" : benchmark.averageFps > targetFps * 1.45 && !severeStutter ? "High" : "Balanced";
-      const jvmProfile: AutoTuneProfile["jvmProfile"] = lowRatio < .65 ? "Performance" : "Default";
-      const reasons: AutoTuneProfile["reasons"] = [
-        { title: "Display target", detail: `${targetFps} FPS target from the detected ${hardware.refreshRate || 60} Hz display. The benchmark remained uncapped.`, tone: "info" },
-        { title: "Rendering headroom", detail: `${benchmark.averageFps.toFixed(1)} average FPS is ${(benchmark.averageFps / targetFps).toFixed(1)}× the display target, so Bloom ${limitedThroughput ? "reduced GPU-heavy settings" : "preserved visual quality"}.`, tone: limitedThroughput ? "warn" : "good" },
-        { title: "Frame consistency", detail: `${benchmark.onePercentLow.toFixed(1)} FPS 1% low (${(lowRatio * 100).toFixed(1)}% of average). Bloom ${severeStutter ? "reduced chunk and simulation pressure to address severe spikes" : "kept moderate world distances"}.`, tone: severeStutter ? "warn" : "good" },
-        { title: "Measured memory", detail: `${formatBytes(benchmark.peakMemoryBytes)} peak Java usage produced a ${memoryMb / 1024} GB heap recommendation while preserving system RAM for Windows.`, tone: "info" },
-        { title: "Runtime behavior", detail: `${jvmProfile} JVM tuning selected from measured frame consistency; aggressive Overdrive flags are never applied automatically.`, tone: jvmProfile === "Performance" ? "warn" : "good" },
-      ];
-      const next: AutoTuneProfile = { targetFps, memoryMb, jvmProfile, graphics, renderDistance, simulationDistance, averageFps: benchmark.averageFps, onePercentLow: benchmark.onePercentLow, lowRatio, confidence: severeStutter ? "Measured with caution" : "Measured", benchmarkCompletedAt: benchmark.completedAt, reasons };
-      localStorage.setItem("bloom-autotune-profile", JSON.stringify(next)); setProfile(next); onComplete();
-    } catch (reason) { setError(String(reason)); } finally { setTuning(false); }
-  };
-  return <section className="autotune-step-screen"><AutoTuneStepHeader title="Build profile" />{!profile ? <div className="autotune-action-card centered"><span className="autotune-step-mark"><WandSparkles size={24} /></span><b>{tuning ? "Building your profile" : "Ready to tune"}</b><p>{tuning ? "Comparing your measured results." : "Creates recommended settings from the benchmark."}</p>{tuning && <div className="autotune-simple-progress indeterminate"><i /></div>}<button disabled={tuning} onClick={() => void tune()}>{tuning ? "Tuning…" : "Build profile"}</button></div> : <div className="autotune-result-card"><div className="autotune-result-lead"><span className="autotune-step-mark complete"><Check size={22} /></span><div><b>Profile ready</b><p>{profile.confidence}</p></div></div><div className="autotune-stat-grid five"><div><small>Memory</small><b>{profile.memoryMb / 1024} GB</b></div><div><small>JVM</small><b>{profile.jvmProfile}</b></div><div><small>Graphics</small><b>{profile.graphics}</b></div><div><small>Render</small><b>{profile.renderDistance}</b></div><div><small>Simulation</small><b>{profile.simulationDistance}</b></div></div><button className="autotune-secondary-action" disabled={tuning} onClick={() => void tune()}><RotateCw size={14} />Recalculate</button></div>}{error && <div className="autotune-inline-error"><TriangleAlert size={15} /><span>{error}</span></div>}</section>;
-}
-
-function AutoTuneApply() {
-  const [profile, setProfile] = useState<AutoTuneProfile | null>(() => { try { return JSON.parse(localStorage.getItem("bloom-autotune-profile") || "null"); } catch { return null; } });
-  const [instanceCount, setInstanceCount] = useState(0);
-  const [confirming, setConfirming] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [appliedCount, setAppliedCount] = useState<number | null>(null);
-  const [error, setError] = useState("");
-  useEffect(() => { const timer = window.setInterval(() => { try { setProfile(JSON.parse(localStorage.getItem("bloom-autotune-profile") || "null")); } catch {} }, 400); void invoke<InstanceDraft[]>("list_instances").then(items => setInstanceCount(items.length)); return () => clearInterval(timer); }, []);
-  const apply = async () => { if (!profile) return; setApplying(true); setError(""); try { const count = await invoke<number>("apply_autotune_profile", { profile }); setAppliedCount(count); setConfirming(false); } catch (reason) { setError(String(reason)); } finally { setApplying(false); } };
-  return <section className="autotune-step-screen"><AutoTuneStepHeader title="Apply AutoTune" />{!profile ? <div className="autotune-action-card centered"><span className="autotune-step-mark"><LockKeyhole size={22} /></span><b>Profile required</b><p>Complete the previous step first.</p></div> : appliedCount !== null ? <div className="autotune-action-card centered"><span className="autotune-step-mark complete"><Check size={24} /></span><b>AutoTune is active</b><p>Updated {appliedCount} instance{appliedCount === 1 ? "" : "s"}. Future instances inherit it automatically.</p><button onClick={() => { setAppliedCount(null); setConfirming(false); }}>Review profile</button></div> : <><div className="autotune-result-card"><div className="autotune-stat-grid"><div><small>Memory</small><b>{profile.memoryMb / 1024} GB</b></div><div><small>JVM</small><b>{profile.jvmProfile}</b></div><div><small>Graphics</small><b>{profile.graphics}</b></div><div><small>Distances</small><b>{profile.renderDistance} / {profile.simulationDistance}</b></div></div>{confirming ? <div className="autotune-confirm-row"><div><b>Apply to {instanceCount} instance{instanceCount === 1 ? "" : "s"}?</b><p>Updates only AutoTune-managed settings.</p></div><button className="autotune-secondary-action" onClick={() => setConfirming(false)}>Cancel</button><button disabled={applying} onClick={() => void apply()}>{applying ? "Applying…" : "Apply"}</button></div> : <button className="autotune-primary-action" onClick={() => setConfirming(true)}>Apply profile</button>}</div></>}{error && <div className="autotune-inline-error"><TriangleAlert size={15} /><span>{error}</span></div>}</section>;
+  return <section className="autotune-benchmark-live"><div className="benchmark-live-heading"><div><em>Phase 2 • Measured locally</em><h2>Delight graphics benchmark</h2><p>A consistent 30-second rendered workload measures frame throughput and frame-time stability on this device.</p></div><span className="phase-two-badge">02</span></div>{stage === "idle" && <div className="benchmark-start"><BarChart3 size={28} /><div><b>Ready to establish a performance baseline</b><span>Close heavy applications and keep Delight visible during the test for the cleanest result.</span></div><button onClick={() => setStage("consent")}>Start benchmark</button></div>}{stage === "consent" && <div className="benchmark-consent"><Activity size={22} /><div><b>Performance test confirmation</b><span>Delight will render a demanding animated scene for 30 seconds. Fans may briefly speed up. No files are changed and no result leaves this computer.</span></div><button className="benchmark-cancel" onClick={() => setStage(result ? "result" : "idle")}>Cancel</button><button onClick={runBenchmark}>Begin test</button></div>}{stage === "running" && <div className="benchmark-running"><canvas ref={canvasRef} /><div className="benchmark-overlay"><span><Activity size={15} />Benchmark running</span><b>{Math.ceil((100 - progress) * .3)}s</b></div><div className="benchmark-progress"><i style={{ width: `${progress}%` }} /></div><button onClick={stopBenchmark}>Stop test</button></div>}{stage === "result" && result && <div className="benchmark-results"><div className="benchmark-score"><small>Delight score</small><b>{result.score}</b><span>{result.stability >= 95 ? "Excellent stability" : result.stability >= 88 ? "Good stability" : "Variable frame times"}</span></div><div className="benchmark-metrics"><div><small>Average FPS</small><b>{result.averageFps.toFixed(1)}</b></div><div><small>1% low</small><b>{result.onePercentLow.toFixed(1)}</b></div><div><small>Frame time</small><b>{result.averageFrameTime.toFixed(2)} ms</b></div><div><small>Stability</small><b>{result.stability.toFixed(1)}%</b></div></div><div className="benchmark-result-actions"><span><Timer size={14} />Completed {new Date(result.completedAt).toLocaleDateString()}</span><button onClick={() => setStage("consent")}><RotateCw size={14} />Run again</button></div></div>}<p className="benchmark-accuracy"><Shield size={13} />This measures Delight’s representative graphics workload, not Minecraft FPS. In-game validation will arrive with the dedicated benchmark mod.</p></section>;
 }
 
 function AutoTuneFlow() {
-  const [hardwareComplete, setHardwareComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-hardware")));
-  const [benchmarkComplete, setBenchmarkComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-minecraft-complete")));
-  const [profileComplete, setProfileComplete] = useState(() => Boolean(localStorage.getItem("bloom-autotune-profile")));
-  const resetBenchmarkProgress = () => { setBenchmarkComplete(false); setProfileComplete(false); };
-  const phase = profileComplete ? 4 : benchmarkComplete ? 3 : hardwareComplete ? 2 : 1;
-  if (phase === 1) return <AutoTunePage onComplete={() => setHardwareComplete(true)} />;
-  return <div className="autotune-flow-shell">
-    {phase === 2 ? <AutoTuneMinecraftBenchmark onComplete={() => setBenchmarkComplete(true)} onReset={resetBenchmarkProgress} /> : phase === 3 ? <><AutoTuneTuner onComplete={() => setProfileComplete(true)} onReset={() => setProfileComplete(false)} /><AutoTuneProgress step={4} /></> : <><AutoTuneApply /><AutoTuneProgress step={5} /></>}
-  </div>;
+  return <AutoTuneWorkflow hardwareScan={AutoTunePage} />;
 }
 
 type DownloadTaskKind = "mod" | "resourcepack" | "shaderpack" | "game";
@@ -2774,8 +2641,11 @@ const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFix
 
 type InstanceLibraryDestination = "view" | "add-mods" | "settings";
 
-function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, onPlay, onShare, onDelete, onOrganize }: { instance: InstanceDraft; busy: boolean; doubleClickToPlay: boolean; onNavigate: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onPlay: (instance: InstanceDraft) => void; onShare: (instance: InstanceDraft) => void; onDelete: (instance: InstanceDraft) => Promise<void>; onOrganize?: () => void }) {
+function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, onPlay, onRename, onExport, onShare, onDuplicate, onDelete, onOrganize }: { instance: InstanceDraft; busy: boolean; doubleClickToPlay: boolean; onNavigate: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onPlay: (instance: InstanceDraft) => void; onRename: (instance: InstanceDraft, name: string) => Promise<void>; onExport: (instance: InstanceDraft) => Promise<void>; onShare: (instance: InstanceDraft) => void; onDuplicate: (instance: InstanceDraft) => Promise<void>; onDelete: (instance: InstanceDraft) => Promise<void>; onOrganize?: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [renameRequest, setRenameRequest] = useState(0);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const run = async (name: string, action: () => Promise<void>) => { setActionBusy(name); try { await action(); setMenuOpen(false); } catch { /* App reports native errors. */ } finally { setActionBusy(null); } };
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [position, setPosition] = useState<FloatingMenuPosition>({ top: 0, left: 0, width: 190, maxHeight: 330 });
@@ -2793,7 +2663,7 @@ function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, on
       const bounds = (trigger.closest(".instance-library-card") as HTMLElement | null)?.getBoundingClientRect() || trigger.getBoundingClientRect();
       const width = 190;
       const contentHeight = menuRef.current?.scrollHeight || 188;
-      setPosition(fitActionMenuBelow(bounds, width, contentHeight, trigger.getBoundingClientRect().right - width));
+      setPosition(fitFloatingMenu(bounds, width, contentHeight, trigger.getBoundingClientRect().right - width));
     };
     const dismiss = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -2810,9 +2680,10 @@ function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, on
   const remove = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setDeleting(true);
-    try { await onDelete(instance); } finally { setDeleting(false); }
+    try { await onDelete(instance); } catch { /* App reports native errors. */ } finally { setDeleting(false); }
   };
   const openCard = (event: MouseEvent<HTMLElement>) => {
+    if (menuOpen) return;
     if (!doubleClickToPlay) { onNavigate(instance, "view"); return; }
     if (event.detail !== 1) return;
     if (openTimer.current !== null) window.clearTimeout(openTimer.current);
@@ -2822,23 +2693,27 @@ function InstanceLibraryCard({ instance, busy, doubleClickToPlay, onNavigate, on
     }, 240);
   };
   const playFromDoubleClick = (event: MouseEvent<HTMLElement>) => {
-    if (!doubleClickToPlay) return;
+    if (busy || menuOpen || (event.target as Element).closest("button,input,form") || !doubleClickToPlay) return;
     event.preventDefault();
     if (openTimer.current !== null) window.clearTimeout(openTimer.current);
     openTimer.current = null;
     onPlay(instance);
   };
   return <article className="instance-library-card" onClick={openCard} onDoubleClick={playFromDoubleClick}>
-    <div className="library-card-identity"><div className="library-card-top"><span className="library-instance-icon">{instance.icon ? <img src={instance.icon} alt="" /> : <span className="library-instance-fallback" aria-hidden="true">?</span>}</span><LoaderLogo loader={instance.loader} /></div>
-    <div className="library-card-copy"><h2>{instance.name}</h2><p>Minecraft {instance.version}</p><small title={instance.directory}>{instance.directory}</small></div></div>
-    <div className="library-card-actions"><button className="library-play" disabled={busy} onClick={(event) => { event.stopPropagation(); onPlay(instance); }}><Play size={15} fill="currentColor" />Play</button><button className="library-folder" onClick={(event) => { event.stopPropagation(); void invoke("open_instance_folder", { instanceId: instance.id }); }} aria-label={`Open ${instance.name} folder`}><FolderOpen size={17} /></button><button ref={triggerRef} className="library-more" onClick={(event) => { event.stopPropagation(); setMenuOpen(value => !value); }} aria-label={`Actions for ${instance.name}`} aria-expanded={menuOpen}><MoreHorizontal size={18} /></button></div>
-    {menuOpen && createPortal(<div ref={menuRef} className="select-menu select-menu-portal instance-library-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }} onClick={(event) => event.stopPropagation()}>
+    <div className="library-card-identity"><div className="library-card-top"><button className="library-artwork-open" aria-label={`Open ${instance.name}`} onClick={e => { e.stopPropagation(); openCard(e); }} onDoubleClick={e => { e.stopPropagation(); if (!doubleClickToPlay || busy) return; if (openTimer.current !== null) window.clearTimeout(openTimer.current); openTimer.current = null; onPlay(instance); }}><span className="library-instance-icon">{instance.icon ? <img src={instance.icon} alt="" /> : <span className="library-instance-fallback" aria-hidden="true">?</span>}</span></button><LoaderLogo loader={instance.loader} /></div>
+    <div className="library-card-copy"><h2 aria-label={instance.name}><InstanceName name={instance.name} request={renameRequest} onRename={name => onRename(instance, name)} disabled={actionBusy !== null} /></h2><p>Minecraft {instance.version}</p><small title={instance.directory}>{instance.directory}</small></div></div>
+    <div className="library-card-actions"><button className="library-play" disabled={busy || actionBusy !== null} onClick={e => { e.stopPropagation(); onPlay(instance); }}><Play size={15} fill="currentColor" />Play</button><button className="library-folder" onClick={event => { event.stopPropagation(); void invoke("open_instance_folder", { instanceId: instance.id }); }} aria-label={`Open ${instance.name} folder`}><FolderOpen size={17} /></button><button ref={triggerRef} className="library-more" onClick={e => { e.stopPropagation(); setMenuOpen(value => !value); }} aria-label={`Actions for ${instance.name}`} aria-expanded={menuOpen} onKeyDown={e => { if (e.key === "ArrowDown") { e.preventDefault(); setMenuOpen(true); requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus()); } }}><MoreHorizontal size={18} /></button></div>
+    {menuOpen && createPortal(<div ref={menuRef} className="select-menu select-menu-portal instance-library-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }} onClick={(event) => event.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); setMenuOpen(false); triggerRef.current?.focus(); } }}>
+      <button style={{ opacity: 0 }} disabled={actionBusy !== null} onClick={() => { setMenuOpen(false); setRenameRequest(n => n + 1); }}><Pencil size={15} />Rename</button>
+      <button style={{ opacity: 0 }} disabled={busy || actionBusy !== null} onClick={() => void run("duplicate", () => onDuplicate(instance))}><Copy size={15} />{actionBusy === "duplicate" ? "Duplicating…" : "Duplicate"}</button>
+      <button style={{ opacity: 0 }} disabled={busy || actionBusy !== null} onClick={() => void run("export", () => onExport(instance))}><Download size={15} />{actionBusy === "export" ? "Exporting…" : "Export ZIP"}</button>
+      <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id }); }}><FolderOpen size={15} />Open folder</button>
       <button style={{ opacity: 0 }} onClick={() => navigate("view")}><Layers3 size={15} />View instance</button>
       <button style={{ opacity: 0 }} onClick={() => navigate("add-mods")}><Puzzle size={15} />Add mods</button>
       <button style={{ opacity: 0 }} onClick={() => navigate("settings")}><SettingsIcon size={15} />Settings</button>
       {onOrganize && <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onOrganize(); }}><FolderPlus size={15} />Move to folder</button>}
       <button style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onShare(instance); }}><Share2 size={15} />Share instance</button>
-      <button style={{ opacity: 0 }} className={`instance-delete-action ${confirmDelete ? "confirm" : ""}`} disabled={deleting || busy} onClick={() => void remove()}><Trash2 size={15} />{deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete instance"}</button>
+      <button style={{ opacity: 0 }} className={`instance-delete-action ${confirmDelete ? "confirm" : ""}`} disabled={deleting || busy || actionBusy !== null} onClick={() => void remove()}><Trash2 size={15} />{deleting ? "Deleting…" : confirmDelete ? "Confirm delete" : "Delete instance"}</button>
     </div>, document.body)}
   </article>;
 }
@@ -2856,7 +2731,7 @@ function LoaderLogo({ loader }: { loader: string }) {
   return <img className="library-loader-logo" src={source} alt={`${loader} loader`} onError={() => setFailed(true)} />;
 }
 
-function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, onDelete, onPlay, onCreate }: { instances: InstanceDraft[]; busy: boolean; doubleClickToPlay: boolean; onOpen: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onShare: (instance: InstanceDraft) => void; onDelete: (instance: InstanceDraft) => Promise<void>; onPlay: (instance: InstanceDraft) => void; onCreate: () => void }) {
+function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onRename, onExport, onShare, onDuplicate, onDelete, onPlay, onCreate }: { instances: InstanceDraft[]; busy: boolean; doubleClickToPlay: boolean; onOpen: (instance: InstanceDraft, destination: InstanceLibraryDestination) => void; onRename: (instance: InstanceDraft, name: string) => Promise<void>; onExport: (instance: InstanceDraft) => Promise<void>; onShare: (instance: InstanceDraft) => void; onDuplicate: (instance: InstanceDraft) => Promise<void>; onDelete: (instance: InstanceDraft) => Promise<void>; onPlay: (instance: InstanceDraft) => void; onCreate: () => void }) {
   const filters = useToolbarDisclosure();
   const filterId = useId();
   const [query, setQuery] = useState("");
@@ -2881,7 +2756,7 @@ function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, on
       </div>
     </div>
     <InstanceFolders instances={instances} query={query} loader={loader} createOpen={creatingFolder} onCloseCreate={() => setCreatingFolder(false)}
-      renderInstance={(instance, organize) => <InstanceLibraryCard instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onShare={onShare} onDelete={onDelete} onPlay={onPlay} onOrganize={organize} />} />
+      renderInstance={(instance, organize) => <InstanceLibraryCard instance={instance} busy={busy} doubleClickToPlay={doubleClickToPlay} onNavigate={onOpen} onRename={onRename} onExport={onExport} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onPlay={onPlay} onOrganize={organize} />} />
     <div className={`content-search instances-search-dock ${query ? "has-query" : ""}`} role="search" aria-label="Search instance library">
       <span className="content-search-mark" aria-hidden="true"><Search size={27} /></span>
       <input aria-label="Search your instances" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search your instances…" />
@@ -2890,14 +2765,34 @@ function InstancesPage({ instances, busy, doubleClickToPlay, onOpen, onShare, on
   </div>;
 }
 
-function DownloadsPage({ download, instances, completed, missingMods, onClear, onCancel, onDismissMissing }: { download: DownloadViewState; instances: InstanceDraft[]; completed: CompletedDownload[]; missingMods: string[]; onClear: () => void; onCancel: () => void; onDismissMissing: () => void }) {
+function ContentDownloadRow({ task, position, onCancel, onDismiss }: { task: ContentDownload; position?: number; onCancel: (id: string) => void; onDismiss: (id: string) => void }) {
+  const pending = contentPending(task);
+  const queued = task.state === "queued";
+  const active = task.state === "installing" || task.state === "cancelling";
+  return <div className={`download-task content-download-task ${task.state === "error" ? "failed-task" : ""}`} data-task-id={task.id} data-state={task.state}>
+    <span className={`download-task-icon ${task.iconUrl ? "has-artwork" : ""}`}>{task.iconUrl ? <DownloadArtwork source={task.iconUrl} progress={active ? task.progress : undefined} /> : task.category === "mods" ? <Puzzle size={24} /> : task.category === "resourcepacks" ? <PackageOpen size={24} /> : <Cuboid size={24} />}</span>
+    <div className="download-task-main"><div className="download-task-title"><div><b>{task.title}</b><small>{task.version} • {active ? "Installing to" : "For"} {task.instanceName}</small></div>{active && <span>{task.progress}%</span>}</div>
+      {active && <div className="download-linear" role="progressbar" aria-label={`${task.title} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={task.progress}><i style={{ width: `${task.progress}%` }} /></div>}
+      {(task.state === "error" || task.state === "cancelled") && <small className="content-download-error">{userError(task.message)}</small>}
+    </div>
+    {active && task.totalBytes > 0 && <div className="download-metrics"><span>{formatBytes(task.downloadedBytes)} / {formatBytes(task.totalBytes)}</span><small>{task.bytesPerSecond ? `${formatBytes(task.bytesPerSecond)}/s` : ""}</small></div>}
+    <div className="download-task-status"><b>{queued ? `Queued · ${position}` : task.state === "cancelling" ? "Cancelling…" : task.state === "error" ? "Failed" : task.state === "cancelled" ? "Cancelled" : "Downloading"}</b>{active && <small title={task.message}>{task.message}</small>}</div>
+    <button className="cancel-download" disabled={task.state === "cancelling"} onClick={() => pending ? onCancel(task.id) : onDismiss(task.id)} aria-label={`${pending ? "Cancel" : "Dismiss"} ${task.title}`} title={pending ? (queued ? "Remove from queue" : "Cancel this download") : "Dismiss"}><CloseIcon size={17} /></button>
+  </div>;
+}
+
+function DownloadsPage({ download, contentTasks, onCancelContent, onDismissContent, instances, completed, missingMods, motion, onClear, onCancel, onDismissMissing }: { contentTasks: ContentDownload[]; onCancelContent: (id: string) => void; onDismissContent: (id: string) => void; motion: boolean; download: DownloadViewState; instances: InstanceDraft[]; completed: CompletedDownload[]; missingMods: string[]; onClear: () => void; onCancel: () => void; onDismissMissing: () => void }) {
   const activeInstance = instances.find(instance => instance.id === download.instanceId);
   const gameTask = !download.taskKind || download.taskKind === "game";
   const activeArtwork = download.taskIcon || (gameTask ? activeInstance?.icon : undefined);
   const failed = download.state === "error";
   const status = failed ? "Failed" : download.state === "launching" ? "Starting" : download.state === "running" ? "Ready" : download.state === "complete" ? "Completed" : "Downloading";
+  const activeContent = contentTasks.filter(task => task.state === "installing" || task.state === "cancelling");
+  const queuedContent = contentTasks.filter(task => task.state === "queued");
+  const stoppedContent = contentTasks.filter(task => task.state === "error" || task.state === "cancelled");
+  const contentRow = (task: ContentDownload, index?: number) => <ContentDownloadRow key={task.id} task={task} position={index === undefined ? undefined : index + 1} onCancel={onCancelContent} onDismiss={onDismissContent} />;
   return <div className="downloads-page">
-    <header className="downloads-heading"><h1>Downloads</h1><p>Monitor Minecraft installations and launch tasks.</p></header>
+    <header className="downloads-heading"><h1>Downloads</h1><p>Track Minecraft, mods, resource packs, and shaders.</p></header>
     {missingMods.length > 0 && <section className="missing-mods-panel" aria-labelledby="missing-mods-title">
       <div className="missing-mods-heading"><div><h2 id="missing-mods-title">Find these mods</h2><span>{missingMods.length} not available through Modrinth</span></div><button onClick={onDismissMissing} aria-label="Dismiss missing mods" title="Dismiss"><CloseIcon size={18} /></button></div>
       <div className="missing-mods-list">{missingMods.map(fileName => <span key={fileName}>{fileName}</span>)}</div>
@@ -2907,15 +2802,15 @@ function DownloadsPage({ download, instances, completed, missingMods, onClear, o
         <span className={`download-task-icon ${activeArtwork ? "has-artwork" : ""}`}>{activeArtwork ? <DownloadArtwork source={activeArtwork} progress={download.state === "complete" || download.state === "running" ? 100 : download.progress} /> : gameTask ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : download.taskKind === "mod" ? <Puzzle size={24} /> : download.taskKind === "resourcepack" ? <PackageOpen size={24} /> : <Cuboid size={24} />}</span>
         <div className="download-task-main"><div className="download-task-title"><div><b>{download.taskName || activeInstance?.name || "Minecraft"}</b><small>{download.taskKind && download.taskKind !== "game" ? `${download.taskVersion || (download.taskKind === "mod" ? "Fabric mod" : download.taskKind === "resourcepack" ? "Resource pack" : "Shader")} • Installing to ${activeInstance?.name || "instance"}` : activeInstance ? `${activeInstance.version} • ${activeInstance.loader}` : "Preparing instance"}</small></div><span>{Math.round(download.progress)}%</span></div><div className="download-linear"><i style={{ width: `${download.progress}%` }} /></div></div>
         <div className="download-metrics"><span>{failed ? "Task stopped" : download.totalBytes ? `${formatBytes(download.downloadedBytes)} / ${formatBytes(download.totalBytes)}` : "Scanning files"}</span><small>{failed ? "See error" : download.bytesPerSecond ? `${formatBytes(download.bytesPerSecond)}/s` : "Calculating speed"}</small></div>
-        <div className="download-task-status"><b>{status}</b><small title={download.message}>{download.message || "Preparing files"}{download.message === "Loading assets" && <i className="loading-dots" />}</small></div>{!failed && <button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>}
-      </div> : <div className="downloads-empty"><Download size={20} /><div><b>No active downloads</b><span>New Minecraft installations will appear here.</span></div></div>}
+        <div className="download-task-status"><b>{status}</b><small title={download.message}>{download.message || "Preparing files"}{download.message === "Loading assets" && <i className="loading-dots" />}</small></div>{["installing", "launching"].includes(download.state) && <button className="cancel-download" onClick={onCancel} aria-label="Cancel task">×</button>}
+      </div> : activeContent.length || queuedContent.length ? null : <div className="downloads-empty"><Download size={20} /><div><b>No active downloads</b><span>New installations will appear here.</span></div></div>}
+      {activeContent.map(task => contentRow(task))}
     </section>
-    <section className="download-section completed-section"><h2>Completed</h2>
-      {completed.length ? completed.map(item => <div className="download-task completed-task" key={item.id}>
+    {queuedContent.length > 0 && <section className="download-section queued-downloads"><h2>Queued <small>{queuedContent.length}</small></h2>{queuedContent.map(contentRow)}</section>}
+    {stoppedContent.length > 0 && <section className="download-section stopped-downloads"><h2>Stopped</h2>{stoppedContent.map(task => contentRow(task))}</section>}
+    <DownloadHistory items={completed} motion={motion} onClear={onClear} renderItem={item => <div className="download-task completed-task">
         <span className={`download-task-icon ${item.iconUrl ? "has-artwork" : ""}`}>{item.iconUrl ? <DownloadArtwork source={item.iconUrl} /> : (!item.kind || item.kind === "game") ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : item.kind === "mod" ? <Puzzle size={22} /> : item.kind === "resourcepack" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="download-task-main"><b>{item.name}</b><small>{item.kind && item.kind !== "game" ? `${item.version} • Installed to ${item.targetName}` : `${item.version} • ${item.loader || "Vanilla"}`}</small></div><span className="completed-time">Completed {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-Math.max(1, Math.round((Date.now() - item.completedAt) / 60000)), "minute")}</span><Check className="completed-check" size={20} />
-      </div>) : <div className="downloads-empty compact"><Check size={18} /><div><b>No completed downloads yet</b><span>Finished installations will be saved here.</span></div></div>}
-    </section>
-    <footer className="downloads-footer"><span>Downloads are saved inside each instance directory.</span><button disabled={!completed.length} onClick={onClear}><Trash2 size={16} />Clear Completed</button></footer>
+      </div>} />
   </div>;
 }
 
@@ -2940,7 +2835,8 @@ function SpotlightInstanceSelect({
       if (!bounds) return;
       const width = Math.max(140, bounds.width - 10);
       const contentHeight = menuRef.current?.scrollHeight || instances.length * 50 + 10;
-      const top = bounds.bottom - 15;
+      // Translucent surfaces must meet, not stack: overlap doubles their opacity.
+      const top = bounds.bottom;
       const viewportPadding = 8;
       setPosition({
         top,
@@ -2964,7 +2860,7 @@ function SpotlightInstanceSelect({
     };
   }, [instances.length, open]);
   useEffect(() => {
-    if (open && menuRef.current) revealDropdown(menuRef.current);
+    if (open && menuRef.current) revealDropdown(menuRef.current, triggerRef.current);
   }, [open, instances.length]);
 
   return (
@@ -3016,10 +2912,7 @@ function SpotlightHome({
                 <b>{selected.name}</b>
               </div>
               <div className="spotlight-launch-controls">
-                <button className="spotlight-play" disabled={busy} onClick={() => onPlay(selected)}>
-                  <Play size={24} fill="currentColor" />
-                  <b>Play</b>
-                </button>
+                <PixelPlayButton disabled={busy} onClick={() => onPlay(selected)} />
                 <SpotlightInstanceSelect instances={instances} selected={selected} onSelect={onSelect} />
               </div>
             </>
@@ -3043,7 +2936,7 @@ function App() {
         if (saved.startupBehavior === "Open Settings") return "settings";
         if (saved.startupBehavior === "Remember last page") {
           const remembered = localStorage.getItem("bloom-last-page");
-          const validPages: AppPage[] = ["home", "settings", "autotune", "utilities", "social", "new-instance", "downloads", "logs", "instance", "instances", "locker"];
+          const validPages: AppPage[] = ["portal", "home", "settings", "autotune", "utilities", "social", "new-instance", "downloads", "logs", "instance", "instances", "locker"];
           return validPages.includes(remembered as AppPage) ? remembered as AppPage : "home";
         }
       } catch {}
@@ -3054,24 +2947,35 @@ function App() {
   const [packMemberships, setPackMemberships] = useState<Map<string, PackChannelRole>>(() => new Map());
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [shareInstance, setShareInstance] = useState<InstanceDraft | null>(null);
+  const [floatingInstanceId, setFloatingInstanceId] = useState<string | null>(null);
   const [instanceDestination, setInstanceDestination] = useState<InstanceLibraryDestination>("view");
   const instanceOpenTimers = useRef(new Map<string, number>());
   const [spotlightInstanceId, setSpotlightInstanceId] = useState<string | null>(() => localStorage.getItem("bloom-spotlight-instance"));
-  const [download, setDownload] = useState<DownloadViewState>({
+  const [gameDownload, setDownload] = useState<DownloadViewState>({
     active: false,
     progress: 0,
     state: "idle",
     message: "",
   });
-  const [completedDownloads, setCompletedDownloads] = useState<CompletedDownload[]>(() => { try { return JSON.parse(localStorage.getItem("bloom-completed-downloads") || "[]").slice(0, 5); } catch { return []; } });
+  const [completedDownloads, setCompletedDownloads] = useState<CompletedDownload[]>(() => { try { return JSON.parse(localStorage.getItem("bloom-completed-downloads") || "[]").slice(0, 50); } catch { return []; } });
   const [sharedPackMissingMods, setSharedPackMissingMods] = useState<string[]>(() => { try { const value = JSON.parse(localStorage.getItem("bloom-shared-pack-missing-mods") || "[]"); return Array.isArray(value) ? value.filter(item => typeof item === "string") : []; } catch { return []; } });
   const lastCompletedTask = useRef("");
   const [ringProgress, setRingProgress] = useState(0);
   const [gameRunning, setGameRunning] = useState(false);
+  const launchRequestPending = useRef(false);
   const [toast, setToast] = useState("");
   const toolToastTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(toolToastTimer.current), []);
   const [toastKind, setToastKind] = useState<"notification" | "error">("notification");
+  const addCompletedDownloads = (additions: CompletedDownload[]) => {
+    // Persist before acknowledging a native snapshot, including bursts batched by React.
+    let saved: CompletedDownload[] = [];
+    try { const value = JSON.parse(localStorage.getItem("bloom-completed-downloads") || "[]"); if (Array.isArray(value)) saved = value; } catch {}
+    const unique = new Map([...saved, ...additions].map(item => [item.id, item]));
+    const next = [...unique.values()].sort((a, b) => b.completedAt - a.completedAt).slice(0, 50);
+    localStorage.setItem("bloom-completed-downloads", JSON.stringify(next));
+    setCompletedDownloads(next);
+  };
   const [availableUpdate, setAvailableUpdate] = useState<TauriUpdate | null>(null);
   const [currentVersion, setCurrentVersion] = useState("1.0.0");
   const [updateChecking, setUpdateChecking] = useState(false);
@@ -3106,6 +3010,7 @@ function App() {
   const backgroundImageRevision = useRef(0);
   const replaceBackgroundImage = (image: string | null) => { backgroundImageRevision.current++; setCustomBackgroundImage(image); };
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const signingOut = useRef(false);
   const [windowMenuOpen, setWindowMenuOpen] = useState<WindowMenuName | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true");
   const windowMenuRef = useRef<HTMLDivElement>(null);
@@ -3116,6 +3021,7 @@ function App() {
   const [settingsNavigationKey, setSettingsNavigationKey] = useState(0);
   const [settings, setSettings] = useState<SettingsState>(() => {
     try {
+      localStorage.removeItem("bloom-cache-recent-mod-searches");
       let loaded = {
         ...defaults,
         ...JSON.parse(localStorage.getItem("bloom-settings") || "{}"),
@@ -3133,6 +3039,8 @@ function App() {
         localStorage.setItem(customBackgroundDefaultsMigrationKey, "complete");
       }
       loaded = { ...loaded, ...normalizeAnimatedAccent(loaded), theme: loaded.theme === "light" ? "light" : "oled" };
+      delete (loaded as SettingsState & { interactionSounds?: unknown }).interactionSounds;
+      delete (loaded as SettingsState & { recentModSearches?: unknown }).recentModSearches;
       delete (loaded as SettingsState & { finish?: unknown }).finish;
       if (loaded.theme === "light" && loaded.sidebarTextColor === defaults.sidebarTextColor) loaded.sidebarTextColor = "#171b22";
       localStorage.setItem("bloom-settings", JSON.stringify(loaded));
@@ -3141,6 +3049,23 @@ function App() {
       return defaults;
     }
   });
+  const contentDownloads = useContentDownloads({
+    ultraPerformance: settings.ultraPerformance,
+    onInstalled: tasks => {
+      for (const task of tasks) instanceContentMemoryCache.delete(instanceContentCacheKey(task.instanceId, task.category));
+      addCompletedDownloads(tasks.map(task => ({ id: task.id, name: task.title, version: task.version, kind: contentKind(task), targetName: task.instanceName, iconUrl: task.iconUrl || undefined, completedAt: task.completedAt || Date.now() })));
+    },
+    onFailed: task => {
+      showToolMessage(userError(task.message), "error");
+      setLogs(current => [...current, { id: `${task.id}-error`, instanceId: task.instanceId, instanceName: task.instanceName, stream: "launcher", level: "error" as const, message: `${task.title}: ${task.message}`, timestamp: task.completedAt || Date.now() }].slice(-600));
+    },
+  });
+  const contentActivity = contentDownloads.current;
+  const download: DownloadViewState = contentActivity ? {
+    active: true, state: contentActivity.state === "installed" ? "complete" : "installing",
+    progress: contentActivity.progress, message: contentActivity.message, instanceId: contentActivity.instanceId,
+    taskName: contentActivity.title, taskVersion: contentActivity.version, taskKind: contentKind(contentActivity), taskIcon: contentActivity.iconUrl || undefined,
+  } : gameDownload;
   useEffect(() => () => {
     instanceOpenTimers.current.forEach((timer) => window.clearTimeout(timer));
     instanceOpenTimers.current.clear();
@@ -3176,22 +3101,6 @@ function App() {
     return () => window.clearTimeout(timer);
   }, []);
   useEffect(startScreenshotWarming, []);
-  useEffect(() => {
-    let disposed = false;
-    let receivedEvent = false;
-    let unlisten: (() => void) | undefined;
-    void listen<boolean>("minecraft-process-state", event => {
-      receivedEvent = true;
-      if (!disposed) setGameRunning(event.payload);
-    }).then(stop => {
-      if (disposed) { stop(); return; }
-      unlisten = stop;
-      void invoke<boolean>("get_minecraft_process_running").then(running => {
-        if (!disposed && !receivedEvent) setGameRunning(running);
-      });
-    });
-    return () => { disposed = true; unlisten?.(); };
-  }, []);
   useEffect(() => { setScreenshotActivity(download.active || gameRunning); }, [download.active, gameRunning]);
   useEffect(() => {
     const nativeWindow = getCurrentWindow();
@@ -3200,46 +3109,51 @@ function App() {
       nativeWindow.setBackgroundColor(themeBackground[settings.theme]),
     ]);
   }, [settings.theme]);
-  useAnimatedAccent({ ...settings, animations: settings.animations && !download.active && !gameRunning });
+  useAnimatedAccent(settings);
   useEffect(() => {
     localStorage.setItem("bloom-settings", JSON.stringify(settings));
     document.documentElement.dataset.theme = settings.theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeBackground[settings.theme]);
-    document.documentElement.dataset.animations = settings.animations && !settings.ultraPerformance && !download.active && !gameRunning ? "on" : "off";
+    document.documentElement.dataset.animations = settings.animations && !settings.ultraPerformance ? "on" : "off";
     document.documentElement.dataset.performance = settings.ultraPerformance ? "ultra" : "normal";
     const buttonPressDuration = Math.max(0, Math.min(1500, settings.buttonPressDuration));
     document.documentElement.dataset.buttonPressDuration = String(buttonPressDuration);
-  }, [settings, download.active, gameRunning]);
+  }, [settings]);
   useEffect(() => {
     const activePresses = new WeakMap<HTMLElement, Animation>();
     const press = (event: PointerEvent) => {
       if (event.button !== 0 || document.documentElement.dataset.animations !== "on" || document.documentElement.dataset.performance === "ultra") return;
       const target = event.target instanceof Element ? event.target.closest<HTMLElement>("button, .instance-library-card") : null;
-      if (!target || (target instanceof HTMLButtonElement && target.disabled)) return;
+      if (!target || (target instanceof HTMLButtonElement && target.disabled) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      // Main navigation owns a held, centered press separate from its sliding track.
+      if (target.closest(".sidebar-navigation")) return;
       if (target.closest(".comparison-canvas") || target.closest(".animated-accent-editor") || target.closest(".accent-picks") || target.closest(".window-menu") || target.classList.contains("background-image-picker") || target.classList.contains("instance-icon-picker") || target.classList.contains("profile-settings-avatar") || target.classList.contains("window-control")) return;
       const duration = Number(document.documentElement.dataset.buttonPressDuration || 0);
-      activePresses.get(target)?.cancel();
-      activePresses.delete(target);
-      if (duration <= 0) return;
-      const animation = target.animate(
-        [
-          { translate: "0 0", scale: "1" },
-          { translate: "0 1.5px", scale: ".975" },
-          { translate: "0 -.5px", scale: "1.008" },
-          { translate: "0 0", scale: "1" },
-        ],
-        {
-          duration,
-          easing: "cubic-bezier(.2,.72,.22,1)",
-          fill: "none",
-        },
-      );
-      activePresses.set(target, animation);
-      void animation.finished
-        .catch(() => undefined)
-        .finally(() => {
-          if (activePresses.get(target) === animation) activePresses.delete(target);
-        });
+      const pressTargets = [target];
+      for (const target of pressTargets) {
+        activePresses.get(target)?.cancel();
+        activePresses.delete(target);
+        if (duration <= 0) continue;
+        const animation = target.animate(
+          [
+            { translate: "0 0", scale: "1" },
+            { translate: "0 1.5px", scale: ".975" },
+            { translate: "0 -.5px", scale: "1.008" },
+            { translate: "0 0", scale: "1" },
+          ],
+          {
+            duration,
+            easing: "cubic-bezier(.2,.72,.22,1)",
+            fill: "none",
+          },
+        );
+        activePresses.set(target, animation);
+        void animation.finished
+          .catch(() => undefined)
+          .finally(() => {
+            if (activePresses.get(target) === animation) activePresses.delete(target);
+          });
+      }
     };
     document.addEventListener("pointerdown", press, { passive: true });
     return () => document.removeEventListener("pointerdown", press);
@@ -3273,7 +3187,7 @@ function App() {
       });
       if (manual && !update) {
         setToastKind("notification");
-        setToast("Bloom Client is already up to date.");
+        setToast("Delight Client is already up to date.");
         window.setTimeout(() => setToast(""), 3200);
       }
     } catch (error) {
@@ -3474,12 +3388,13 @@ function App() {
     }, 750);
     return () => window.clearTimeout(timer);
   }, [instances, gameRunning, download.active]);
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void listen<DownloadViewState>(
-      "minecraft-launch-progress",
-      (event) => {
-        const next = event.payload;
+  useLauncherActivity({
+    activity: gameDownload,
+    running: gameRunning,
+    ultraPerformance: settings.ultraPerformance,
+    requestPending: () => launchRequestPending.current,
+    onRunning: setGameRunning,
+    onProgress: (next) => {
         if (next.state === "installing") lastCompletedTask.current = "";
         setDownload((current) => ({
           active: next.state === "installing" || next.state === "launching" || next.state === "running" || next.state === "complete",
@@ -3507,39 +3422,12 @@ function App() {
         if (next.state === "complete") {
           void invoke<InstanceDraft[]>("list_instances").then(setInstances);
         }
-        if (next.state === "idle") {
-          window.setTimeout(
-            () =>
-              setDownload({
-                active: false,
-                progress: 0,
-                state: "idle",
-                message: "",
-              }),
-            700,
-          );
-        }
-      },
-    ).then((value) => {
-      unlisten = value;
-    });
-    return () => unlisten?.();
-  }, [settings.closeAfterLaunch, instances]);
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void listen<ContentInstallState>("content-install-state", (event) => {
-      const task = event.payload;
-      if (task.state !== "installing") return;
-      const taskKind: DownloadTaskKind = task.category === "mods" ? "mod" : task.category === "resourcepacks" ? "resourcepack" : "shaderpack";
-      setDownload({ active: true, progress: 1, state: "installing", message: task.message, instanceId: task.instanceId, taskName: task.title, taskVersion: task.version, taskKind, taskIcon: task.iconUrl || undefined });
-    }).then(value => { unlisten = value; });
-    return () => unlisten?.();
-  }, []);
+    },
+  });
   useEffect(() => {
     if (!download.instanceId || instances.some(instance => instance.id === download.instanceId)) return;
     void invoke<InstanceDraft[]>("list_instances").then(setInstances).catch(() => {});
   }, [download.instanceId]);
-  useEffect(() => { localStorage.setItem("bloom-completed-downloads", JSON.stringify(completedDownloads.slice(0, 5))); }, [completedDownloads]);
   useEffect(() => { localStorage.setItem("bloom-shared-pack-missing-mods", JSON.stringify(sharedPackMissingMods)); }, [sharedPackMissingMods]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -3559,7 +3447,7 @@ function App() {
     const capture = (message: string) => {
       const reports = JSON.parse(localStorage.getItem("bloom-local-crashes") || "[]") as Array<{ message: string; timestamp: number }>;
       localStorage.setItem("bloom-local-crashes", JSON.stringify([{ message, timestamp: Date.now() }, ...reports].slice(0, 20)));
-      setLogs(current => [...current, { id: `${Date.now()}-client-crash`, instanceId: "bloom-client", instanceName: "Bloom Client", stream: "client", level: "error" as const, message, timestamp: Date.now() }].slice(-600));
+      setLogs(current => [...current, { id: `${Date.now()}-client-crash`, instanceId: "bloom-client", instanceName: "Delight Client", stream: "client", level: "error" as const, message, timestamp: Date.now() }].slice(-600));
     };
     const onError = (event: ErrorEvent) => capture(event.error?.stack || event.message);
     const onRejection = (event: PromiseRejectionEvent) => capture(String(event.reason));
@@ -3587,17 +3475,17 @@ function App() {
     return () => { unlisten?.(); if (flushTimer !== undefined) window.clearTimeout(flushTimer); };
   }, [instances, settings.ultraPerformance]);
   useEffect(() => {
-    if ((download.state !== "running" && download.state !== "complete") || !download.instanceId) return;
-    const completionKey = `${download.state}:${download.instanceId}`;
+    if ((gameDownload.state !== "running" && gameDownload.state !== "complete") || !gameDownload.instanceId) return;
+    const completionKey = `${gameDownload.state}:${gameDownload.instanceId}`;
     if (lastCompletedTask.current === completionKey) return;
-    const instance = instances.find(item => item.id === download.instanceId);
+    const instance = instances.find(item => item.id === gameDownload.instanceId);
     if (!instance) return;
     lastCompletedTask.current = completionKey;
-    const completedItem: CompletedDownload = download.taskKind && download.taskKind !== "game"
-      ? { id: `${instance.id}-${Date.now()}`, name: download.taskName || "Content", version: download.taskVersion || (download.taskKind === "mod" ? "Fabric" : download.taskKind === "resourcepack" ? "Resource pack" : "Shader"), targetName: instance.name, kind: download.taskKind, iconUrl: download.taskIcon, completedAt: Date.now() }
+    const completedItem: CompletedDownload = gameDownload.taskKind && gameDownload.taskKind !== "game"
+      ? { id: `${instance.id}-${Date.now()}`, name: gameDownload.taskName || "Content", version: gameDownload.taskVersion || (gameDownload.taskKind === "mod" ? "Fabric" : gameDownload.taskKind === "resourcepack" ? "Resource pack" : "Shader"), targetName: instance.name, kind: gameDownload.taskKind, iconUrl: gameDownload.taskIcon, completedAt: Date.now() }
       : { id: `${instance.id}-${Date.now()}`, name: instance.name, version: instance.version, loader: instance.loader, kind: "game", iconUrl: instance.icon || undefined, completedAt: Date.now() };
-    setCompletedDownloads(current => [completedItem, ...current.filter(item => item.name !== completedItem.name || item.targetName !== completedItem.targetName)].slice(0, 5));
-  }, [download.state, download.instanceId, download.taskKind, download.taskName, download.taskVersion, download.taskIcon, instances]);
+    addCompletedDownloads([completedItem]);
+  }, [gameDownload.state, gameDownload.instanceId, gameDownload.taskKind, gameDownload.taskName, gameDownload.taskVersion, gameDownload.taskIcon, instances]);
   useEffect(() => {
     if (!download.active) {
       if (download.state === "idle") setRingProgress(0);
@@ -3609,26 +3497,19 @@ function App() {
     setRingProgress(Math.max(0, Math.min(100, download.progress)));
   }, [download.active, download.progress, download.state]);
   useEffect(() => {
-    if ((download.state !== "running" && download.state !== "complete") || ringProgress < 99) return;
-    const timer = window.setTimeout(() => setDownload(current => ({ ...current, active: false })), 3000);
+    if ((gameDownload.state !== "running" && gameDownload.state !== "complete") || gameDownload.progress < 99 || !gameDownload.active) return;
+    const timer = window.setTimeout(() => setDownload(current => current.state === gameDownload.state && current.instanceId === gameDownload.instanceId
+      ? { ...current, active: false } : current), 3000);
     return () => window.clearTimeout(timer);
-  }, [download.state, ringProgress]);
-  useEffect(() => {
-    if (!download.active) return;
-    const poll = window.setInterval(() => {
-      void invoke<DownloadViewState>("get_minecraft_launch_status").then((status) => {
-        if (status.state === "installing" || status.state === "launching") setDownload(current => ({ ...status, active: true, taskName: current.instanceId === status.instanceId ? current.taskName : undefined, taskVersion: current.instanceId === status.instanceId ? current.taskVersion : undefined, taskKind: current.instanceId === status.instanceId ? current.taskKind : undefined, taskIcon: current.instanceId === status.instanceId ? current.taskIcon : undefined }));
-      }).catch(() => {});
-    }, settings.ultraPerformance ? 1200 : 600);
-    return () => window.clearInterval(poll);
-  }, [download.active, settings.ultraPerformance]);
-  const launch = async (instance: InstanceDraft) => {
-    if (download.active || gameRunning) {
+  }, [gameDownload.state, gameDownload.instanceId, gameDownload.progress, gameDownload.active]);
+  const launch = async (instance: InstanceDraft, portalTarget?: PortalTarget) => {
+    if (launchRequestPending.current || download.active || gameRunning) {
       setToastKind("notification");
       setToast("Something is already downloading or running. Please wait.");
       window.setTimeout(() => setToast(""), 3500);
       return;
     }
+    launchRequestPending.current = true;
     setDownload({
       active: true,
       progress: 1,
@@ -3639,7 +3520,7 @@ function App() {
     });
     setLogs(current => [...current, { id: `${Date.now()}-launch`, instanceId: instance.id, instanceName: instance.name, stream: "launcher", level: "info" as const, message: `Starting ${instance.name} (${instance.version} • ${instance.loader})`, timestamp: Date.now() }].slice(-600));
     try {
-      await invoke("launch_minecraft", { instanceId: instance.id, launchMethod: settings.launchMethod, downloadWorkers: settings.downloadWorkers, debugLogging: settings.debugLogging });
+      await invoke("launch_minecraft", { instanceId: instance.id, launchMethod: settings.launchMethod, downloadWorkers: settings.downloadWorkers, debugLogging: settings.debugLogging, ...(portalTarget ? { portalTarget } : {}) });
     } catch (error) {
       const message = String(error);
       setToastKind("error");
@@ -3650,6 +3531,8 @@ function App() {
       setLogs(current => [...current, { id: `${Date.now()}-invoke-error`, instanceId: instance.id, instanceName: instance.name, stream: "launcher", level: "error" as const, message, timestamp: Date.now() }].slice(-600));
       setDownload({ active: false, progress: 0, state: "idle", message: "" });
       window.setTimeout(() => setToast(""), 5000);
+    } finally {
+      launchRequestPending.current = false;
     }
   };
   const openInstancePage = (instance: InstanceDraft) => {
@@ -3678,28 +3561,20 @@ function App() {
   };
   const installContent = async (instance: InstanceDraft, item: CatalogItem, category: Exclude<InstanceTab, "settings">) => {
     if (gameRunning && category === "mods") throw new Error("Close Minecraft before installing mods.");
-    const taskKind: DownloadTaskKind = category === "mods" ? "mod" : category === "resourcepacks" ? "resourcepack" : "shaderpack";
     const taskIcon = item.iconSourceUrl || (item.iconUrl?.startsWith("https://") ? item.iconUrl : undefined);
-    if (!download.active) setDownload({ active: true, progress: 1, state: "installing", message: `Queueing ${item.title}`, instanceId: instance.id, taskName: item.title, taskVersion: item.versionNumber, taskKind, taskIcon: taskIcon || undefined });
-    try {
-      await invoke("install_modrinth_content", { instanceId: instance.id, projectId: item.projectId, category, title: item.title, version: item.versionNumber, iconUrl: taskIcon || null });
-    } catch (error) {
-      setToastKind("error");
-      setToast(String(error));
-      if (!download.active) setDownload({ active: false, progress: 0, state: "idle", message: "" });
-      window.setTimeout(() => setToast(""), 5000);
-      throw error;
-    }
+    await contentDownloads.enqueue({ instanceId: instance.id, projectId: item.projectId, category, title: item.title, version: item.versionNumber, iconUrl: taskIcon || null });
   };
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape") setWindowMenuOpen(null);
   };
   const selectedInstance = instances.find(instance => instance.id === selectedInstanceId);
+  const floatingInstance = instances.find(instance => instance.id === floatingInstanceId);
   const mostRecentInstance = instances[0];
   const deleteClientInstance = async (instance: InstanceDraft) => {
     try {
       await invoke("delete_instance", { instanceId: instance.id });
       setInstances(current => current.filter(item => item.id !== instance.id));
+      if (floatingInstanceId === instance.id) setFloatingInstanceId(null);
       if (selectedInstanceId === instance.id) { setSelectedInstanceId(null); setPage("instances"); }
       if (spotlightInstanceId === instance.id) { setSpotlightInstanceId(null); localStorage.removeItem("bloom-spotlight-instance"); }
       showToolMessage(`${instance.name} and all of its files were deleted.`, "notification");
@@ -3707,6 +3582,18 @@ function App() {
       showToolMessage(String(error), "error");
       throw error;
     }
+  };
+  const renameClientInstance = async (instance: InstanceDraft, name: string) => {
+    const changed = await invoke<InstanceDraft>("rename_instance", { instanceId: instance.id, name });
+    setInstances(current => current.map(item => item.id === changed.id ? changed : item));
+  };
+  const exportClientInstance = async (instance: InstanceDraft) => {
+    try {
+      const path = await invoke<string | null>("export_instance", { instanceId: instance.id });
+      if (path) {
+        showToolMessage(`Exported ${instance.name} to ${path}`, "notification");
+      }
+    } catch (error) { showToolMessage(String(error), "error"); throw error; }
   };
   const duplicateClientInstance = async (instance: InstanceDraft) => {
     try {
@@ -3721,7 +3608,14 @@ function App() {
       throw error;
     }
   };
-  const signOut = () => { void invoke<MinecraftProfile | null>("sign_out_minecraft").then((next) => { setProfile(next); return refreshAccounts(); }).catch(error => showToolMessage(String(error), "error")).finally(() => { setSignInOpen(false); setProfileMenuOpen(false); setPendingAccountId(null); }); };
+  const signOut = () => {
+    if (signingOut.current) return Promise.resolve();
+    signingOut.current = true;
+    return invoke<MinecraftProfile | null>("sign_out_minecraft")
+      .then(next => { setProfile(next); return refreshAccounts(); })
+      .catch(error => showToolMessage(String(error), "error"))
+      .finally(() => { signingOut.current = false; setSignInOpen(false); setProfileMenuOpen(false); setPendingAccountId(null); });
+  };
   const switchAccount = async (account: MinecraftProfile) => {
     if (switchingAccount) return;
     setSwitchingAccount(true);
@@ -3771,7 +3665,7 @@ function App() {
   };
   const switchTargets: SwitchTarget[] = [
     ...instances.map(instance => ({ id: `instance:${instance.id}`, label: instance.name, detail: `${instance.version} · ${instance.loader}`, kind: "instance" as const, run: () => openInstancePage(instance) })),
-    ...([ ["Home", "home"], ["Instances", "instances"], ["Locker", "locker"], ["Social", "social"], ["Screenshots", "screenshots"], ["Utilities", "utilities"], ["Downloads", "downloads"], ["Logs", "logs"], ["New instance", "new-instance"] ] as const).map(([label, destination]) => ({ id: `page:${destination}`, label, detail: "Page", kind: "page" as const, run: () => setPage(destination) })),
+    ...([ ["Home", "home"], ["Instances", "instances"], ["Locker", "locker"], ["Social", "social"], ["Screenshots", "screenshots"], ["Utilities", "utilities"], ["Portal", "portal"], ["Downloads", "downloads"], ["Logs", "logs"], ["New instance", "new-instance"] ] as const).map(([label, destination]) => ({ id: `page:${destination}`, label, detail: "Page", kind: "page" as const, run: () => setPage(destination) })),
     ...["General", "Appearance", "Background", "Performance", "Cache", "Minecraft", "Cosmetics", "Launcher", "Privacy", "Updates", "My Profile", "Advanced"].map(label => ({ id: `setting:${label}`, label, detail: "Settings", keywords: ({ Appearance: "theme accent color animations", Background: "image wallpaper organic opacity", Performance: "memory ram java arguments", Minecraft: "version loader", "My Profile": "account login avatar", Cache: "storage disk" } as Record<string, string>)[label], kind: "setting" as const, run: () => openSettings(label) })),
   ];
   const activeNavPage = page === "instance" || page === "new-instance" ? "instances" : page === "autotune" ? "utilities" : page;
@@ -3880,13 +3774,13 @@ function App() {
           <button className="sidebar-collapse-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => { const next = !sidebarCollapsed; setSidebarCollapsed(next); localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next)); setWindowMenuOpen(null); setProfileMenuOpen(false); setSignInOpen(false); }}><ChevronLeft size={19} /></button>
         </div>
         <div className="window-controls">
-          <button className="window-control window-minimize" onClick={() => void getCurrentWindow().minimize()} aria-label="Minimize Bloom Client"><WindowMinimizeIcon /></button>
-          <button className="window-control window-expand" onClick={() => void getCurrentWindow().toggleMaximize()} aria-label="Maximize or restore Bloom Client"><WindowExpandIcon /></button>
-          <button className="window-control window-close" onClick={() => void invoke("exit_application")} aria-label="Close Bloom Client"><WindowCloseIcon /></button>
+          <button className="window-control window-minimize" onClick={() => void getCurrentWindow().minimize()} aria-label="Minimize Delight Client"><WindowMinimizeIcon /></button>
+          <button className="window-control window-expand" onClick={() => void getCurrentWindow().toggleMaximize()} aria-label="Maximize or restore Delight Client"><WindowExpandIcon /></button>
+          <button className="window-control window-close" onClick={() => void invoke("exit_application")} aria-label="Close Delight Client"><WindowCloseIcon /></button>
         </div>
       </div>
       <aside className="sidebar" aria-label={sidebarCollapsed ? "Compact sidebar" : "Sidebar"}>
-        <nav className="sidebar-navigation" aria-label="Main navigation">
+        <SidebarNavigation activeKey={activeNavPage} motion={settings.animations && !settings.ultraPerformance} pressDuration={settings.buttonPressDuration}>
           {nav.map(([Icon, label, destination]) => (
             <button
               className={activeNavPage === destination ? "active" : ""}
@@ -3894,13 +3788,13 @@ function App() {
               aria-label={label}
               aria-current={activeNavPage === destination ? "page" : undefined}
               title={sidebarCollapsed ? label : undefined}
-              onClick={() => destination === "settings" ? openSettings() : setPage(destination)}
+              onClick={() => setPage(destination)}
             >
               <Icon size={17} />
               <span className="sidebar-nav-label">{label}</span>
             </button>
           ))}
-        </nav>
+        </SidebarNavigation>
         <div className="sidebar-rule" />
         <div className="instance-section-heading">
           <button className="instance-section-add" onClick={() => setPage("new-instance")} aria-label="Create a new instance" title="Create a new instance">
@@ -3955,7 +3849,7 @@ function App() {
                   <div className="signed-in-name"><b>{profile.name}</b></div>
                   <ChevronDown className={profileMenuOpen ? "rotated" : ""} size={16} aria-hidden="true" />
                 </button>
-                {availableUpdate && <button className="sidebar-update-button" onClick={() => void installUpdate()} aria-label={`Update to Bloom Client ${availableUpdate.version}`} title={`Update available: ${availableUpdate.version}`}>
+                {availableUpdate && <button className="sidebar-update-button" onClick={() => void installUpdate()} aria-label={`Update to Delight Client ${availableUpdate.version}`} title={`Update available: ${availableUpdate.version}`}>
                   <Download size={16} />
                   <i />
                 </button>}
@@ -3974,10 +3868,8 @@ function App() {
                   </button>
                 </div>
                 <div className="profile-popover-rule" />
-                <button className="profile-logout" title="Log out" aria-label="Log out" role="menuitem" tabIndex={profileMenuOpen ? 0 : -1} onClick={signOut}>
-                  <span><LogOut size={17} /></span>
-                  <div><b>Log out</b></div>
-                </button>
+                <UndoLogoutButton key={profile.id} accountId={profile.id} open={profileMenuOpen}
+                  disabled={switchingAccount} animations={settings.animations && !settings.ultraPerformance} onConfirm={signOut} />
               </div>
             </>
           ) : (
@@ -3991,6 +3883,7 @@ function App() {
               </div>
               <SignInPanel
                 open={signInOpen}
+                onSettings={() => { setSignInOpen(false); openSettings(); }}
                 onSignedIn={(nextProfile) => {
                   setProfile(nextProfile);
                   setSignInOpen(false);
@@ -4003,21 +3896,23 @@ function App() {
       </aside>
       <main className={`content ${page === "social" ? "social-content" : ""}`}>
         {page === "instance" && selectedInstance ? (
-          <InstancePage onMessage={showToolMessage} key={`${selectedInstance.id}:${instanceDestination}`} instance={selectedInstance} groupRole={packMemberships.get(selectedInstance.id)} busy={download.active || gameRunning} initialTab={instanceDestination === "settings" ? "settings" : "mods"} initialCatalog={instanceDestination === "add-mods"} recentSearchesEnabled={settings.recentModSearches} onPlay={() => void launch(selectedInstance)} onShare={() => setShareInstance(selectedInstance)} onDuplicate={() => duplicateClientInstance(selectedInstance)} onDelete={() => deleteClientInstance(selectedInstance)} onInstallContent={(item, category) => installContent(selectedInstance, item, category)} onChanged={(changed) => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} />
+          <InstancePage contentTasks={contentDownloads.tasks} floating={floatingInstanceId === selectedInstance.id} onPopOut={() => setFloatingInstanceId(current => current === selectedInstance.id ? null : selectedInstance.id)} onMessage={showToolMessage} key={`${selectedInstance.id}:${instanceDestination}`} instance={selectedInstance} groupRole={packMemberships.get(selectedInstance.id)} busy={download.active || gameRunning} initialTab={instanceDestination === "settings" ? "settings" : "mods"} initialCatalog={instanceDestination === "add-mods"} onPlay={() => void launch(selectedInstance)} onRename={name => renameClientInstance(selectedInstance, name)} onExport={() => exportClientInstance(selectedInstance)} onShare={() => setShareInstance(selectedInstance)} onDuplicate={() => duplicateClientInstance(selectedInstance)} onDelete={() => deleteClientInstance(selectedInstance)} onInstallContent={(item, category) => installContent(selectedInstance, item, category)} onChanged={(changed) => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} />
         ) : page === "logs" ? (
           <LogsPage entries={logs} running={gameRunning || download.state === "launching"} onClear={() => setLogs([])} />
         ) : page === "autotune" ? (
           <AutoTuneFlow />
         ) : page === "screenshots" ? (
           <ScreenshotShelf instances={instances} SelectControl={Select} onMessage={showToolMessage} />
+        ) : page === "portal" ? (
+          <PortalPage instances={instances} busy={download.active || gameRunning} SelectControl={Select} onCreate={() => setPage("new-instance")} onOpenInstance={id => { const instance = instances.find(item => item.id === id); if (instance) openInstancePage(instance); }} onPlay={(id, target) => { const instance = instances.find(item => item.id === id); if (instance) void launch(instance, target); else showToolMessage("That instance is no longer available. Refresh Portal.", "error"); }} />
         ) : page === "utilities" ? (
           <UtilitiesPage instances={instances} SelectControl={Select} onOpenAutoTune={() => setPage("autotune")} onMessage={showToolMessage} />
         ) : page === "social" ? (
           <SocialPage onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} onInstanceImported={(result) => { setSharedPackMissingMods(result.missingMods); setDownload({ active: true, progress: 1, state: "installing", message: "Importing shared instance", instanceId: result.instanceId, taskKind: "game" }); refreshPackMemberships(); setPage("downloads"); void invoke<InstanceDraft[]>("list_instances").then(setInstances); }} />
         ) : page === "instances" ? (
-          <InstancesPage instances={instances} busy={download.active || gameRunning} doubleClickToPlay={settings.doubleClickToPlay} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onShare={setShareInstance} onOpen={(instance, destination) => { setSelectedInstanceId(instance.id); setInstanceDestination(destination); setPage("instance"); }} onDelete={deleteClientInstance} />
+          <InstancesPage onRename={renameClientInstance} onExport={exportClientInstance} onDuplicate={duplicateClientInstance} instances={instances} busy={download.active || gameRunning} doubleClickToPlay={settings.doubleClickToPlay} onCreate={() => setPage("new-instance")} onPlay={(instance) => void launch(instance)} onShare={setShareInstance} onOpen={(instance, destination) => { setSelectedInstanceId(instance.id); setInstanceDestination(destination); setPage("instance"); }} onDelete={deleteClientInstance} />
         ) : page === "downloads" ? (
-          <DownloadsPage download={download} instances={instances} completed={completedDownloads} missingMods={sharedPackMissingMods} onClear={() => setCompletedDownloads([])} onCancel={() => void invoke("cancel_minecraft_launch")} onDismissMissing={() => setSharedPackMissingMods([])} />
+          <DownloadsPage motion={settings.animations && !settings.ultraPerformance} download={gameDownload} contentTasks={contentDownloads.tasks} onCancelContent={id => void contentDownloads.cancel(id).catch(error => showToolMessage(String(error), "error"))} onDismissContent={id => void contentDownloads.dismiss(id).catch(error => showToolMessage(String(error), "error"))} instances={instances} completed={completedDownloads} missingMods={sharedPackMissingMods} onClear={() => { localStorage.setItem("bloom-completed-downloads", "[]"); setCompletedDownloads([]); }} onCancel={() => void invoke("cancel_minecraft_launch")} onDismissMissing={() => setSharedPackMissingMods([])} />
         ) : page === "locker" ? (
           <Locker profile={profile} motion={settings.animations && !settings.ultraPerformance} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />
         ) : page === "settings" ? (
@@ -4139,6 +4034,7 @@ function App() {
           </div>
         ))}
       </aside>}
+      {floatingInstance && <FloatingInstancePlayer instance={floatingInstance} busy={download.active || gameRunning} onPlay={() => void launch(floatingInstance)} onClose={() => { setFloatingInstanceId(null); document.querySelector<HTMLButtonElement>(".instance-more")?.focus(); }} />}
       {shareInstance && <ShareInstanceDialog instance={shareInstance} onClose={() => setShareInstance(null)} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />}
       {(availableUpdate || mockUpdateActive) && <section
         ref={updateSurfaceRef}
@@ -4149,12 +4045,12 @@ function App() {
       >
         <div className="update-bottom-bar">
           <span className="update-bar-mark"><Download size={20} strokeWidth={2.4} /></span>
-          <b id="update-title">Bloom Client {displayedUpdateVersion} is ready</b>
+          <b id="update-title">Delight Client {displayedUpdateVersion} is ready</b>
           <button onClick={() => void installUpdate()} disabled={updatePhase !== "ready"}>Update now</button>
         </div>
         {updatePanelOpen && <div className="update-fullscreen-copy">
           <span className="update-fullscreen-mark">{updatePhase === "error" ? <TriangleAlert size={31} /> : <Download size={31} strokeWidth={2.4} />}</span>
-          <h2>{updatePhase === "error" ? "Update stopped" : updatePhase === "installing" ? "Installing Bloom" : "Updating Bloom"}</h2>
+          <h2>{updatePhase === "error" ? "Update stopped" : updatePhase === "installing" ? "Installing Delight" : "Updating Delight"}</h2>
           <p>{updatePhase === "error" ? updateError : updatePhase === "installing" ? "The launcher will restart when it’s ready." : `Downloading version ${displayedUpdateVersion}`}</p>
           {updatePhase !== "error" && <div className="update-fullscreen-progress" aria-label={updatePhase === "installing" ? "Installing update" : `${Math.round(updateProgress)} percent downloaded`}>
             <i style={{ width: `${updatePhase === "installing" ? 100 : updateProgress}%` }} />
