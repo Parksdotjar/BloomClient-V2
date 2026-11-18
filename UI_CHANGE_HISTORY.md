@@ -1,4 +1,17 @@
-# Bloom Client UI Decision and Fix History
+## November 7, 2026 — Optional sound and mechanical toggle feedback
+
+## Delight branding — November 17, 2026
+
+Parks requested the Delight name and supplied wing logo for the client and every Bloom-named companion project. Use Delight Client, Delight Cosmetics, Delight Benchmark, Delight Admin, Delight Animation Creator, Delight Books and Delight Servers in visible copy and native product metadata. Preserve existing layouts and theme behavior. This approves the name and source artwork, not a redesigned interface.
+
+Keep account/keyring names, storage paths, mod IDs, Java namespaces, emote format identifiers, live URLs, updater endpoint and signing configuration compatible. See [BRANDING.md](BRANDING.md) for installer and asset details.
+
+
+- Parks selected gentle thumb compression and optional interaction audio. The initial request emphasized deeper thocks and a tiny echo, with master/advanced settings and independent effect switches.
+- **Correction during implementation:** A thock for every action was too uniform. Buttons should feel like an osu! click/hit; toggles should sweep with their movement into a higher on or lower off landing sound; scrolling must tick faster or slower with actual movement. These newer requirements supersede the uniform-thock interpretation. The osu! reference describes a feel, not an approved exact asset or new visual style.
+- Settings > General now contains Interface sounds, volume and connected Advanced sounds: Buttons, Toggles, Scrolling and Confirmations each have a switch and preview, plus depth and a tiny echo. Master and scrolling default off. Previews are explicitly available while switches are off; zero volume and Ultra Performance remain silent.
+- Toggle sound is tied to a deliberately requested state change, while native-operation confirmations only follow success. Visual compression respects motion settings independently of audio. No new runtime package, website/backend change or release is involved. See `INTERACTION_FEEDBACK.md` for implementation and test boundaries.
+- Verification passed: 25 focused audio/cadence tests and the real-browser interaction suite (native calls stubbed), including fast/slow scrolling, failed/pending saves, sound previews/mutes, persistence, themes and motion modes. Fixed passive-wheel position timing, OLED slider-thumb token fallback and reduced-motion selector specificity found during these checks. Exact sound quality remains for listening review.
 
 ## October 2026 — Free Shop and owned Locker
 
@@ -1054,3 +1067,228 @@ These notes preserve earlier decisions. Apply the current rules in DESIGN_RULES.
 - Replaced the boxed count with a quiet installed/enabled readout beneath the category title. Search and status filters display matching versus total counts from the existing list, including confirmed toggle changes.
 - Filter reveals a full-width drawer under the header. Neutral selection surfaces slide between Show and Sort by choices; Reset restores both defaults. The list lends height to the drawer, keeping search/pagination stationary and results visible below the tools. Compact widths use two rows. Escape restores focus, outside click closes and hidden controls are inert.
 - Add/Back retain one focusable control while its icon and header copy transition into the existing catalog. Version/loader identify the catalog context. Existing compatibility, loading, caching, installation and pagination paths remain in place. All decorative motion respects reduced motion, animations off and Ultra Performance. Original flat buttons and sidebars remain unchanged.
+
+## October 31, 2026 — modpack builder removed
+
+Parks requested removal of the just-added modpack builder. Removed its workspace, native resolver/creation commands, tests and feature document; restored the pre-builder client entry points. Existing modpack sharing and unrelated client/Admin work remain unchanged. Do not treat the removed implementation as approved design.
+
+
+## November 3, 2026 — inline names, quiet cards, and optional floating Play
+
+- Requested: click-to-rename instance titles (Enter saves, Escape restores), quieter artwork/name/Play cards with a corner Rename/Duplicate/Export/Delete menu, and initially a bottom workspace Play dock.
+- Correction: Parks rejected the permanent bottom bar before handoff. Restore Play and overflow to the header. Offer an optional floating copy from the menu, drag it by its empty middle, preserve it across tabs, and resize continuously into an icon-only Play button. Use a Put away action rather than duplicating the full overflow menu on the floating copy. This is direction approval; final visuals await review.
+- Implemented: native rename changes only the current record's name; blank/failed edits remain editable. All shared instance identities update after save. Existing duplicate/delete/sharing/organization actions remain connected. Export ZIP uses a native save dialog and writes a local backup containing mods, resource packs, shaders, config, saves, screenshots, options and server list plus basic instance metadata. It excludes launcher credentials, runtime caches and logs; it is not a Modrinth pack or a new automatic import format. Existing exports are not overwritten, links are rejected, and publication waits for a completed archive. The atomic export requires a filesystem supporting hard links (such as the current local Windows drive).
+- Floating Play is session-scoped, retains its target across navigation, and remembers size/position locally for reopening. Drag/resize uses pointer capture, bounded frame-based easing and continuous layout; Escape restores the starting geometry. Arrow keys move the grip; Left/Right resize, Home reduces to icon-only, and End expands. Reflow keeps controls inside the workspace when sidebar/window dimensions change. Reduced-motion modes apply geometry immediately. The original flat buttons and sidebar remain unchanged.
+- Verification: `tests/instance-controls-ui.mjs` uses the real React UI with a native-command fixture to cover rename cancellation/failure, card actions, floating drag/resize/cancellation, cross-page instance targeting, busy launch controls, preference restoration and minimum window/theme/motion behavior. Rust export tests exercise actual ZIP bytes, credential-file exclusion, cleanup and overwrite refusal. Native window dialogs and an actual Minecraft launch are not exercised by the browser fixture.
+- Handoff checks passed: TypeScript, production build (existing bundle-size warning), locked Cargo check, Rust export test, instance-controls UI checks and existing content-toolbar/instance-folder UI regressions. Reviewed expanded/icon-only and Light/minimum-window screenshots. Changes remain local on `codex/instance-controls`; no version, release, tag, commit or push was created.
+
+## November 3, 2026 — restore original instance appearance
+
+Parks requested resetting how instances and the instance page look. Restored the library card's original dimensions, loader mark, Minecraft version, directory text, and bottom Play/Folder/More row; removed the compact-card and header-width overrides. The permanent bottom dock remains removed and the original instance header/page composition remains in place. Inline renaming, working menu actions and the optional user-controlled floating Play copy are retained; this is an appearance rollback, not removal of those capabilities. Reconciled DESIGN_RULES and GOOD_DESIGNS so the rejected quiet-card layout is no longer active guidance.
+
+
+## November 10, 2026 — AutoTune reliability and Minecraft 26.3
+
+- Reported: the benchmark stopped with a missing `launchMethod` argument. The launch now supplies all three required settings through one tested payload; normal launch settings and unrelated local work are preserved.
+- Parks requested stable 26.3 for the benchmark. Updated the actual Fabric instrumentation and embedded JAR, not just the UI label. This is a fixed supported version, not an unimplemented multi-version selector.
+- Retained the focused five-step shell, theme tokens and flat controls. Added an explicit measured-result review, expandable reasons, a bounded session run log with report copy, retry/stop paths, confirmed completion, and optional Sodium/Lithium/FerriteCore project links. This implementation awaits Parks's visual approval; it is not a new approved reference.
+- Corrected long-stall filtering, percentile rank, per-frame status-file writes, stale-result reuse and silent early-exit waits. New runs carry a shared run ID; incomplete, interrupted and inconsistent results cannot produce a profile. Benchmark setup avoids Global File Sync and cosmetics injection to preserve its workload.
+- Recommendations respect system-memory headroom and the tested distances; they no longer infer garbage-collector faults from FPS alone or extrapolate a heavier graphics mode. Applying uses the display target for the frame limiter, preserves fullscreen/VSync preferences, skips native-engine instances, and restores previous files on reported save failures before returning an error.
+- See `AUTOTUNE_ARCHITECTURE.md` for the build/test commands, measurement scope and remaining limitations. No application version, commit, push, tag or release action is included.
+
+
+## November 10, 2026 — Mac compatibility copy
+
+- Preserved the shared interface, layout, themes and controls. Java and memory help refer to the system instead of assuming Windows.
+- AutoTune labels its 60 FPS fallback when display refresh is unavailable, including variable-refresh macOS modes.
+- Native Mac appearance and interaction acceptance remain pending on Parks's Apple Silicon Mac. This is not a newly approved design. Platform boundaries, build commands and the acceptance matrix are in `MACOS_SUPPORT.md`.
+
+
+## November 11, 2026 — selected Soft ceramic sidebar
+
+Parks selected the Soft ceramic preview and requested its drop shadow on the existing main sidebar. Applied its radius, neutral gradient, 600-weight labels, 46px minimum height, inset lighting, diffuse shadow and selected-button press. Scoped styles to main navigation and excluded those buttons from the global press animation to prevent double compression. Settings tabs and other actions remain unchanged. Earlier shared-navigation styling guidance is superseded for the main sidebar only; this does not reverse the rejection of application-wide raised buttons.
+
+
+## November 11, 2026 — darker ceramic and sliding navigation
+
+Darkened the ceramic gradient and standard sidebar in both themes. Replaced separate selected-button fills with one measured, pointer-transparent surface that slides with a subtle fade/scale settle. Active routes and clicks remain immediate. Rapid changes begin from the current visual position; first render, resized layouts and reduced-motion modes position immediately. Kept existing wallpaper controls and Settings navigation.
+
+
+## November 11, 2026 — restore press feedback and fix glass menu seams
+
+Parks reported a harsh opaque underlap in Home's instance selector and rejected removal of the click-pop timing. Restored configurable press motion on both navigation labels and the shared ceramic surface, removed the separate held-button transform, dimmed inactive labels, and added a bounded 6px overshoot with 480ms settle. Body-portaled dropdowns now receive the owner's translucent fill/frost explicitly; Home no longer overlaps the trigger by 15px and standard glass selectors omit their opaque underlap patch. Tests verified material equality, edge alignment, actual instance selection, rapid navigation reversal, compact alignment and reduced motion.
+
+## November 11, 2026 — continuous ceramic corners and softer settling
+
+Parks reported bright corner flicker during travel, uneven gradient lighting and harsh stops, and requested a substantially darker highlight. Inspection reproduced stationary rounded button blur/fill layers cutting across the moving surface. Main navigation now paints its background only on the shared highlight; buttons remain transparent and unfiltered even on hover. Lowered the dark gradient to #191b1f–#14161a, softened the inset edge, matched compact corner radii, and replaced the segmented 480ms fade/overshoot with a continuous 720ms damped spring at stable opacity. The small overshoot settles gradually; configurable click-pop remains intact. Noise was not added because the suggestion was tentative. Settings navigation and dropdown materials retain their previous behavior. The integrated revision awaits visual review.
+
+## November 11, 2026 — remove interface sounds
+
+Parks requested removal of interface sound. Removed the sound settings, preview controls, synthesized playback, input listeners and success cues, plus their obsolete tests. Settings loading drops the retired sound preference even when previously enabled. Visual toggle compression and configurable button press feedback remain. Game audio is outside this removal. This supersedes the November 7 optional-audio direction.
+
+## November 11, 2026 — ceramic workspace depth and silent feedback
+
+Parks requested more depth on the shown instance panels and controls, then invited consistent tactile detail elsewhere. Added a scoped interface-depth stylesheet: dark ceramic header lighting across existing workspace title platforms, recessed connected shelves, a raised neutral content indicator, soft bevels/shadows on instance Play/Add content and adjacent controls, quiet installed-row hover/focus edges, and recessed toggle tracks with shaded thumbs. Existing geometry, artwork, blur controls, real actions and configured click-pop remain; no new sound or decorative movement was added. Light uses its own semantic surfaces/shadows, custom-background headers retain their chosen opacity, and motion preferences suppress the new transitions. Corrected two earlier sidebar literals to pass the shared theme audit. This direction supersedes flat-action guidance only within the requested instance-workspace scope; visual approval is pending.
+
+## November 11, 2026 — pull back repetitive ceramic depth
+
+Parks rejected the broad depth pass as repetitive and trying too hard, while allowing ceramic on the top. Removed the newly added bevels, toggle shading, row treatment, selected-tab material and repeated header/shelf styling. Retained ceramic only on the top instance identity header (and the separately approved main sidebar). Restored the original Mods toolbar, flat Play/Add Mods/Settings controls, lower panels and other page headers. Add Mods remains in its existing toolbar. Interface sounds stay removed and existing visual click/toggle feedback remains. This supersedes the broader workspace-depth direction above.
+
+## November 11, 2026 — remove recent-search history
+
+Parks clarified that “the research thing” meant recent searches and requested its complete removal. Removed the Cache preference, five-item history recording, suggestion panel, focus/keyboard hooks and dedicated CSS. App settings loading removes the old history key and retired preference, including previously enabled histories. Installed-content filtering, Add Mods search, catalog/result caching and the search bar's existing appearance remain. This supersedes the earlier Recent Mods searches entry.
+
+## November 11, 2026 — near-black grayscale header and sidebar
+
+Parks rejected the dusky/cool tint and bright glint, requesting a much blacker grayscale treatment. Changed the main sidebar selection and top instance identity header to #0d0d0d–#080808, removed their bright upper inset edge in OLED, and made the standard sidebar pure black. Light keeps readable neutral-gray counterparts. Layout, artwork, accents, existing press/slide motion and the previously restored flat lower controls remain.
+
+## November 11, 2026 — slight grayscale visibility lift
+
+Parks approved the near-black grayscale direction and requested only a small lift because the surfaces were hard to see. Raised both instance-header and sidebar-selection gradient stops by five RGB levels, from #0d0d0d–#080808 to #121212–#0d0d0d. Kept the sidebar background black and preserved the lack of tint/glint, layout, shadows and animation.
+
+## November 11, 2026 — match the Mods toolbar color
+
+Parks perceived the slightly lifted equal-RGB gray as brown and supplied the Mods toolbar as the desired lighter color. Sampled #0c0e0f from three unobstructed areas, matching the existing `--panel-strong` token. Both the instance identity header and sidebar selection now start at that color, hold it through the upper 20%, then fade vertically to a 25% mix over the page near black. Retained shadows and no bright upper glint. The flat Mods toolbar itself is the reference and remains unchanged. This supersedes the previous exact grayscale stop values.
+
+## November 11, 2026 — restore ceramic bevels and diagonal shading
+
+Parks clarified that the Mods-toolbar color change must retain Soft ceramic bevels, roundness and depth, and explicitly rejected the vertical gradient. Restored the 160-degree diagonal on the instance identity header and sidebar highlight, with soft upper-left inset lighting and lower-right inset shading. Retained the sampled Mods-toolbar palette, dark falloff, existing radii/drop shadows and single-layer sidebar movement. This supersedes the vertical/no-edge interpretation above.
+
+## November 11, 2026 — approved sidebar frame and five text previews
+
+Parks explicitly approved the pictured Instances frame as beautiful and requested five click-through options for its text. Prepared isolated typography previews with the same ceramic frame, label and icon; only font, size, weight and letter spacing vary. The live sidebar remains unchanged while Parks chooses. The frame approval is recorded in GOOD_DESIGNS; none of the new text treatments is an approved implementation yet.
+
+## November 11, 2026 — Home Play pixel-fill hover
+
+Parks requested a slowly spreading circular fill from the mouse-entry point, a noisy edge made of large pixels, S-curve easing and gentle enlargement on the pictured wide Home Play button. Added a focused component using fixed 10px edge noise, 1250ms entrance, 850ms withdrawal and 2.5% scale. The overlay uses the existing theme text/page pair for a pale fill in OLED and dark fill in Light; the final palette and animation await visual review. Quick reversals retain the existing front, keyboard focus begins in the center, and motion preferences snap color without scaling. Disabled/busy and hidden states stop the effect. Preserved native launch timing and target, global click-pop, the selector, other Play actions and the approved sidebar frame. The five sidebar typography previews remain unselected.
+
+### November 12 revision — quicker fill and smoother S-curve
+
+Parks requested a slightly quicker Home Play hover fill with better S-curve easing. Shortened the entrance from 1250ms to 1000ms and replaced cubic smoothstep with quintic smootherstep, giving zero speed and acceleration at both ends and a stronger middle. Kept the 850ms withdrawal duration, pointer origin, fixed pixel noise, scale, palette, geometry and immediate launch. This narrow motion revision awaits visual review.
+
+### November 12 preview — ceramic Home Play
+
+Parks asked to try ceramic bevel depth on this Play button. Added a restrained 160-degree face gradient, soft upper-left/lower-right inset bevel and diffuse theme-aware shadow, scoped to Home Play. One pointer-transparent rim sits above the accent and pixel-fill faces so the edge stays continuous during hover. Kept its size, accent, label, hover timing, press feedback and launch behavior. This reversible preview is not approval of the treatment or permission to restyle other buttons.
+
+## November 11, 2026 — keep launcher responsive across Minecraft launches
+
+Parks reported that animations stopped and buttons appeared randomly unresponsive after launch. Reproduced the global animation flag switching off on Play: both download activity and the entire game lifetime were overriding the saved animation preference. Removed those overrides from global feedback, sidebar movement and animated accent. Existing user motion/performance settings still apply; actual game/file-operation guards remain.
+
+The prior fallback polled only active downloads and ignored terminal states; process liveness was checked only once. Replaced those paths with stable event subscriptions and bounded native snapshot recovery, including focus/visibility return, completion, error, cancellation and process exit. Older responses cannot overwrite newer events or local requests. Removed the delayed idle reset that could clear a newer launch, scoped completion cleanup, and prevented duplicate pending launch requests. Regression coverage uses native fixtures and does not constitute real gameplay or Mac acceptance.
+
+## November 12, 2026 — archive the native remake outside Bloom
+
+Parks paused the unfinished Rust remake and requested that all progress be preserved outside the client. Moved the entire engine workspace, its build cache, adapter, settings component, build script, architecture notes and staged executable to the sibling `Sakura-Archive-2026-11-12` folder. The archive includes verified originals of all mixed integration files and the earlier runtime-specific UI/design records.
+
+Removed the engine picker/settings/launcher path, native content exceptions, nightly engine build hooks and Windows/Mac sidecar packaging. Bloom remains a Java/Fabric launcher with its existing UI, AutoTune, cosmetics and platform support. Existing non-Java records are rejected/hidden without rewriting their data, rather than being accidentally launched or tuned as Java. The archived work is paused, not discarded or approved as finished. No version change, release, push or publication was requested.
+
+
+## November 12, 2026 — centered sidebar press and release-only travel
+
+Parks rejected the ceramic highlight lifting vertically during click-pop. He requested compression in place, retaining the normal slide but starting navigation only after release/completion. The global pointer-down animation was scaling/translating the positioning track and completing its pop while the pointer was still held. Main navigation now owns a held native `:active` compression on the label and a separate inner ceramic face; the outer track keeps its existing spring translation. Release restores scale with the configured duration, and existing native clicks/keyboard activation remain authoritative. No palette, typography, frame bevel, sidebar layout or other button treatment changed. The correction is requested direction, not a new visual approval.
+
+
+## November 12, 2026 — hold interrupted sidebar slides; contain download artwork
+
+Parks reported that the previous centered press fix still moved the highlight on lower rows while holding. Reproduced an in-flight slide continuing more than 100px underneath the compressed face. Pointer/Space holds now freeze the visible track transform immediately, and completed/canceled releases resume from there toward the appropriate existing route. Regression checks exercise every navigation destination, interruption, outside cancellation and the existing motion preferences. The original 720ms spring and ceramic material remain unchanged.
+
+Parks also reported a stray question mark and blocked Downloads controls. Its missing-artwork fallback used absolute positioning without a containing icon tile, covering the content pane. The 48px tile now establishes its containing block, clips artwork and rejects pointer input. The legitimate placeholder stays inside the tile; cancellation, Clear Completed and navigation remain wired to their original operations. Browser fixtures verified active and completed placeholders, hit targets, cancellation and persisted history clearing. No live download history was cleared.
+
+
+## November 12, 2026 — restrained Downloads hover and clearing feedback
+
+Parks requested more reactive Downloads, especially a simple satisfying delete effect and hover animation. Added a 1px hover lift and quiet neutral edge/fill response to the existing rows, plus a restrained danger-ink/trash-icon tilt on Clear Completed. Clearing uses a short shrink/fade and gap collapse with 20ms staggering (capped at 80ms); the empty state fades in. Saved history clears at once, and exiting rows are inert/hidden to accessibility. New completions remain independent of the deleted snapshot. No files are removed, and the existing active Cancel action, layout, artwork containment and other pages remain unchanged. This is an implemented request awaiting visual review, not a new approved reference.
+
+Browser verification covers hover, immediate persistence before the animation finishes, incoming completion during removal, keyboard clearing, active cancellation, placeholder hit testing and motion-disabled/Light states. Native commands and history are isolated fixtures; real user history was not cleared.
+
+## November 12, 2026 — slower Downloads clearing with a directional exit
+
+Parks rejected the first fast shrink/collapse as unsatisfying and requested a slower, more creative eased deletion. Replaced it with a slight pull-back followed by a 720ms rightward sweep, a delayed soft fade/blur, and a separate 560ms eased space closure beginning at 360ms. Rows follow with a 65ms stagger capped at 260ms; the empty state fades in more gently. Existing hover feedback, flat surfaces and actual immediate history clearing remain. The implemented motion awaits visual review and is not an approved reference. Browser checks now verify the pull-back, visible rightward departure before any gap closes, and later collapse while retaining persistence, concurrent completion and motion-preference checks.
+
+## November 12, 2026 — show every content installation in Downloads
+
+Parks rapidly installed four mods and saw only the last in Downloads. The native worker already queued requests, but the UI exposed one mutable launch record and deduplicated completion by instance/state. Added native per-task identity and revisioned snapshots; Downloads now shows the active install, each queued item with its position, stopped outcomes, and independent completed records. Per-item cancellation preserves the rest of the FIFO; errors continue to the next task. The catalog reads the same pending state after navigation. Snapshot recovery handles missed events and webview reloads, and a persisted acknowledgement prevents cleared history returning. Retained the flat cards and existing hover/delete animations; no new visual approval is inferred. Completed history now retains 50 records instead of five. The queue remains in memory and does not resume after fully quitting Bloom.
+
+Regression fixtures cover four same-turn catalog clicks, all queue rows, per-task progress, navigation/reload, stale snapshots, missed terminal events, all four completions, clearing/reload, queued and active cancellation, failure continuation, dismissal and compact Light layout. Native queue tests exercise FIFO identity, deduplication checks, isolated cancellation and bounded terminal retention. These checks do not download mods into the user's real instances.
+
+## November 12, 2026 — bottom-first falling history deletion
+
+Parks approved the slower deletion as “much better” and requested falling down, scaling inward and fading out, starting from the bottom row. Kept the 720ms eased departure and delayed fade, changed the path to a straight 28px fall with 90% final scale, and reversed the stagger to bottom-to-top. Gaps close later, with the same soft 560ms ease; long lists compress the stagger to a maximum 400ms spread. Removed clipping on the inert presentation wrapper so the moving card keeps its corners. Actual clearing, incoming completions and motion preferences remain unchanged. Approval is limited to the improved pacing; the revised path awaits visual review.
+
+## November 12, 2026 — ceramic account dock and recessed logout footer
+
+Parks requested the existing ceramic finish on the pictured sidebar account card, and more depth for Log out with an explicit exclusion of ceramic. Reused the sidebar's 160-degree palette, subtle inset bevels and diffuse shadow on the moving account identity dock, preserving its avatar, typography, dimensions and attached drawer. The trigger stays transparent so custom-background overrides cannot double-paint the face. Log out keeps its existing edge-to-edge footprint and bare icon, with a solid matte red surface, recessed upper shadow and a small eased icon movement on hover/focus. Existing sign-out, keyboard operation, compact sidebar and motion preferences remain. The screenshot identifies the target; this implementation is a requested revision awaiting visual review, not a new approved reference.
+
+## November 12, 2026 — lighter account ceramic without an outline
+
+Parks said the account card still looked the same and requested removing its outline and lightening the ceramic. Raised the dark-theme gradient stops to make the face visibly distinct while preserving the 160-degree direction, soft bevels and drop shadow. Removed the trigger's enclosing focus outline; keyboard focus instead brightens the material, including the compact dock. Kept the avatar, drawer motion, other ceramic surfaces and logout treatment unchanged. This correction supersedes the account dock's original near-black palette; the new rendering awaits review.
+
+## November 12, 2026 — per-instance Fabric Loader selection
+
+Parks requested changing Fabric Loader versions from Instance settings. Added a shared-dropdown row for Fabric instances, showing the saved or locally recovered version, latest-stable/prerelease labels, loading and retry states. Choices remain drafts until the existing Save changes action succeeds. Native saves verify the published version for the instance Minecraft version, recheck activity and target identity after metadata returns, preserve independent settings, and write the existing loaderVersion field. Launch resolution and the existing version-aware cache key use that exact pin, including downgrades. Omitted loader fields preserve existing pins and legacy automatic behavior; Vanilla and all instance game/content files remain unchanged. UI and native fixtures cover persistence, failures, stale results and busy guards. The new row awaits visual review.
+
+## November 12, 2026 — Add Mods sidebar redesign reverted
+
+Parks rejected the in-progress Add Mods filter-sidebar redesign and requested exactly the previous behavior. Restored the pre-redesign frontend and native catalog sources and removed the new filter components, styles, service and native module. The previous Add/Back toolbar, full-width results, search, installed-content filters, caching and installation flow remain the active design. The earlier Fabric Loader setting is outside this rollback. Do not treat the rejected sidebar proposal as approved.
+
+## November 12, 2026 — Add Mods filters in the existing drawer
+
+Parks replaced the rejected sidebar request with a filter button beside the existing return action and the same slide-down drawer used by installed-content filters, explicitly asking to change nothing else. Added category, client/server environment, loader, Minecraft version and sorting dropdowns with compact icon labels and existing theme-aware Select controls. The surrounding headers, full-width rows, anchored search, pagination, Add/Back action and installed filters retain their layout.
+
+Selections reach native Modrinth search and distinct cache keys. Defaults retain the existing search path; reset restores Fabric and the instance version. Dropdown clicks stay inside the drawer, Escape closes a submenu before its parent and restores focus, metadata/search failures can retry, and stale responses cannot replace newer selections. Browsing other loaders/versions never enables installing an incompatible file; details describe the selected file. This implements the requested direction and awaits visual approval.
+
+
+## November 14, 2026 — Portal and account-menu Settings
+
+Parks clarified that he meant the global Settings tab in the sidebar, then authorized replacing it with Portal and moving Settings to the account menu. Kept the instance header, Mods/Resource Packs/Shaders navigation, instance-settings gear and Home unchanged. The existing signed-in Client settings action is reused; signed-out accounts now also have that action in their drawer. Portal is included in remembered-page navigation and Ctrl+K. This supersedes earlier sidebar-order entries that placed Settings last. Earlier proposed instance-header redesigns remain rejected.
+
+Portal reads actual instance worlds and saved server lists, groups recent successful sessions above the destination list, and offers favorites, search, All/Servers/Worlds and additional server shortcuts. Play/Join uses the existing launch flow and correct owning instance. Minecraft's Quick Play log records actual joins; attempts are not treated as recent servers. Native validation blocks missing worlds, unsafe targets and world downgrades. Bookmark changes persist separately without rewriting game saves/server files. The dropdown's optional modal host keeps its options interactive inside the Add server dialog; existing dropdown placement is unchanged. Requested placement is approved; this implementation awaits visual review.
+
+
+## November 17, 2026 — Portal library rejected; simplified server list requested
+
+After rejecting the original Portal, Parks initially selected a launcher game library. The first replacement used cards and a compact Continue section. Parks rejected that direction before handoff: “no no again i want more of a serverlist format.” He then said there was far too much information and requested simple animations like the Add Mods button on instance pages.
+
+Replaced the proposed cards, Continue area, repeated counts, labels and metadata with full-width rows: small icon, name, one secondary line, favorite, options and Join/Play. Instance/version details and launch restrictions remain accessible in options. Add server now reveals a connected form, with the same persistent Add/Back icon swap used by the content toolbar. Filters, removal confirmation and action feedback use restrained transitions; favorite state and copy/save feedback follow native success. The form retains values on failure. Animation-off, Ultra and reduced motion are respected. Discovery, persistence, launch guards and account-menu Settings remain unchanged.
+
+The requested format and feedback references are recorded; this implementation has not yet received visual approval.
+
+Parks then requested an easier, unobtrusive way to distinguish servers and worlds on All. Added separate Servers and Worlds groups with small icon headings. Dedicated tabs omit these headings, empty groups disappear under filtering, and sorting applies within each group. This refinement also awaits visual review.
+
+Parks requested the actual Minecraft default server image instead of the server-stack fallback. Server rows without a working custom icon use Minecraft’s actual default server image (`public/minecraft-default-server.png`), extracted unchanged from `assets/minecraft/textures/misc/unknown_server.png` in the locally installed Minecraft 26.3 client. Keep its pixel art crisp; custom server icons retain precedence.
+
+Parks rejected the continuous workspace block below the header and supplied a Locker screenshot as a reference for separation. Search now has its own surface; the view selector and filter controls are visually separate; Servers and Worlds each have their own list panel beneath an outside heading. The overall workspace background was removed. The screenshot is a reference, and this Portal layout still awaits visual review.
+
+## November 18, 2026 — Portal favorite and filter hover refinement
+
+Parks requested more unique, less awkward hover feedback for Favorites and Filters. Removed the persistent star tilt. Row favorites and the Favorites filter now keep an upright star, preview a faint accent fill on hover/focus, and retain solid fill only for the saved/selected state. Filters subtly adjusts its icon’s line lengths in place. Neutral surface feedback stays restrained; button geometry, labels and existing actions remain unchanged. Motion preferences disable the transitions. The request is recorded; this implementation awaits visual review.
+
+Parks approved the favorite/filter refinement (“way better, almost perfect”) and requested the same hover treatment for All/Servers/Worlds with a cooler selected state. Portal’s existing moving selector now uses a restrained accent tint, fine border and small leading marker. Hover and keyboard focus share the icon controls’ quiet accent feedback, with stable label positions. The shared ToolbarSegments behavior remains unchanged and this styling is scoped to Portal. Approval covers the favorite/filter effects; the tab styling awaits review.
+
+Parks rejected the proposed selected-tab dot and accent fill/border, explicitly prohibiting dots, underlines, side lines and similar selection decorations. He requested a material treatment related to sidebar ceramic but different. Removed the marker, accent fill and border, restored centered labels, and replaced them with a neutral softly raised face using subtle gradient and inset/lower shading. The moving selection stays on the existing shared indicator; tab hover is neutral. Favorite/filter hover approval remains scoped to those controls. The revised selected face awaits review.
+
+## November 18, 2026 — reversible account-menu logout
+
+Parks supplied three Archive/Undo images and requested that Log out turn into Undo with a ring retreating around the button before sign-out. Added a dedicated `UndoLogoutButton` inside the existing account drawer. The first proposal used a matte pill; Parks immediately rejected its roundness and requested the existing button and font design. The implementation now retains the original logout footer’s geometry, red material, alignment and typography. Only its icon/label transition and functional SVG perimeter are new. The perimeter reports the actual five-second window without changing the identity dock or other menu actions.
+
+Undo and keyboard activation cancel before any native action occurs. Menu dismissal, account changes, document hiding and unmount clear the timer. Expiry invokes the existing sign-out flow once; the control disables during that request, native failures retain the existing error reporting, and successful completion refreshes accounts. Reduced/off/Ultra motion preserves the time window and uses discrete ring progress. The new functional ring is explicitly requested and does not reinstate decorative selection outlines. The supplied screenshots are references; this implementation awaits visual review.
+
+Parks clarified that the reference applies to feedback, not pill geometry: match the client’s existing roundness, button and font design. Removed the proposed pill/centered label and restored the original Log out footer. The ring now follows the button’s measured individual corner radii, including its square upper corners and rounded lower corners.
+
+Parks then rejected the red-filled footer with the orange ring and asked for a dark grayscale surface, a red outline, and a bolder icon and label. The footer now uses a neutral inset/hover surface and divider, the existing font family at 12px/900 weight, and an 18px icon with a stronger stroke. Only the functional countdown is red. Its existing corner geometry and five-second behavior remain; this refinement awaits visual review.
+
+Parks subsequently requested rounded top corners, a darker logout surface and a shadow cast upward onto the rest of the dropdown. The top corners now match the existing 13px bottom radius, the neutral face is nearly black with a restrained hover increase, and an upward diffuse shadow replaces the straight divider. The measured red countdown follows all four corners. This supersedes the square-top treatment above and awaits visual review.
+
+Parks then explicitly requested an even darker ceramic finish for Log out. This supersedes the November 12 matte-only exclusion: the footer now reuses the account dock's 160-degree shading and inset bevels over a nearly black face while retaining its upward shadow, 13px corners, heavier content and red countdown. The revised implementation awaits visual review.
+
+## November 18, 2026 — borderless account menu and ceramic controls
+
+Parks requested redesigning the entire account dropdown to remove its outline while retaining a distinct menu. The revision uses an opaque shaded panel, diffuse shadow, neutral hover/focus rows and an inset ceramic logout button. It preserves the moving identity dock, stationary reveal, compact layout and five-second Undo flow. Increased action-label readability and recovered width so Profile & accounts does not truncate. The screenshot identifies the prior treatment; the revision awaits review.
+
+Parks then requested red versions of Home Play's ceramic finish for Settings Sign out and Reset settings, followed by that finish on Add Minecraft account (+) and all on-state toggles. The + control and toggle tracks retain the current accent, off states and existing behavior. Found and corrected the global button-shadow reset suppressing the intended material bevels and logout's upward shadow; scoped overrides restore them while Ultra suppresses the depth. These changes supersede earlier ceramic-only scope limits for the named controls and await visual approval.
+
+## November 18, 2026 — complete action coverage and softer ceramic corrections
+
+Parks expanded the finish to every accent action, naming New folder, New instance, Add Mods/Back, comparison Cancel and Settings Enabled, then identified missed Clear cache/Change and photo buttons. Audited accent-background rules and neutral action rows and consolidated their finish in `ceramic-actions.css`, preserving component behavior and geometry. This supersedes earlier named-controls-only scope; navigation selections, artwork and off toggles retain their own treatment.
+
+Parks rejected the bright, tight bevel on the small options control, requesting darker, duller material, softer corners and a slight hover lift below the rejected brightness. The first softening blurred the inset highlight broadly; he then reported it looked like a rim around the entire button. The revised finish uses a faint upper-left highlight with negative spread, removes the enclosing inner shade and fades compact controls' hover/focus brightness in and out over 200ms, respecting motion preferences. These are corrections and requested implementations, not visual approval.

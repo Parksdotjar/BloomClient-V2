@@ -1,0 +1,7 @@
+.fabric-loader-control { min-width: 0; display: grid; gap: 8px; }
+.fabric-loader-control .select-trigger:disabled { opacity: .55; cursor: default; }
+.fabric-loader-note { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.fabric-loader-error { display: flex; align-items: center; gap: 10px; color: var(--theme-danger-ink, #e97979); font-size: 11px; line-height: 1.5; }
+.fabric-loader-error > span { min-width: 0; overflow-wrap: anywhere; }
+.fabric-loader-error > button { flex: 0 0 auto; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--control); color: var(--text); font: inherit; }
+.fabric-loader-error > button:hover { background: var(--panel-strong); }

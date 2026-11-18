@@ -3,7 +3,7 @@ import "./organic-background.css";
 
 export const LIVE_BACKGROUNDS = [
   { id: "aurora", name: "Aurora" }, { id: "tide", name: "Tide" },
-  { id: "bloom", name: "Bloom" }, { id: "dunes", name: "Dunes" },
+  { id: "bloom", name: "Delight" }, { id: "dunes", name: "Dunes" },
   { id: "mist", name: "Mist" }, { id: "petals", name: "Petals" },
   { id: "ripple", name: "Ripple" }, { id: "silk", name: "Silk" },
   { id: "lagoon", name: "Lagoon" }, { id: "ribbons", name: "Ribbons" },

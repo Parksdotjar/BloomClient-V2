@@ -1,8 +1,8 @@
-# Bloom player rig, version 1
+# Delight player rig, version 1
 
 Open `bloom-player-template.bbmodel` (classic arms) or `bloom-player-slim-template.bbmodel` (slim arms) in Blockbench. These use its built-in **Bedrock Entity** format. No plugin is required. The model is an authoring mannequin; Minecraft supplies the actual skin, armor, and outer layers.
 
-Validated editor: Blockbench **5.2.2**, web edition, October 18, 2026. The Nod source opened with its geometry and six head keyframes, played in the preview, and exported through **Animation → Export Animations… → nod → Confirm**. That historical export was accepted by Bloom's validator; the starter samples have since been removed from the active catalog. Start new work from the blank templates. Runtime parser tests run against the separately pinned PAL versions for all four Minecraft targets.
+Validated editor: Blockbench **5.2.2**, web edition, October 18, 2026. The Nod source opened with its geometry and six head keyframes, played in the preview, and exported through **Animation → Export Animations… → nod → Confirm**. That historical export was accepted by Delight's validator; the starter samples have since been removed from the active catalog. Start new work from the blank templates. Runtime parser tests run against the separately pinned PAL versions for all four Minecraft targets.
 
 ## Skeleton
 
@@ -35,6 +35,6 @@ The `body` bone moves the rendered model only. It never changes position, physic
 
 ## Source and license
 
-The mannequin geometry was authored for Bloom. The nine original starter animations have been retired. No commercial emote files or GPL Emotecraft project/template are included. Pivot values follow PAL's `HumanoidAnimationController.BONE_POSITIONS` contract. PAL and its runtime dependency notices are included under the mod's `META-INF/licenses/`; upstream library license terms still apply to those libraries.
+The mannequin geometry was authored for Delight. The nine original starter animations have been retired. No commercial emote files or GPL Emotecraft project/template are included. Pivot values follow PAL's `HumanoidAnimationController.BONE_POSITIONS` contract. PAL and its runtime dependency notices are included under the mod's `META-INF/licenses/`; upstream library license terms still apply to those libraries.
 
 The main authoring guide is [BLOOM_EMOTES_AUTHORING.md](../../BLOOM_EMOTES_AUTHORING.md).

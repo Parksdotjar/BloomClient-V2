@@ -14,7 +14,7 @@ import org.joml.Vector3f;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Immutable, render-ready version of Bloom's deliberately small cuboid format. */
+/** Immutable, render-ready version of Delight's deliberately small cuboid format. */
 public final class BloomHatMesh {
     private static final int MAX_CUBES = 512;
     private final List<Quad> quads;
@@ -63,17 +63,17 @@ public final class BloomHatMesh {
 
     private static BloomHatMesh parse(String source, boolean alignWingFacesWithPreview) {
         JsonObject root = JsonParser.parseString(source).getAsJsonObject();
-        if (number(root, "formatVersion") != 1.0f) throw new IllegalArgumentException("Unsupported Bloom hat model");
+        if (number(root, "formatVersion") != 1.0f) throw new IllegalArgumentException("Unsupported Delight hat model");
         float textureWidth = positive(root, "textureWidth", 4096);
         float textureHeight = positive(root, "textureHeight", 4096);
         float uvWidth = positiveOrDefault(root, "uvWidth", textureWidth, 4096);
         float uvHeight = positiveOrDefault(root, "uvHeight", textureHeight, 4096);
         JsonArray cubes = root.getAsJsonArray("cubes");
-        if (cubes == null || cubes.isEmpty() || cubes.size() > MAX_CUBES) throw new IllegalArgumentException("Invalid Bloom hat cube count");
+        if (cubes == null || cubes.isEmpty() || cubes.size() > MAX_CUBES) throw new IllegalArgumentException("Invalid Delight hat cube count");
 
         List<Quad> output = new ArrayList<>(cubes.size() * 6);
         for (JsonElement element : cubes) addCube(output, element.getAsJsonObject(), uvWidth, uvHeight, alignWingFacesWithPreview);
-        if (output.isEmpty()) throw new IllegalArgumentException("Bloom hat model has no visible faces");
+        if (output.isEmpty()) throw new IllegalArgumentException("Delight hat model has no visible faces");
         return new BloomHatMesh(output, animation(root, alignWingFacesWithPreview));
     }
 

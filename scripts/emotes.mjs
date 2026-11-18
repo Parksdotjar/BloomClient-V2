@@ -129,8 +129,8 @@ export function importEmote(file, id, name = id.replaceAll('_',' '), directory =
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [action,...args] = process.argv.slice(2);
-    if (action === 'validate') console.log(`Validated ${readCatalog().length} Bloom emotes.`);
-    else if (action === 'build') console.log(`Bundled ${build()} Bloom emotes.`);
+    if (action === 'validate') console.log(`Validated ${readCatalog().length} Delight emotes.`);
+    else if (action === 'build') console.log(`Bundled ${build()} Delight emotes.`);
     else if (action === 'import' && args.length >= 2) console.log(`Imported ${importEmote(...args)}`);
     else throw new Error('Usage: node scripts/emotes.mjs validate | build | import <animation.json> <id> [name]');
   } catch(error) { console.error(error.message); process.exitCode=1; }

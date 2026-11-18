@@ -1,6 +1,94 @@
 use crate::InstanceConfig;
 use std::io::Read;
 
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub(crate) struct LoaderVersion {
+    version: String,
+    stable: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct LoaderEntry {
+    loader: LoaderVersion,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LoaderOptions {
+    current_version: Option<String>,
+    versions: Vec<LoaderVersion>,
+}
+
+fn safe_version(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 80
+        && value.as_bytes()[0].is_ascii_digit()
+        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+' | b'_'))
+}
+
+pub(super) async fn available(minecraft_version: &str) -> Result<Vec<LoaderVersion>, String> {
+    let mut url = reqwest::Url::parse("https://meta.fabricmc.net/v2/versions/loader/").unwrap();
+    url.path_segments_mut().unwrap().pop_if_empty().push(minecraft_version);
+    let entries = super::bloom_http_client()?
+        .get(url)
+        .timeout(std::time::Duration::from_secs(15))
+        .send().await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|error| format!("Could not load Fabric versions. Check your connection and retry: {error}"))?
+        .json::<Vec<LoaderEntry>>().await
+        .map_err(|error| format!("Fabric returned unreadable loader versions: {error}"))?;
+    let mut seen = std::collections::HashSet::new();
+    let versions: Vec<_> = entries.into_iter().map(|entry| entry.loader)
+        .filter(|loader| safe_version(&loader.version) && seen.insert(loader.version.clone())).collect();
+    if versions.is_empty() {
+        return Err(format!("Fabric has no loader versions for Minecraft {minecraft_version}."));
+    }
+    Ok(versions)
+}
+
+#[tauri::command]
+pub(crate) async fn list_instance_fabric_loaders(instance_id: String) -> Result<LoaderOptions, String> {
+    let config = super::load_instance(&instance_id)?;
+    if !config.loader.eq_ignore_ascii_case("fabric") {
+        return Err("This instance does not use Fabric.".into());
+    }
+    let current_version = configured(&config).map(str::to_owned).or_else(|| installed(&config));
+    let versions = available(&config.version).await?;
+    Ok(LoaderOptions { current_version, versions })
+}
+
+// None means leave the persisted pin alone, including callers predating this setting.
+pub(super) fn requested_change(config: &InstanceConfig, requested: Option<&str>) -> Result<Option<String>, String> {
+    let Some(version) = requested else { return Ok(None); };
+    if !config.loader.eq_ignore_ascii_case("fabric") {
+        return Err("Only Fabric instances have a Fabric Loader version.".into());
+    }
+    let version = version.trim();
+    if !safe_version(version) {
+        return Err("Choose a valid Fabric Loader version from the list.".into());
+    }
+    Ok((configured(config) != Some(version)).then(|| version.to_owned()))
+}
+
+pub(super) fn check_available(version: &str, versions: &[LoaderVersion]) -> Result<(), String> {
+    if !versions.iter().any(|loader| loader.version == version) {
+        return Err("That Fabric Loader version is no longer available for this Minecraft version. Reload the version list and choose again.".into());
+    }
+    Ok(())
+}
+
+pub(super) fn apply_change(current: &mut InstanceConfig, expected: &InstanceConfig, version: String, busy: bool) -> Result<(), String> {
+    if busy {
+        return Err("Close Minecraft and wait for active downloads before changing Fabric Loader.".into());
+    }
+    if current.id != expected.id || current.loader != expected.loader || current.version != expected.version
+        || current.directory != expected.directory || configured(current) != configured(expected) {
+        return Err("The instance changed while checking Fabric Loader. Reopen its settings and try again.".into());
+    }
+    current.loader_version = Some(version);
+    Ok(())
+}
+
 fn configured(config: &InstanceConfig) -> Option<&str> {
     config
         .loader_version
@@ -15,13 +103,7 @@ fn logged_version(log: &str, minecraft_version: &str) -> Option<String> {
         let (minecraft, loader) = startup.split_once(" with Fabric Loader ")?;
         let loader = loader.trim();
         // Only accept the exact game version and a loader version, never log text or URL/path data.
-        (minecraft == minecraft_version
-            && !loader.is_empty()
-            && loader.len() <= 80
-            && loader.as_bytes()[0].is_ascii_digit()
-            && loader.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+' | b'_')
-            }))
+        (minecraft == minecraft_version && safe_version(loader))
         .then(|| loader.to_owned())
     })
 }
@@ -109,6 +191,70 @@ mod tests {
             "config":true, "customResolution":false, "visible":true, "shortcut":false
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn setting_omission_and_same_version_preserve_existing_pins_offline() {
+        let mut current = config();
+        current.loader_version = Some("0.18.4".into());
+        assert_eq!(requested_change(&current, None).unwrap(), None);
+        assert_eq!(requested_change(&current, Some(" 0.18.4 ")).unwrap(), None);
+        current.loader = "Vanilla".into();
+        assert_eq!(requested_change(&current, None).unwrap(), None);
+        assert!(requested_change(&current, Some("0.18.4")).is_err());
+    }
+
+    #[test]
+    fn settings_reject_unsafe_or_unpublished_versions() {
+        for value in ["", " ", "../../loader", "0.18/4", "0.18.4?query", "0.18.4 extra"] {
+            assert!(requested_change(&config(), Some(value)).is_err());
+        }
+        let versions = vec![LoaderVersion { version: "0.18.4".into(), stable: true }];
+        assert!(check_available("0.18.4", &versions).is_ok());
+        assert!(check_available("0.19.0", &versions).is_err());
+        assert!(check_available("0.18.4", &[]).is_err());
+    }
+
+    #[test]
+    fn upgrade_and_downgrade_change_launch_cache_and_preserve_other_settings() {
+        let mut current = config();
+        current.loader_version = Some("0.18.4".into());
+        current.jvm_arguments = "-Dexample=true".into();
+        let root = std::path::Path::new("test-root");
+        for version in ["0.19.0", "0.17.3"] {
+            let expected = current.clone();
+            let old_key = crate::launch_cache::key(&expected, root);
+            let change = requested_change(&expected, Some(version)).unwrap().unwrap();
+            // A concurrent artwork edit is preserved when applying the checked loader choice.
+            current.icon = Some("data:image/png;base64,test".into());
+            apply_change(&mut current, &expected, change, false).unwrap();
+            let restored: InstanceConfig = serde_json::from_slice(&serde_json::to_vec(&current).unwrap()).unwrap();
+            assert_eq!(resolve_with(&restored, || panic!("must use the saved loader")).unwrap(), version);
+            assert_ne!(crate::launch_cache::key(&restored, root), old_key);
+            assert_eq!(restored.jvm_arguments, "-Dexample=true");
+            assert_eq!(restored.memory, expected.memory);
+            assert_eq!(restored.version, expected.version);
+            assert_eq!(restored.icon, current.icon);
+        }
+    }
+
+    #[test]
+    fn changing_loader_rechecks_busy_and_target_after_metadata() {
+        let expected = config();
+        for field in ["busy", "id", "loader", "minecraft", "directory", "pin"] {
+            let mut current = expected.clone();
+            match field {
+                "id" => current.id = "other".into(),
+                "loader" => current.loader = "Vanilla".into(),
+                "minecraft" => current.version = "26.3".into(),
+                "directory" => current.directory = "other".into(),
+                "pin" => current.loader_version = Some("0.20.0".into()),
+                _ => {}
+            }
+            let before = serde_json::to_value(&current).unwrap();
+            assert!(apply_change(&mut current, &expected, "0.18.4".into(), field == "busy").is_err());
+            assert_eq!(serde_json::to_value(&current).unwrap(), before);
+        }
     }
 
     #[test]

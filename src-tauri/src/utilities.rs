@@ -52,9 +52,9 @@ pub struct GlobalFileSyncReport {
 fn utility_root() -> Result<PathBuf, String> {
     let root = bloom_data_dir()?.join("utilities").join("global-file-sync");
     std::fs::create_dir_all(root.join("shared"))
-        .map_err(|error| format!("Bloom could not create the Global File Sync folder: {error}"))?;
+        .map_err(|error| format!("Delight could not create the Global File Sync folder: {error}"))?;
     std::fs::create_dir_all(root.join("backups"))
-        .map_err(|error| format!("Bloom could not create the sync backup folder: {error}"))?;
+        .map_err(|error| format!("Delight could not create the sync backup folder: {error}"))?;
     Ok(root)
 }
 
@@ -72,7 +72,7 @@ fn load_settings() -> Result<GlobalFileSyncSettings, String> {
         return Ok(GlobalFileSyncSettings::default());
     }
     let bytes = std::fs::read(path)
-        .map_err(|error| format!("Bloom could not read Global File Sync settings: {error}"))?;
+        .map_err(|error| format!("Delight could not read Global File Sync settings: {error}"))?;
     serde_json::from_slice(&bytes)
         .map_err(|error| format!("Global File Sync settings are invalid: {error}"))
 }
@@ -82,7 +82,7 @@ fn save_settings(settings: &GlobalFileSyncSettings) -> Result<(), String> {
         settings_path()?,
         serde_json::to_vec_pretty(settings).map_err(|error| error.to_string())?,
     )
-    .map_err(|error| format!("Bloom could not save Global File Sync settings: {error}"))
+    .map_err(|error| format!("Delight could not save Global File Sync settings: {error}"))
 }
 
 fn load_active_settings() -> Result<Option<GlobalFileSyncSettings>, String> {
@@ -91,7 +91,7 @@ fn load_active_settings() -> Result<Option<GlobalFileSyncSettings>, String> {
         return Ok(None);
     }
     let bytes = std::fs::read(path).map_err(|error| {
-        format!("Bloom could not read the active Global File Sync setup: {error}")
+        format!("Delight could not read the active Global File Sync setup: {error}")
     })?;
     serde_json::from_slice(&bytes)
         .map(Some)
@@ -103,7 +103,7 @@ fn save_active_settings(settings: &GlobalFileSyncSettings) -> Result<(), String>
         active_settings_path()?,
         serde_json::to_vec_pretty(settings).map_err(|error| error.to_string())?,
     )
-    .map_err(|error| format!("Bloom could not save the active Global File Sync setup: {error}"))
+    .map_err(|error| format!("Delight could not save the active Global File Sync setup: {error}"))
 }
 
 fn instance_map() -> Result<HashMap<String, InstanceConfig>, String> {
@@ -175,7 +175,7 @@ fn backup_file(
     }
     std::fs::copy(target, backup).map_err(|error| {
         format!(
-            "Bloom could not back up {} before syncing: {error}",
+            "Delight could not back up {} before syncing: {error}",
             target.display()
         )
     })?;
@@ -220,7 +220,7 @@ fn sync_file_to_instances(
         }
         std::fs::copy(&source, &target).map_err(|error| {
             format!(
-                "Bloom could not sync {} to {}: {error}",
+                "Delight could not sync {} to {}: {error}",
                 relative, target_instance.name
             )
         })?;
@@ -261,7 +261,7 @@ fn copy_directory_merge(
         if !target_path.exists() {
             std::fs::copy(&source_path, &target_path).map_err(|error| {
                 format!(
-                    "Bloom could not preserve {}: {error}",
+                    "Delight could not preserve {}: {error}",
                     source_path.display()
                 )
             })?;
@@ -324,7 +324,7 @@ fn is_any_directory_link(path: &Path) -> bool {
 fn create_shared_link(shared: &Path, target: &Path) -> Result<(), String> {
     junction::create(shared, target).map_err(|error| {
         format!(
-            "Bloom could not connect {} to the shared folder: {error}",
+            "Delight could not connect {} to the shared folder: {error}",
             target.display()
         )
     })
@@ -350,7 +350,7 @@ fn connect_shared_folder(
         }
         if is_any_directory_link(&target) {
             return Err(format!(
-                "{} already links to a different folder. Disconnect that link before enabling Bloom's shared {} library.",
+                "{} already links to a different folder. Disconnect that link before enabling Delight's shared {} library.",
                 target.display(),
                 category
             ));
@@ -363,7 +363,7 @@ fn connect_shared_folder(
             }
             std::fs::rename(&target, &backup).map_err(|error| {
                 format!(
-                    "Bloom could not back up {} before sharing it: {error}",
+                    "Delight could not back up {} before sharing it: {error}",
                     target.display()
                 )
             })?;
@@ -683,7 +683,7 @@ pub fn open_global_sync_folder(category: String) -> Result<(), String> {
     };
     std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
     tauri_plugin_opener::open_path(&target, None::<&str>)
-        .map_err(|error| format!("Bloom could not open the Global File Sync folder: {error}"))
+        .map_err(|error| format!("Delight could not open the Global File Sync folder: {error}"))
 }
 
 #[cfg(test)]
@@ -694,6 +694,7 @@ mod tests {
         InstanceConfig {
             id: id.to_string(),
             name: id.to_string(),
+            engine: crate::InstanceEngine::Java,
             icon: None,
             loader: "Fabric".to_string(),
             loader_version: None,

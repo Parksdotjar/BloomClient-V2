@@ -43,7 +43,7 @@ function hexToHsv(input: string): HsvColor {
   };
 }
 
-export function CustomAccentPicker({ value, onApply, label = "Custom accent color", description = "Build your own Bloom accent.", showValue = false, selected, trigger, wallpaperSource }: { wallpaperSource?: string | null; value: string; onApply: (color: string) => void; label?: string; description?: string; showValue?: boolean; selected?: boolean; trigger?: (props: { ref: RefObject<HTMLButtonElement | null>; onClick: () => void; expanded: boolean }) => ReactNode }) {
+export function CustomAccentPicker({ value, onApply, label = "Custom accent color", description = "Build your own Delight accent.", showValue = false, selected, trigger, wallpaperSource }: { wallpaperSource?: string | null; value: string; onApply: (color: string) => void; label?: string; description?: string; showValue?: boolean; selected?: boolean; trigger?: (props: { ref: RefObject<HTMLButtonElement | null>; onClick: () => void; expanded: boolean }) => ReactNode }) {
   const sharedWallpaper = useContext(WallpaperSourceContext);
   const paletteSource = wallpaperSource === undefined ? sharedWallpaper : wallpaperSource;
   const [open, setOpen] = useState(false);

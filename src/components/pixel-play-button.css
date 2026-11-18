@@ -1,0 +1,59 @@
+.spotlight-play.pixel-play {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  box-shadow: 0 5px 9px -5px var(--theme-shadow-soft, #0006),
+    0 16px 26px -14px var(--theme-shadow, #000b);
+  /* transform is separate from the shared click-pop's scale/translate longhands. */
+  transform: scale(1);
+  transition: transform 680ms cubic-bezier(.45, 0, .2, 1);
+}
+/* Local ceramic preview: the same diagonal face on the accent and revealed fill. */
+.spotlight-play.pixel-play,
+.pixel-play .pixel-play-fill {
+  background-image: linear-gradient(160deg,
+    color-mix(in srgb, var(--theme-highlight, #ffffff42) 40%, transparent),
+    transparent 44%,
+    color-mix(in srgb, var(--theme-shadow-soft, #0005) 40%, transparent));
+}
+/* One bevel above both faces keeps the rim continuous as the pixels spread. */
+.spotlight-play.pixel-play::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 1px 2px 2px var(--theme-highlight, #ffffff42),
+    inset -1px -2px 3px var(--theme-shadow-soft, #0005);
+}
+.spotlight-play.pixel-play:disabled { box-shadow: none; }
+.spotlight-play.pixel-play[data-pixel-active="true"]:not(:disabled) {
+  transform: scale(1.025);
+}
+.pixel-play .pixel-play-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  pointer-events: none;
+}
+.pixel-play .pixel-play-fill {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background-color: var(--text, var(--theme-ink, #f3f5f7));
+  color: var(--page);
+  clip-path: inset(50%);
+  pointer-events: none;
+}
+:root[data-animations="off"] .spotlight-play.pixel-play,
+:root[data-performance="ultra"] .spotlight-play.pixel-play {
+  transform: none;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root .spotlight-play.pixel-play[data-pixel-active] { transform: none; transition: none; }
+}

@@ -33,9 +33,9 @@ const cargoLockUrl = new URL("src-tauri/Cargo.lock", root);
 const cargoLockSource = readFileSync(cargoLockUrl, "utf8");
 const cargoLockPattern = /(\[\[package\]\]\r?\nname = "bloomclient"\r?\nversion = ")[^"]+("\r?$)/m;
 if (!cargoLockPattern.test(cargoLockSource)) {
-  throw new Error("Cargo.lock does not contain Bloom Client's package entry.");
+  throw new Error("Cargo.lock does not contain Delight Client's package entry.");
 }
 const cargoLock = cargoLockSource.replace(cargoLockPattern, `$1${version}$2`);
 writeFileSync(cargoLockUrl, cargoLock);
 
-console.log(`Bloom Client release version synchronized to ${releaseVersion}.`);
+console.log(`Delight Client release version synchronized to ${releaseVersion}.`);

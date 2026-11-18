@@ -112,7 +112,7 @@ export function MinecraftWardrobe({ accountId, tab, motion, onNotify, heading }:
       <div className="locker-detail-base"><div className="locker-detail-copy"><small>{tab === "skins" ? "Selected skin" : "Official Minecraft cape"}</small><h2>{tab === "skins" ? skin?.name || "Skins" : cape?.name || "Capes"}</h2></div>
         {tab === "skins" && skin && skin.id !== "current" && <div className="locker-skin-model" role="group" aria-label="Skin arm model"><button aria-pressed={variant === "classic"} onClick={() => setVariant("classic")}>Classic</button><button aria-pressed={variant === "slim"} onClick={() => setVariant("slim")}>Slim</button></div>}
         <button className="locker-equip" disabled={refreshing || busy || !!error || (tab === "skins" ? !skin || skin.id === "current" : !cape)} onClick={equip}>{busy ? "Saving…" : tab === "skins" ? skin?.id === "current" ? "Current skin" : "Use skin" : cape?.active ? "Unequip" : "Equip cape"}</button>
-        {tab === "capes" && cape && <p className="locker-precedence-note">Unequip your Bloom cloak to show this cape in Bloom.</p>}
+        {tab === "capes" && cape && <p className="locker-precedence-note">Unequip your Delight cloak to show this cape in Delight.</p>}
       </div>
     </aside>
   </div>;

@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "bloom_cosmetics",
   "version": "${version}",
-  "name": "Bloom Cosmetics",
+  "name": "Delight Cosmetics",
   "icon": "assets/bloom_cosmetics/icon.png",
-  "description": "Bloom capes, nametag badges, and multiplayer emotes. Press B for the emote wheel. Client-side, for Fabric Minecraft ${minecraft}.",
-  "authors": ["Bloom Client"],
+  "description": "Delight capes, nametag badges, and multiplayer emotes. Press B for the emote wheel. Client-side, for Fabric Minecraft ${minecraft}.",
+  "authors": ["Delight Client"],
   "contact": {
     "homepage": "https://bloomclient.org",
     "sources": "https://github.com/Parksdotjar/BloomClient-V2"
