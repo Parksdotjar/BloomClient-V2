@@ -24,8 +24,7 @@
   z-index: 2;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: inset 1px 2px 2px var(--theme-highlight, #ffffff42),
-    inset -1px -2px 3px var(--theme-shadow-soft, #0005);
+  box-shadow: var(--launcher-bevel);
 }
 .spotlight-play.pixel-play:disabled { box-shadow: none; }
 .spotlight-play.pixel-play[data-pixel-active="true"]:not(:disabled) {

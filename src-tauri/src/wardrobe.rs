@@ -84,7 +84,7 @@ async fn profile(account: &str) -> Result<Value, String> {
     }
     Ok(result)
 }
-async fn texture(url: &str) -> Result<String, String> {
+pub(super) async fn texture(url: &str) -> Result<String, String> {
     let mut url = reqwest::Url::parse(url).map_err(|_| "Invalid Minecraft texture")?;
     if url.host_str() != Some("textures.minecraft.net")
         || !url.username().is_empty()
@@ -201,7 +201,7 @@ pub async fn get_minecraft_wardrobe(
         if let Ok(bytes) = local_skin(&account_id, id) {
             let name = fs::read_to_string(path.with_extension("txt"))
                 .unwrap_or_else(|_| "Saved skin".into());
-            skins.push(json!({"id":id,"name":name,"texture":format!("data:image/png;base64,{}",STANDARD.encode(bytes)),"variant":"classic"}));
+            skins.push(json!({"id":id,"name":name,"texture":format!("data:image/png;base64,{}",STANDARD.encode(bytes)),"variant":saved_variant(&path)}));
         }
     }
     skins.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
@@ -260,6 +260,35 @@ pub async fn set_official_cape(account_id: String, cape_id: Option<String>) -> R
 }
 
 #[tauri::command]
+pub async fn import_skin_by_username(account_id: String, username: String) -> Result<String, String> {
+    active(&account_id)?;
+    let username = username.trim();
+    if !(1..=16).contains(&username.len())
+        || !username.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+    {
+        return Err("Enter a Java username using letters, numbers or underscores.".into());
+    }
+    let response = bloom_http_client()?
+        .get(format!("https://api.minecraftservices.com/minecraft/profile/lookup/name/{username}"))
+        .timeout(std::time::Duration::from_secs(10))
+        .send().await.map_err(|_| "Could not reach Minecraft. Try again.")?;
+    match response.status().as_u16() {
+        200 => {}
+        404 | 204 => return Err("No Java player found with that username.".into()),
+        429 => return Err("Too many lookups. Wait a moment and retry.".into()),
+        _ => return Err("Minecraft could not look up this player. Try again.".into()),
+    }
+    let player: Value = response.json().await.map_err(|_| "Invalid Minecraft profile.")?;
+    let player_id = uuid(player["id"].as_str().unwrap_or(""))?;
+    let (url, variant) = minecraft_skin_metadata(&player_id).await?;
+    let image = texture(&url).await?;
+    let bytes = STANDARD.decode(image.strip_prefix("data:image/png;base64,").unwrap_or(""))
+        .map_err(|_| "Invalid Minecraft skin.")?;
+    let name = player["name"].as_str().unwrap_or(username);
+    save_import(&account_id, &bytes, name, Some(variant))
+}
+
+#[tauri::command]
 pub async fn import_locker_skin(account_id: String) -> Result<Option<String>, String> {
     active(&account_id)?;
     let picked = rfd::AsyncFileDialog::new()
@@ -276,12 +305,6 @@ pub async fn import_locker_skin(account_id: String) -> Result<Option<String>, St
         .take(1_048_577)
         .read_to_end(&mut bytes)
         .map_err(|_| "Unable to read skin")?;
-    validate_skin(&bytes)?;
-    let id = format!("{:x}", Sha256::digest(&bytes));
-    let path = skin_dir(&account_id)?.join(format!("{id}.png"));
-    if !path.exists() {
-        fs::write(&path, &bytes).map_err(|_| "Unable to save skin")?;
-    }
     let name = file
         .path()
         .file_stem()
@@ -290,6 +313,28 @@ pub async fn import_locker_skin(account_id: String) -> Result<Option<String>, St
         .chars()
         .take(80)
         .collect::<String>();
+    save_import(&account_id, &bytes, &name, None).map(Some)
+}
+
+fn saved_variant(path: &std::path::Path) -> &'static str {
+    if fs::read_to_string(path.with_extension("model")).ok().as_deref() == Some("slim") {
+        "slim"
+    } else {
+        "classic"
+    }
+}
+
+fn save_import(account_id: &str, bytes: &[u8], name: &str, model: Option<&str>) -> Result<String, String> {
+    active(account_id)?;
+    validate_skin(bytes)?;
+    let id = format!("{:x}", Sha256::digest(bytes));
+    let path = skin_dir(account_id)?.join(format!("{id}.png"));
+    if !path.exists() {
+        fs::write(&path, bytes).map_err(|_| "Unable to save skin")?;
+    }
+    if let Some(model) = model {
+        fs::write(path.with_extension("model"), model).map_err(|_| "Unable to save skin model")?;
+    }
     fs::write(path.with_extension("txt"), &name).map_err(|_| "Unable to save skin name")?;
     let normalized_account = uuid(&account_id)?;
     if let Some(mut cached) =
@@ -301,13 +346,13 @@ pub async fn import_locker_skin(account_id: String) -> Result<Option<String>, St
                 "id": id,
                 "name": name,
                 "texture": format!("data:image/png;base64,{}", STANDARD.encode(&bytes)),
-                "variant": "classic"
+                "variant": saved_variant(&path)
             }));
             skins.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
         }
         let _ = super::cache::write_json("minecraft-wardrobe", &normalized_account, &cached);
     }
-    Ok(Some(id))
+    Ok(id)
 }
 
 #[tauri::command]
@@ -315,11 +360,21 @@ pub async fn apply_locker_skin(
     account_id: String,
     skin_id: String,
     variant: String,
+    current_texture: Option<String>,
 ) -> Result<(), String> {
     if !matches!(variant.as_str(), "classic" | "slim") {
         return Err("Choose Classic or Slim arms.".into());
     }
-    let bytes = local_skin(&account_id, &skin_id)?;
+    // The current account skin may have no imported library file.
+    let bytes = if skin_id == "current" {
+        let png = current_texture.as_deref().and_then(|s| s.strip_prefix("data:image/png;base64,"))
+            .filter(|s| s.len() <= 1_398_104).ok_or("Missing current skin")?;
+        let bytes = STANDARD.decode(png).map_err(|_| "Invalid current skin")?;
+        validate_skin(&bytes)?;
+        bytes
+    } else {
+        local_skin(&account_id, &skin_id)?
+    };
     request(
         &account_id,
         reqwest::Method::POST,
@@ -340,6 +395,7 @@ pub async fn apply_locker_skin(
                     .find(|skin| skin["id"].as_str() == Some(skin_id.as_str()))
             })
             .cloned()
+            .or_else(|| current_texture.filter(|_| skin_id == "current").map(|texture| json!({"texture": texture})))
         {
             let mut current = saved;
             current["id"] = Value::String("current".into());

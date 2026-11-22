@@ -1,0 +1,7 @@
+.shortcut-settings { max-width: 680px; }
+.shortcut-settings > p, .shortcut-row small { color: var(--muted); }
+.shortcut-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; padding: 7px 0; border-bottom: 1px solid var(--desktop-line); }
+.shortcut-row button { min-width: 76px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--launcher-menu-line); background: transparent; color: var(--text); font: inherit; }
+.shortcut-row button[data-recording-shortcut] { border-color: var(--accent); }
+.shortcut-row small { grid-column: 1/-1; text-align: end; }
+.shortcut-settings > button { margin-top: 12px; }

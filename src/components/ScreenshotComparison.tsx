@@ -4,7 +4,7 @@ import { renderComparison } from "../services/comparison-export";
 import "./screenshot-comparison.css";
 
 export type ComparisonShot = { instanceId: string; instanceName: string; name: string; modified: number; revision?: string };
-export function ScreenshotComparison({ shots, loadImage, initialImages, close, exportImage }: { shots: [ComparisonShot, ComparisonShot]; loadImage: (shot: ComparisonShot) => Promise<string>; initialImages?: [string, string]; close: () => void; exportImage: (render: () => Promise<string>) => Promise<void> }) {
+export function ScreenshotComparison({ shots, loadImage, initialImages, close, cancel, exportImage }: { shots: [ComparisonShot, ComparisonShot]; loadImage: (shot: ComparisonShot) => Promise<string>; initialImages?: [string, string]; close: () => void; cancel: () => void; exportImage: (render: () => Promise<string>) => Promise<void> }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const handle = useRef<HTMLButtonElement>(null);
@@ -52,14 +52,14 @@ export function ScreenshotComparison({ shots, loadImage, initialImages, close, e
     const box = event.currentTarget.getBoundingClientRect();
     if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) close();
   }}>
-    <header><h2 id="screenshot-comparison-title">Compare screenshots</h2><div className="comparison-actions"><button type="button" disabled={!sources || !!error || exporting} onClick={() => void exportCurrent()}><Download size={16} />{exporting ? "Exporting…" : "Export"}</button><button type="button" disabled={!sources || !!error} onClick={() => setSwapped(value => !value)} title="Swap screenshots"><ArrowRightLeft size={16} />Swap</button><button type="button" disabled={!sources || !!error} onClick={() => setPosition(50)} title="Center divider"><RotateCcw size={16} />Reset</button><button type="button" onClick={close} aria-label="Close comparison"><X size={20} /></button></div></header>
+    <header><h2 id="screenshot-comparison-title">Compare screenshots</h2><div className="comparison-actions"><button type="button" disabled={!sources || !!error || exporting} onClick={() => void exportCurrent()}><Download size={16} />{exporting ? "Exporting…" : "Export"}</button><button type="button" onClick={close} aria-label="Close comparison"><X size={20} /></button></div></header>
     {error ? <div className="comparison-state" role="alert"><p>{error}</p><button type="button" onClick={() => setAttempt(value => value + 1)}><RefreshCw size={16} />Try again</button></div> : !sources ? <div className="comparison-state" role="status"><RefreshCw className="spin" size={24} /><p>Loading screenshots…</p></div> : <div ref={canvas} className="comparison-canvas" style={{ "--comparison-position": `${position}%` } as CSSProperties} onPointerDown={event => {
       if (event.button !== 0) return;
       event.preventDefault(); handle.current?.focus(); event.currentTarget.setPointerCapture(event.pointerId); move(event.currentTarget, event.clientX);
     }} onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) move(event.currentTarget, event.clientX); }}>
       <img className="comparison-image" src={sources[1]} alt={`Right: ${ordered[1].name}`} draggable={false} onError={() => setError("A screenshot could not be displayed. Try loading the comparison again.")} />
       <div className="comparison-left"><img className="comparison-image" src={sources[0]} alt={`Left: ${ordered[0].name}`} draggable={false} onError={() => setError("A screenshot could not be displayed. Try loading the comparison again.")} /></div>
-      <span className="comparison-side comparison-side-left" aria-hidden="true">A</span><span className="comparison-side comparison-side-right" aria-hidden="true">B</span>
+      <span className="shot-letter comparison-side comparison-side-left" aria-hidden="true">A</span><span className="shot-letter comparison-side comparison-side-right" aria-hidden="true">B</span>
       <i className="comparison-divider" aria-hidden="true" />
       <button ref={handle} type="button" className="comparison-handle" role="slider" aria-label="Screenshot comparison divider" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(position)} aria-valuetext={`${Math.round(position)}% left screenshot`} onKeyDown={event => {
         const step = event.shiftKey ? 10 : 1;
@@ -67,5 +67,8 @@ export function ScreenshotComparison({ shots, loadImage, initialImages, close, e
         if (next !== null) { event.preventDefault(); setPosition(next); }
       }}><span><ArrowRightLeft size={23} strokeWidth={2.4} /></span></button>
     </div>}
+    <footer className="comparison-foot"><div className="comparison-files">{ordered.map((shot, index) =>
+      <span key={index} title={shot.name}><b>{index ? "B" : "A"}</b>{shot.name}</span>
+    )}</div><div className="comparison-actions"><button type="button" onClick={cancel}>Cancel</button><button type="button" disabled={!sources || !!error} onClick={() => setSwapped(value => !value)} title="Swap screenshots"><ArrowRightLeft size={16} />Swap</button><button type="button" disabled={!sources || !!error} onClick={() => setPosition(50)} title="Center divider"><RotateCcw size={16} />Reset</button></div></footer>
   </dialog>;
 }

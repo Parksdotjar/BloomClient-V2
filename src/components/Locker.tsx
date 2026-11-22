@@ -1,30 +1,32 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { chooseEquipment, equipmentSlot, readEquipment, useEquipment } from "../services/locker-equipment";
 import { invoke } from "../services/invoke";
-import { Check, ChevronLeft, ChevronRight, Shirt, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Shirt, RotateCw, Layers, PersonStanding, Flag, Store } from "lucide-react";
 import { CapePreview, type CapeAnimation } from "./CapePreview";
 import { CapeDisplay } from "./CapeDisplay";
 import "./locker.css";
 import { CapeRedemption } from "./CapeRedemption";
 import "./connected-toolbar.css";
-import { MinecraftWardrobe } from "./MinecraftWardrobe";
+import { MinecraftWardrobe, type Wardrobe } from "./MinecraftWardrobe";
 import { CosmeticsShop } from "./CosmeticsShop";
 
-type Cape = { id: string; name: string; textureUrl: string; textureRevision: string; animation?: CapeAnimation | null };
+export type LockerCloak = { id: string; name: string; textureUrl: string; textureRevision: string; animation?: CapeAnimation | null };
 type Profile = { id: string; name: string };
 type Me = { capeId: string | null; badgeVisible: boolean };
 const api = <T,>(method: string, path: string, accountId?: string, body?: unknown) => invoke<T>("cosmetics_request", { method, path, body: body ?? null, accountId: accountId ?? null });
-const cloakCatalogMemoryCache = new Map<string, Cape[]>();
+const cloakCatalogMemoryCache = new Map<string, LockerCloak[]>();
 window.addEventListener("bloom-clear-transient-caches", () => { cloakCatalogMemoryCache.clear(); });
 
 function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId, heading, onBrowse }: { heading: ReactNode; onBrowse: () => void; catalogRevision: number; claimedId?: string; profile: Profile | null; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void }) {
   const cacheKey = profile?.id || "public";
-  const [items, setItems] = useState<Cape[]>(() => cloakCatalogMemoryCache.get(cacheKey) || []);
+  const [items, setItems] = useState<LockerCloak[]>(() => cloakCatalogMemoryCache.get(cacheKey) || []);
   const [selected, setSelected] = useState<string | null>(() => cloakCatalogMemoryCache.get(cacheKey)?.[0]?.id || null);
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(!cloakCatalogMemoryCache.has(cacheKey));
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const slot = "cloak:" + cacheKey;
+  const worn = useEquipment(slot);
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
   const backgroundRefresh = useRef(false);
@@ -33,7 +35,7 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     const update = () => {
-      if (!document.hidden && !busy && !refreshing) {
+      if (!document.hidden && !refreshing) {
         backgroundRefresh.current = true;
         setRefresh(value => value + 1);
       }
@@ -41,7 +43,7 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
     const timer = window.setInterval(update, 15000);
     window.addEventListener("focus", update);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", update); };
-  }, [busy, refreshing]);
+  }, [refreshing]);
   const generation = useRef(0);
   const notify = useRef(onNotify);
   notify.current = onNotify;
@@ -50,24 +52,25 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
 
   useEffect(() => {
     const current = ++generation.current;
+    const revision = equipmentSlot(slot).revision;
     const silent = backgroundRefresh.current;
     backgroundRefresh.current = false;
     let stopped = false;
     if (!cloakCatalogMemoryCache.has(cacheKey)) setLoading(true);
     setRefreshing(true); setError("");
     void (async () => {
-      const catalog = profile ? await api<{ items: Cape[] }>("GET", "/v1/capes/locker", profile.id) : {items: []};
+      const catalog = profile ? await api<{ items: LockerCloak[] }>("GET", "/v1/capes/locker", profile.id) : {items: []};
       if (stopped) return;
       cloakCatalogMemoryCache.set(cacheKey, catalog.items);
       setItems(catalog.items);
-      setSelected(old => catalog.items.some(cape => cape.id === old) ? old : catalog.items[0]?.id || null);
+      setSelected(old => catalog.items.some(cape => cape.id === old) ? old : old === null && equipmentSlot(slot).choice === null ? null : catalog.items[0]?.id || null);
       const claimIndex = catalog.items.findIndex(item => item.id === pendingClaim.current);
       if (claimIndex >= 0) { setPage(Math.floor(claimIndex / 9) + 1); pendingClaim.current = undefined; }
       else setPage(old => Math.min(old, Math.max(1, Math.ceil(catalog.items.length / 9))));
       if (profile) {
         try {
           const result = await api<Me>("GET", "/v1/cosmetics/me", profile.id);
-          if (!stopped) setMe(result);
+          if (!stopped) { setMe(result); readEquipment(slot, revision, result.capeId); }
         } catch (reason) {
           if (!stopped) {
             setError(String(reason));
@@ -85,49 +88,23 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
     return () => { stopped = true; ++generation.current; };
   }, [profile?.id, refresh, catalogRevision]);
 
-  const action = async (work: () => Promise<void>) => {
-    const current = generation.current;
-    setBusy(true); setError("");
-    try { await work(); }
-    catch (reason) {
-      if (current === generation.current) {
-        setError(String(reason));
-        notify.current(String(reason), "error");
-      }
-    }
-    finally {
-      if (alive.current) {
-        setBusy(false);
-        // A claim can refresh the catalog while an equip request is completing.
-        if (current !== generation.current) setRefresh(value => value + 1);
-      }
-    }
-  };
-
-  const equipItem = (item: Cape) => {
-    setSelected(item.id);
-    if (!profile) {
-      notify.current("Sign in with Minecraft to equip a cloak.", "error");
-      return;
-    }
-    if (!me || busy || refreshing) return;
-    const capeId = me.capeId === item.id ? null : item.id;
-    const current = generation.current;
-    void action(async () => {
+  const wear = (id: string | null) => {
+    if (!profile) return;
+    setSelected(id);
+    chooseEquipment(slot, id, async capeId => {
       await api("PUT", "/v1/capes/equipped", profile.id, { capeId });
-      if (current !== generation.current) return;
-      setMe(previous => previous && ({ ...previous, capeId }));
-      notify.current(capeId ? "Cloak equipped" : "Cloak unequipped", "success");
+    }, message => {
+      if (alive.current) { setSelected(equipmentSlot(slot).saved || null); notify.current(message, "error"); }
     });
   };
-
-  const cape = items.find(item => item.id === selected);
+  const previewId = claimedId && selected === claimedId ? claimedId : worn === undefined ? selected : worn;
+  const cape = items.find(item => item.id === previewId);
   const pages = Math.max(1, Math.ceil(items.length / 9));
-  const equipped = cape && me?.capeId === cape.id;
+  const equipped = worn !== undefined ? worn : me?.capeId;
 
   return <div className={`locker-content ${items.length ? "" : "locker-content-empty"}`}>
         <div className="locker-collection">
-          <div className="locker-collection-heading">{heading}<div><span>{items.length}</span><button className="locker-refresh" aria-label="Refresh cloaks" title="Refresh cloaks" disabled={busy || refreshing} onClick={() => setRefresh(value => value + 1)}><RotateCw size={16} className={refreshing ? "spin" : ""} /></button></div></div>
+          <div className="locker-collection-heading">{heading}<div><span>{items.length}</span><button className="locker-refresh" aria-label="Refresh cloaks" title="Refresh cloaks" disabled={refreshing} onClick={() => setRefresh(value => value + 1)}><RotateCw size={16} className={refreshing ? "spin" : ""} /></button></div></div>
           {loading ? <div className="locker-inline-state" role="status"><Shirt size={30} /><h2>Loading locker…</h2></div> : items.length === 0 ? <div className="locker-inline-state">
             <h2>{error ? "Locker unavailable" : !profile ? "Sign in to Minecraft" : "Your collection starts here"}</h2>
             <p>{error ? "Delight could not load your cloaks." : !profile ? "Your claimed cloaks are saved to your Minecraft account." : "Pick a free cloak in Shop or redeem a code."}</p>
@@ -136,14 +113,12 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
           <div className="locker-grid">
             {items.slice((page - 1) * 9, page * 9).map(item => {
               const isSelected = selected === item.id;
-              const isEquipped = me?.capeId === item.id;
-              return <article className={`locker-cape ${isSelected ? "selected" : ""}`} key={item.id} onClick={() => setSelected(item.id)}>
-                <button className="locker-art" aria-label={`Preview ${item.name}`} aria-pressed={isSelected}><CapeDisplay texture={item.textureUrl} animation={item.animation} motion={motion} /></button>
+              const isEquipped = equipped === item.id;
+              return <article className={`locker-cape ${isSelected ? "selected" : ""}`} key={item.id} onClick={() => wear(item.id)}>
+                <button className="locker-art" aria-label={`Wear ${item.name}`} aria-pressed={isEquipped} aria-description={isEquipped ? "Equipped" : undefined}><CapeDisplay texture={item.textureUrl} animation={item.animation} motion={motion} /></button>
                 <div className="locker-cape-name">
-                  <div className="locker-cape-identity"><strong>{item.name}</strong>{isEquipped && <span className="locker-equipped-mark" aria-label="Equipped" title="Equipped"><Check size={14} strokeWidth={3.2} /></span>}</div>
-                  <button className={`locker-card-equip ${isEquipped ? "equipped" : ""}`} disabled={busy || refreshing || Boolean(profile && !me)} onClick={(event) => { event.stopPropagation(); equipItem(item); }}>
-                    {!profile ? "Sign in" : busy && isSelected ? "Saving…" : isEquipped ? "Unequip" : "Equip cloak"}
-                  </button>
+                  <div className="locker-cape-identity"><strong>{item.name}</strong></div>
+
                 </div>
               </article>;
             })}
@@ -158,45 +133,76 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
         {items.length > 0 && <aside className="locker-detail">
           <div className="locker-preview"><CapePreview texture={cape?.textureUrl} animation={cape?.animation} skinUuid={profile?.id} motion={motion} /></div>
           <div className="locker-detail-base">
-            <div className="locker-detail-copy"><small>Selected cloak</small><h2>{cape?.name}</h2></div>
-            {!profile ? <div className="locker-signin-note">Sign in to equip this cloak.</div> : <button className={`locker-equip ${equipped ? "equipped" : ""}`} disabled={busy || refreshing || !cape || !me} onClick={() => { if (cape) equipItem(cape); }}>{busy ? "Saving…" : equipped ? "Unequip" : "Equip cloak"}</button>}
+            <div className="locker-detail-copy"><h2>{cape?.name}</h2></div>
+            {!profile ? <div className="locker-signin-note">Sign in to equip this cloak.</div> : equipped && <button className="locker-equip" onClick={() => wear(null)}>Unequip</button>}
           </div>
         </aside>}
       </div>;
 }
 
-export function Locker(props: { profile: Profile | null; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void }) {
-  const [view, setView] = useState<"shop" | "locker">("shop");
-  const [tab, setTab] = useState<"cloaks" | "capes" | "skins">("cloaks");
+export const lockerSections = [
+  ["Equipped look", PersonStanding], ["Cloaks", Layers], ["Capes", Flag], ["Skins", Shirt], ["Shop", Store],
+] as const;
+export type LockerSection = typeof lockerSections[number][0];
+
+export async function getEquippedCloak(accountId: string) {
+  const slot = equipmentSlot("cloak:" + accountId);
+  const revision = slot.revision;
+  if (slot.timer === undefined && !slot.active) {
+    const me = await api<Me>("GET", "/v1/cosmetics/me", accountId);
+    readEquipment("cloak:" + accountId, revision, me.capeId);
+  }
+  if (!slot.choice) return undefined;
+  const cached = cloakCatalogMemoryCache.get(accountId)?.find(item => item.id === slot.choice);
+  if (cached) return cached;
+  const catalog = await api<{items: LockerCloak[]}>("GET", "/v1/capes/locker", accountId);
+  cloakCatalogMemoryCache.set(accountId, catalog.items);
+  return catalog.items.find(item => item.id === slot.choice);
+}
+
+function EquippedLook({ accountId, motion, onSection }: { accountId: string; motion: boolean; onSection: (section: LockerSection) => void }) {
+  const localCape = useEquipment("cape:" + accountId);
+  const localCloak = useEquipment("cloak:" + accountId);
+  const [look, setLook] = useState<{ wardrobe: Wardrobe; cloak?: LockerCloak } | null>(null);
+  const [error, setError] = useState("");
+  const [revision, retry] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setError("");
+    Promise.all([
+      invoke<Wardrobe>("get_minecraft_wardrobe", { accountId, refresh: false }),
+      getEquippedCloak(accountId),
+    ]).then(([wardrobe, cloak]) => {
+      if (current) setLook({ wardrobe, cloak });
+    }).catch(reason => { if (current) setError(String(reason)); });
+    return () => { current = false; };
+  }, [accountId, revision]);
+  if (error) return <div className="locker-inline-state" role="alert">{error}<button onClick={() => retry(value => value + 1)}>Try again</button></div>;
+  if (!look) return <div className="locker-inline-state" role="status">Loading equipped look…</div>;
+  const skin = look.wardrobe.currentSkin;
+  const cape = look.wardrobe.capes.find(item => localCape === undefined ? item.active : item.id === localCape);
+  const cloak = localCloak === undefined ? look.cloak : cloakCatalogMemoryCache.get(accountId)?.find(item => item.id === localCloak);
+  return <div className="locker-content">
+    <div className="look-slots">{([
+      ["Skins", "Skin", skin?.name || "Default skin", Shirt],
+      ["Cloaks", "Delight cloak", cloak?.name || "None equipped", Layers],
+      ["Capes", "Minecraft cape", cape?.name || "None equipped", Flag],
+    ] as const).map(([section, label, name, Icon]) => <button key={section} onClick={() => onSection(section)}><Icon size={19}/><span><small>{label}</small><strong>{name}</strong></span><ChevronRight size={16}/></button>)}</div>
+    <aside className="locker-detail" aria-label="Equipped character"><div className="locker-preview"><CapePreview skinUuid={accountId} skinTexture={skin?.texture} variant={skin?.variant} texture={cloak?.textureUrl || cape?.texture} animation={cloak?.animation} front={!cloak && !cape} motion={motion}/></div></aside>
+  </div>;
+}
+
+export function Locker(props: { section: LockerSection; onSection: (section: LockerSection) => void; profile: Profile | null; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void }) {
+  const { section, onSection, profile } = props;
   const [claim, setClaim] = useState<{id: string; account?: string; sequence: number}>({id: "", sequence: 0});
-  const tabs = ["cloaks", "capes", "skins"] as const;
-  const recordClaim = (id: string) => setClaim(previous => ({id, account: props.profile?.id, sequence: previous.sequence + 1}));
-  const openLocker = (id: string) => { recordClaim(id); setTab("cloaks"); setView("locker"); };
-  const categories = <div className="locker-category-picker" role="tablist" aria-label="Locker category">
-        {tabs.map((name, index) => <button key={name} id={`locker-tab-${name}`} role="tab" aria-selected={tab === name} aria-controls="locker-panel" tabIndex={tab === name ? 0 : -1} onClick={() => setTab(name)} onKeyDown={event => {
-          const offset = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-          if (!offset && event.key !== "Home" && event.key !== "End") return;
-          event.preventDefault();
-          const target = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs[2] : tabs[(index + offset + 3) % 3];
-          setTab(target); requestAnimationFrame(() => document.getElementById(`locker-tab-${target}`)?.focus());
-        }}>{name[0].toUpperCase() + name.slice(1)}</button>)}
-      </div>;
-  return <section className="locker-workspace cosmetics-workspace">
-    <div className="locker-heading-shell">
-      <header className="locker-platform"><div className="cosmetics-main-tabs toolbar-segments" role="tablist" aria-label="Cosmetics workspace"
-        style={{"--segments":2,"--selected":view === "shop" ? 0 : 1} as CSSProperties}><i aria-hidden="true" />
-        {(["shop","locker"] as const).map(name => <button key={name} id={`cosmetics-tab-${name}`} role="tab" aria-selected={view === name} aria-controls="cosmetics-panel" tabIndex={view === name ? 0 : -1} onClick={() => setView(name)} onKeyDown={event => {
-          if (!["ArrowLeft","ArrowRight","Home","End"].includes(event.key)) return;
-          event.preventDefault(); const next = event.key === "Home" ? "shop" : event.key === "End" ? "locker" : view === "shop" ? "locker" : "shop";
-          setView(next); document.getElementById(`cosmetics-tab-${next}`)?.focus();
-        }}>{name === "shop" ? "Shop" : "Locker"}</button>)}
-      </div></header>
-      <CapeRedemption key={props.profile?.id || "guest"} accountId={props.profile?.id} onNotify={props.onNotify} onClaim={openLocker} />
-    </div>
-    <div className="cosmetics-panel" id="cosmetics-panel" role="tabpanel" aria-labelledby={`cosmetics-tab-${view}`}>
-      <div key={view} className="toolbar-copy">{view === "shop" ? <CosmeticsShop key={props.profile?.id || "guest"} accountId={props.profile?.id} motion={props.motion} onNotify={props.onNotify} onAdded={recordClaim} onOpenLocker={openLocker} /> :
-        <div id="locker-panel" role="tabpanel" aria-labelledby={`locker-tab-${tab}`}>{tab === "cloaks" ? <CloakCollection key={props.profile?.id || "guest"} {...props} heading={categories} onBrowse={() => setView("shop")} catalogRevision={claim.sequence} claimedId={claim.account === props.profile?.id ? claim.id : undefined} /> : props.profile ? <MinecraftWardrobe key={props.profile.id + tab} accountId={props.profile.id} tab={tab} heading={categories} motion={props.motion} onNotify={props.onNotify} /> : <div className="locker-collection"><div className="locker-collection-heading">{categories}</div><div className="locker-inline-state"><h2>Sign in to Minecraft</h2><p>Your account’s {tab} will appear here.</p></div></div>}</div>}
-      </div>
-    </div>
+  const recordClaim = (id: string) => setClaim(previous => ({id, account: profile?.id, sequence: previous.sequence + 1}));
+  const openLocker = (id: string) => { recordClaim(id); onSection("Cloaks"); };
+  return <section className="locker-workspace desktop-locker">
+    <header className="look-heading"><h1>{section}</h1><CapeRedemption key={profile?.id || "guest"} accountId={profile?.id} onNotify={props.onNotify} onClaim={openLocker}/></header>
+    {section === "Shop" ? <CosmeticsShop key={profile?.id || "guest"} accountId={profile?.id} motion={props.motion} onNotify={props.onNotify} onAdded={recordClaim} onOpenLocker={openLocker}/> :
+      section === "Cloaks" ? <CloakCollection key={profile?.id || "guest"} {...props} heading={<span>Collection</span>} onBrowse={() => onSection("Shop")} catalogRevision={claim.sequence} claimedId={claim.account === profile?.id ? claim.id : undefined}/> :
+      !profile ? <div className="locker-inline-state"><h2>Sign in to Minecraft</h2><p>Your equipped look and wardrobe appear here when signed in.</p></div> :
+      section === "Equipped look" ? <EquippedLook key={profile.id} accountId={profile.id} motion={props.motion} onSection={onSection}/> :
+      <MinecraftWardrobe getCloak={getEquippedCloak} key={profile.id + section} accountId={profile.id} tab={section === "Skins" ? "skins" : "capes"} heading={<span>Collection</span>} motion={props.motion} onNotify={props.onNotify}/>}
   </section>;
 }

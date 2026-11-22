@@ -22,22 +22,22 @@
 .download-history-entry + .download-history-entry { margin-top: 9px; }
 .download-history-entry[data-leaving] { pointer-events: none; }
 .download-history-entry[data-leaving] > .download-task { pointer-events: none; transition: none; }
-.downloads-footer button { transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease; }
-.downloads-footer button > svg { transition: transform 180ms cubic-bezier(.2,.7,.3,1); }
-.downloads-footer button:not(:disabled):is(:hover, :focus-visible) {
+.history-heading button { transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease; }
+.history-heading button > svg { transition: transform 180ms cubic-bezier(.2,.7,.3,1); }
+.history-heading button:not(:disabled):is(:hover, :focus-visible) {
   color: var(--theme-danger-ink, #f16a6a);
   border-color: color-mix(in srgb, var(--theme-danger-ink, #f16a6a) 30%, var(--border));
 }
-.downloads-footer button:not(:disabled):is(:hover, :focus-visible) > svg { transform: rotate(-8deg); }
+.history-heading button:not(:disabled):is(:hover, :focus-visible) > svg { transform: rotate(-8deg); }
 .completed-section[data-motion="on"] .download-history-empty { animation: download-empty-arrive 320ms cubic-bezier(.2,0,.2,1); }
 @keyframes download-empty-arrive { from { opacity: 0; } to { opacity: 1; } }
-:root:is([data-animations="off"], [data-performance="ultra"]) .downloads-page :is(.download-task, .downloads-footer button, .downloads-footer button > svg, .download-history-empty) {
+:root:is([data-animations="off"], [data-performance="ultra"]) .downloads-page :is(.download-task, .history-heading button, .history-heading button > svg, .download-history-empty) {
   transform: none !important;
   transition: none !important;
   animation: none !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  .downloads-page :is(.download-task, .downloads-footer button, .downloads-footer button > svg, .download-history-empty) {
+  .downloads-page :is(.download-task, .history-heading button, .history-heading button > svg, .download-history-empty) {
     transform: none !important;
     transition: none !important;
     animation: none !important;

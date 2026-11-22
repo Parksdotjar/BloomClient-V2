@@ -1,8 +1,3 @@
-/* The header reveals a tool drawer and lends it space from the list viewport.
-   Results stay visible below the tools; the bottom search dock never moves. */
-.instance-manager:has(.content-toolbar) { --content-toolbar-drawer-space: 96px; }
-.instance-manager:has(.content-toolbar) .content-list { transition: height 320ms cubic-bezier(.22,.72,.2,1); }
-.instance-manager:has(.content-toolbar[data-filters-open="true"]) .content-list { height: calc(475px - var(--content-toolbar-drawer-space)); }
 .instance-manager:not(.settings-manager) .manager-heading.content-toolbar {
   position: relative;
   z-index: 5;
@@ -37,23 +32,6 @@
 .content-toolbar .content-filter-trigger[data-filtered="true"] { color: var(--accent-ink, var(--accent)); }
 .content-toolbar .content-filter-trigger[aria-expanded="true"] { background: var(--dropdown-selected); color: var(--text); }
 .content-toolbar .content-filter-trigger:hover { background: var(--dropdown-hover); color: var(--text); }
-.content-toolbar-drawer {
-  position: relative;
-  z-index: 1;
-  height: 13px;
-  margin-top: -13px;
-  overflow: hidden;
-  border-radius: 0 0 13px 13px;
-  background: var(--panel);
-  box-shadow: 0 14px 24px -13px var(--theme-shadow, #000e);
-  clip-path: inset(0 0 100% round 0 0 13px 13px);
-  pointer-events: none;
-  visibility: hidden;
-  transition: height 320ms cubic-bezier(.22,.72,.2,1), clip-path 320ms cubic-bezier(.22,.72,.2,1), visibility 0s 320ms;
-}
-.content-toolbar[data-filters-open="true"] .content-toolbar-drawer { height: calc(13px + var(--content-toolbar-drawer-space)); clip-path: inset(0 0 0 round 0 0 13px 13px); pointer-events: auto; visibility: visible; transition-delay: 0s; }
-.content-toolbar-drawer-body { display: flex; align-items: end; gap: 16px; min-height: calc(13px + var(--content-toolbar-drawer-space)); padding: 27px 20px 16px; opacity: 0; transform: translateY(-6px); transition: opacity 220ms ease, transform 320ms cubic-bezier(.22,.72,.2,1); }
-.content-toolbar[data-filters-open="true"] .content-toolbar-drawer-body { opacity: 1; transform: translateY(0); }
 .content-toolbar-reset { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 650; }
 .content-toolbar-reset:hover:not(:disabled) { background: var(--dropdown-hover); color: var(--text); }
 .content-toolbar-reset:disabled { opacity: .35; cursor: default; }
@@ -61,10 +39,7 @@
 .content-toolbar-identity h2, .content-toolbar-readout > span, .content-toolbar-action-label { animation: content-toolbar-copy-in 240ms ease both; }
 @keyframes content-toolbar-copy-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 1050px) {
-  .instance-manager:has(.content-toolbar) { --content-toolbar-drawer-space: 170px; }
   .content-toolbar-face { flex-wrap: wrap; gap: 12px; }
-  .content-toolbar-drawer-body { flex-wrap: wrap; gap: 10px; }
-  .content-toolbar .toolbar-field:first-child { flex-basis: 100%; }
 }
 :root:not([data-animations="on"]) .content-toolbar *,
 :root[data-performance="ultra"] .content-toolbar *,

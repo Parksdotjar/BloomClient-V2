@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowLeft, ArrowUpRight, Check, Copy, Globe2, Layers3, ListFilter, MoreHorizontal, Play, Plus, RefreshCw, RotateCcw, Search, Server, Star, TriangleAlert, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Copy, Globe2, Layers3, SlidersHorizontal, MoreHorizontal, Play, Plus, RefreshCw, Search, Server, Star, TriangleAlert, Trash2, X } from "lucide-react";
 import { invoke } from "../services/invoke";
 import type { PortalChange, PortalEntry, PortalLibrary, PortalTarget } from "../services/portal";
-import { ToolbarDrawer, ToolbarIconSwap, ToolbarSegments, useToolbarDisclosure } from "./ConnectedToolbar";
+import { ToolbarIconSwap } from "./ConnectedToolbar";
+import { FilterMenu, FilterReset, FilterSection } from "./FilterMenu";
 import "./portal.css";
 
 type Instance = { id: string; name: string; version: string };
@@ -20,8 +21,8 @@ function instanceLabels(instances: Instance[]) {
   return instances.map((instance, i) => `${instance.name} · ${instance.version}${instances.some((other, j) => j !== i && other.name === instance.name && other.version === instance.version) ? ` · ${i + 1}` : ""}`);
 }
 
-export function PortalPage({ instances, busy, onPlay, onOpenInstance, onCreate, SelectControl }: {
-  instances: Instance[]; busy: boolean;
+export function PortalPage({ filter, instances, busy, onPlay, onOpenInstance, onCreate, SelectControl }: {
+  filter: "All" | "Servers" | "Worlds"; instances: Instance[]; busy: boolean;
   onPlay: (instanceId: string, target: PortalTarget) => void;
   onOpenInstance: (instanceId: string) => void;
   onCreate: () => void;
@@ -31,14 +32,16 @@ export function PortalPage({ instances, busy, onPlay, onOpenInstance, onCreate, 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [changing, setChanging] = useState(false);
-  const [filter, setFilter] = useState("All");
+
   const [query, setQuery] = useState("");
   const [favorites, setFavorites] = useState(false);
   const [instanceFilter, setInstanceFilter] = useState("");
   const [sort, setSort] = useState("Recently played");
   const [message, setMessage] = useState("");
-  const filters = useToolbarDisclosure();
+  const filterTrigger = useRef<HTMLButtonElement>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  useEffect(() => { setAdding(false); setFiltersOpen(false); setRemoving(null); }, [filter]);
   const addTrigger = useRef<HTMLButtonElement>(null);
   const closeAdd = () => { setAdding(false); addTrigger.current?.focus(); };
   useEffect(() => {
@@ -95,11 +98,11 @@ export function PortalPage({ instances, busy, onPlay, onOpenInstance, onCreate, 
   const sorted = entries.slice().sort((a, b) =>
     (sort === "Recently played" ? (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0)
       : sort === "Instance" ? a.instanceName.localeCompare(b.instanceName) : 0) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-  const filtered = Boolean(needle || favorites || scope || filter !== "All");
+  const filtered = Boolean(needle || favorites || scope);
   const groups = (filter === "All" ? ["Servers", "Worlds"] : [filter]).map(label => ({
     label, entries: sorted.filter(entry => entry.kind === (label === "Servers" ? "server" : "world")),
   })).filter(group => group.entries.length > 0);
-  const reset = () => { setFilter("All"); setFavorites(false); setInstanceFilter(""); setQuery(""); setSort("Recently played"); };
+  const reset = () => { setFavorites(false); setInstanceFilter(""); setQuery(""); setSort("Recently played"); };
   const play = (entry: PortalEntry) => { if (!busy && !entry.unavailableReason) onPlay(entry.instanceId, { kind: entry.kind, target: entry.target }); };
   const launchButton = (entry: PortalEntry) => <button className="portal-play" disabled={busy || Boolean(entry.unavailableReason)}
     title={entry.unavailableReason || (busy ? "Wait for the current game or download to finish." : `Launch ${entry.instanceName} directly into ${entry.name}`)}
@@ -115,38 +118,33 @@ export function PortalPage({ instances, busy, onPlay, onOpenInstance, onCreate, 
   return <section className="portal-page" aria-label="Portal">
     <div className="portal-header-panel">
       <header className="portal-heading">
-        <h1>Portal</h1>
+        <h1>{adding ? "Add server" : filter === "All" ? "All destinations" : filter}</h1>
         <div className="portal-heading-actions">
           <button className="portal-icon-button" aria-label="Refresh Portal" title="Refresh" disabled={loading || changing} onClick={() => void refresh()}><RefreshCw size={17} className={loading ? "portal-refreshing" : undefined} /></button>
-          <button ref={addTrigger} className={`portal-add-toggle ${adding ? "portal-back" : "portal-add"}`} disabled={changing} aria-expanded={adding} aria-controls="portal-add-panel" onClick={() => instances.length ? setAdding(value => !value) : onCreate()}>
-            <ToolbarIconSwap active={adding} resting={<Plus size={17} />} engaged={<ArrowLeft size={17} />} />
-            <span key={String(adding)} className="toolbar-copy">{adding ? "Back to list" : instances.length ? "Add server" : "Create instance"}</span>
-          </button>
+          {(filter !== "Worlds" || adding) && <button ref={addTrigger} className={`portal-add-toggle ${adding ? "portal-back" : "portal-add"}`} disabled={changing} aria-expanded={adding} aria-controls="portal-add-panel" onClick={() => instances.length ? setAdding(value => !value) : onCreate()}>
+            {adding ? <ArrowLeft size={17}/> : <Plus size={17}/>}
+            <span>{adding ? "Back to list" : instances.length ? "Add server" : "Create instance"}</span>
+          </button>}
         </div>
       </header>
-      <ToolbarDrawer id="portal-add-panel" open={adding} className="portal-add-drawer">
+      <div id="portal-add-panel" hidden={!adding}>
         <AddServer open={adding} instances={instances} SelectControl={SelectControl} busy={changing} error={error} onClose={closeAdd} onSave={async (instanceId, name, address) => {
           const saved = await change({ action: "addServer", instanceId, name, address });
           if (saved) { closeAdd(); reset(); setMessage("Server added."); }
           return saved;
         }} />
-      </ToolbarDrawer>
+      </div>
     </div>
-    <div className="portal-workspace">
-      <label className="portal-search"><Search size={16} /><input aria-label="Search Portal" placeholder="Search worlds and servers" value={query} onChange={event => setQuery(event.target.value)} />{query && <button aria-label="Clear Portal search" onClick={() => setQuery("")}><X size={14} /></button>}</label>
-      <div ref={filters.root} className="portal-tools">
-        <div className="portal-tools-row">
-          <ToolbarSegments label="Show" options={["All", "Servers", "Worlds"]} value={filter} onChange={setFilter} />
-          <div className="portal-filter-actions">
-            <button className="portal-icon-button portal-favorites" aria-label="Favorites" title="Favorites" aria-pressed={favorites} onClick={() => setFavorites(value => !value)}><Star size={17} fill={favorites ? "currentColor" : "none"} /></button>
-            <button ref={filters.trigger} className="portal-filter-trigger" aria-label="Filters" title="Filter and sort" aria-expanded={filters.open} aria-controls="portal-filters" data-filtered={Boolean(scope || sort !== "Recently played")} onClick={() => filters.setOpen(value => !value)}><ListFilter size={17} />Filters</button>
-          </div>
-        </div>
-        <ToolbarDrawer id="portal-filters" open={filters.open} className="portal-filter-drawer">
-          <div className="toolbar-field toolbar-reveal-item"><span>Instance</span><SelectControl ariaLabel="Filter by instance" value={scope ? labels[instances.findIndex(instance => instance.id === scope)] : "All instances"} options={["All instances", ...labels]} onChange={value => setInstanceFilter(instances[labels.indexOf(value)]?.id ?? "")} /></div>
-          <div className="toolbar-field toolbar-reveal-item"><span>Sort by</span><SelectControl ariaLabel="Sort Portal" value={sort} options={["Recently played", "Name", "Instance"]} onChange={setSort} /></div>
-          <button className="portal-reset toolbar-reveal-item" disabled={!filtered && sort === "Recently played"} onClick={reset}><RotateCcw size={14} />Reset</button>
-        </ToolbarDrawer>
+    <div className="portal-workspace" hidden={adding}>
+      <div className="portal-toolbar">
+        <label className="portal-search"><Search size={16} /><input aria-label="Search Portal" placeholder={filter === "All" ? "Search destinations…" : `Search ${filter.toLowerCase()}…`} value={query} onChange={event => setQuery(event.target.value)} />{query && <button aria-label="Clear Portal search" onClick={() => setQuery("")}><X size={14} /></button>}</label>
+        <button ref={filterTrigger} className="portal-filter-trigger" aria-label="Filter" title="Filter and sort" aria-haspopup="menu" aria-expanded={filtersOpen} aria-controls={filtersOpen ? "portal-filters" : undefined} data-filtered={Boolean(scope || sort !== "Recently played")} onClick={() => setFiltersOpen(value => !value)}><SlidersHorizontal size={17} />Filter</button>
+        <button className="portal-icon-button portal-favorites" aria-label="Favorites" title="Favorites" aria-pressed={favorites} onClick={() => setFavorites(value => !value)}><Star size={17} fill={favorites ? "currentColor" : "none"} /></button>
+        {filtersOpen && <FilterMenu anchor={filterTrigger} id="portal-filters" title="Portal filters" onClose={() => setFiltersOpen(false)}>
+          <FilterSection label="Instance" value={scope ? labels[instances.findIndex(instance => instance.id === scope)] : "All instances"} options={["All instances", ...labels]} onChange={value => setInstanceFilter(instances[labels.indexOf(value)]?.id ?? "")} />
+          <FilterSection label="Sort by" value={sort} options={["Recently played", "Name", "Instance"]} onChange={setSort} />
+          <FilterReset label="Reset" disabled={!filtered && sort === "Recently played"} onReset={reset} />
+        </FilterMenu>}
       </div>
       {error && !adding && <div className="portal-notice" role="alert"><TriangleAlert size={16} /><span>{error}</span><button disabled={loading || changing} onClick={() => void refresh()}>Retry</button></div>}
       {message && <div className="portal-feedback" role="status"><Check size={15} /><span>{message}</span><button className="portal-icon-button" aria-label="Dismiss Portal notification" onClick={() => setMessage("")}><X size={14} /></button></div>}
@@ -157,10 +155,10 @@ export function PortalPage({ instances, busy, onPlay, onOpenInstance, onCreate, 
         : !entries.length ? <div className="portal-empty">
           {filtered ? <Search size={30} /> : <Layers3 size={32} />}
           <h2>{filtered ? "No matches" : "Nothing here yet"}</h2>
-          <p>{filtered ? "Try another search or clear your filters." : !instances.length ? "Create an instance to get started." : "Add a server or play a world in an instance."}</p>
+          <p>{filtered ? "Try another search or clear your filters." : !instances.length ? "Create an instance to get started." : filter === "Worlds" ? "Play a world in an instance to find it here." : "Add a server to this list."}</p>
           <div className="portal-empty-actions">{filtered ? <button onClick={reset}>Clear filters</button>
             : !instances.length ? <button className="portal-add" onClick={onCreate}>Create instance</button>
-            : <><button className="portal-add" onClick={() => setAdding(true)}>Add a server</button><button onClick={() => onOpenInstance(instances[0].id)}>Open instance<ArrowUpRight size={14} /></button></>}</div>
+            : <>{filter !== "Worlds" && <button className="portal-add" onClick={() => setAdding(true)}>Add a server</button>}<button onClick={() => onOpenInstance(instances[0].id)}>Open instance<ArrowUpRight size={14} /></button></>}</div>
         </div> : <div className="portal-list" aria-label="Worlds and servers">{groups.map(group => <section key={group.label} className="portal-kind-group" aria-label={group.label}>
           {filter === "All" && <h2 className="portal-group-title">{group.label === "Servers" ? <Server size={14} /> : <Globe2 size={14} />}{group.label}</h2>}
           <div className="portal-group-list">{group.entries.map(entry => <PortalRow key={entry.id} entry={entry} changing={changing} removing={removing === entry.id}
@@ -176,7 +174,8 @@ function PortalRow({ entry, changing, removing, onFavorite, onOpen, onCopy, onRe
   entry: PortalEntry; changing: boolean; removing: boolean; onFavorite: () => void; onOpen: () => void;
   onCopy: () => Promise<boolean>; onRemove: () => void; onKeep: () => void; onConfirmRemove: () => void; launch: import("react").ReactNode;
 }) {
-  const menu = useToolbarDisclosure();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
   const [copying, setCopying] = useState(false);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -190,23 +189,21 @@ function PortalRow({ entry, changing, removing, onFavorite, onOpen, onCopy, onRe
       <div className="portal-row-copy"><h3 title={entry.name}>{entry.name}</h3><p title={entry.kind === "server" ? entry.target : entry.instanceName}>{entry.kind === "server" ? entry.target : entry.instanceName}</p></div>
       <div className="portal-row-actions">
         <button className="portal-icon-button portal-star" disabled={changing} aria-label={`${entry.favorite ? "Unfavorite" : "Favorite"} ${entry.name}`} title={entry.favorite ? "Remove from favorites" : "Add to favorites"} aria-pressed={entry.favorite} onClick={onFavorite}><Star size={17} fill={entry.favorite ? "currentColor" : "none"} /></button>
-        <div className="portal-row-menu" ref={menu.root}>
-          <button ref={menu.trigger} className="portal-icon-button" aria-label={`Options for ${entry.name}`} title={entry.unavailableReason || "Options"} aria-expanded={menu.open} aria-controls={`portal-menu-${entry.id}`} onClick={() => menu.setOpen(value => !value)}>
+        <div className="portal-row-menu">
+          <button ref={trigger} aria-haspopup="menu" className="portal-icon-button" aria-label={`Options for ${entry.name}`} title={entry.unavailableReason || "Options"} aria-expanded={open} aria-controls={`portal-menu-${entry.id}`} onClick={() => setOpen(value => !value)}>
             <ToolbarIconSwap active={copied} resting={entry.unavailableReason ? <TriangleAlert size={17} /> : <MoreHorizontal size={18} />} engaged={<Check size={17} />} />
           </button>
-          {menu.open && <div className="portal-actions-menu" id={`portal-menu-${entry.id}`} role="group" aria-label={`${entry.name} actions`}>
+          {open && <FilterMenu anchor={trigger} id={`portal-menu-${entry.id}`} title={`${entry.name} actions`} onClose={() => setOpen(false)}>
             <div className="portal-menu-details"><strong>{entry.instanceName}</strong><span>Minecraft {entry.version}</span>{entry.unavailableReason && <p>{entry.unavailableReason}</p>}</div>
-            <button onClick={() => { menu.setOpen(false); onOpen(); }}><ArrowUpRight size={14} />Open instance</button>
-            {entry.kind === "server" && <button disabled={copying} onClick={async () => { setCopying(true); if (await onCopy()) { setCopied(true); menu.setOpen(false); menu.trigger.current?.focus(); } setCopying(false); }}><Copy size={14} />{copying ? "Copying…" : "Copy address"}</button>}
-            {entry.removable && <button disabled={changing} onClick={() => { menu.setOpen(false); onRemove(); }} aria-label={`Remove ${entry.name} shortcut`}><Trash2 size={14} />Remove shortcut</button>}
-          </div>}
+            <button role="menuitem" onClick={() => { setOpen(false); onOpen(); }}><ArrowUpRight size={14} />Open instance</button>
+            {entry.kind === "server" && <button role="menuitem" disabled={copying} onClick={async () => { setCopying(true); if (await onCopy()) { setCopied(true); setOpen(false); trigger.current?.focus(); } setCopying(false); }}><Copy size={14} />{copying ? "Copying…" : "Copy address"}</button>}
+            {entry.removable && <button role="menuitem" disabled={changing} onClick={() => { setOpen(false); trigger.current?.focus(); onRemove(); }} aria-label={`Remove ${entry.name} shortcut`}><Trash2 size={14} />Remove shortcut</button>}
+          </FilterMenu>}
         </div>
         {launch}
       </div>
     </div>
-    <ToolbarDrawer id={`portal-remove-${entry.id}`} open={removing} className="portal-remove-drawer">
-      <div className="portal-remove-confirm" role="group" aria-label={`Remove ${entry.name} shortcut`}><p>Remove this shortcut?</p><button disabled={changing} onClick={onKeep}>Keep</button><button disabled={changing} onClick={onConfirmRemove}>Remove</button></div>
-    </ToolbarDrawer>
+    {removing && <div className="portal-remove-confirm" role="group" aria-label={`Remove ${entry.name} shortcut`}><p>Remove this shortcut?</p><button disabled={changing} onClick={onKeep}>Keep</button><button disabled={changing} onClick={onConfirmRemove}>Remove</button></div>}
   </article>;
 }
 

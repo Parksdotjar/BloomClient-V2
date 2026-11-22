@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, LoaderCircle, Plus, RotateCw, Search, Shirt } from "lucide-react";
+import { ArrowRight, LoaderCircle, Plus, RotateCw, Search, Shirt } from "lucide-react";
 import { invoke } from "../services/invoke";
 import { CapeDisplay } from "./CapeDisplay";
 import type { CapeAnimation } from "./CapePreview";
@@ -56,7 +56,7 @@ export function CosmeticsShop({ accountId, motion, onAdded, onOpenLocker, onNoti
     aria-label={cape.owned ? `Open ${cape.name} in Locker` : `Add ${cape.name} to Locker`}
     disabled={!!pending || (!cape.owned && (!accountId || !!catalog?.offline))}
     onClick={() => cape.owned ? onOpenLocker(cape.id) : void add(cape)}>
-    {pending === cape.id ? <LoaderCircle size={17} className="shop-spinner" /> : cape.owned ? <Check size={17} /> : <Plus size={17} />}
+    {pending === cape.id ? <LoaderCircle size={17} className="shop-spinner" /> : cape.owned ? null : <Plus size={17} />}
     <span>{pending === cape.id ? "Adding…" : cape.owned ? "In Locker" : !accountId ? "Sign in to add" : "Add to Locker"}</span>
     {featured && cape.owned && <ArrowRight size={16} />}
   </button>;
@@ -70,7 +70,7 @@ export function CosmeticsShop({ accountId, motion, onAdded, onOpenLocker, onNoti
         <div className="shop-feature-art"><CapeDisplay texture={featured.textureUrl} animation={featured.animation} motion={motion} size="detail" /></div>
       </article>}
       <section className="shop-collection" aria-label="Available cloaks">
-        <header className="shop-collection-heading"><div><h2>All cloaks</h2><span>Free to collect</span></div><div className="shop-collection-tools"><label className="shop-search"><Search size={16} /><input aria-label="Search Shop" placeholder="Find a cloak…" value={query} onChange={event => setQuery(event.target.value)} /></label><button className="locker-refresh" aria-label="Refresh Shop" disabled={refreshing || !!pending} onClick={() => void refresh()}><RotateCw size={16} className={refreshing ? "shop-spinner" : ""} /></button></div></header>
+        <header className="shop-collection-heading"><div><h2>All cloaks</h2></div><div className="shop-collection-tools"><label className="shop-search"><Search size={16} /><input aria-label="Search Shop" placeholder="Find a cloak…" value={query} onChange={event => setQuery(event.target.value)} /></label><button className="locker-refresh" aria-label="Refresh Shop" disabled={refreshing || !!pending} onClick={() => void refresh()}><RotateCw size={16} className={refreshing ? "shop-spinner" : ""} /></button></div></header>
         {items.length ? <div className="shop-grid">{items.map(cape => <article key={cape.id} className="shop-card">
           <div className="shop-card-art"><CapeDisplay texture={cape.textureUrl} animation={cape.animation} motion={motion} /></div>
           <div className="shop-card-details"><h3 title={cape.name}>{cape.name}</h3>{action(cape)}</div>

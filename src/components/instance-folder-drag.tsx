@@ -11,7 +11,7 @@ export function useInstanceFolderDrag(onDrop: (item: FolderDragItem, target: str
   const latest = useRef(onDrop); latest.current = onDrop;
   useEffect(() => () => cancel.current?.(), []);
   const start = (event: ReactPointerEvent, value: FolderDragItem) => {
-    if (disabled || event.button !== 0 || !event.isPrimary || (event.target as Element).closest("button,input,select,textarea,a")) return;
+    if (disabled || event.button !== 0 || !event.isPrimary || (event.target as Element).closest("button:not([data-folder-drag-handle]),input,select,textarea,a")) return;
     cancel.current?.();
     const row = event.currentTarget as HTMLElement;
     const root = row.closest<HTMLElement>(".instance-folders-grid")!;
@@ -44,9 +44,10 @@ export function useInstanceFolderDrag(onDrop: (item: FolderDragItem, target: str
         const label = ghost.current.querySelector("small");
         if (label) label.textContent = target?.dataset.folderDropLabel || "Drop onto a folder or another instance";
       }
-      const bounds = root.getBoundingClientRect();
+      const scroller = root.closest<HTMLElement>(".desktop-context-body") ?? root;
+      const bounds = scroller.getBoundingClientRect();
       if (x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom) {
-        root.scrollTop += y < bounds.top + 36 ? (y - bounds.top - 36) / 5 : y > bounds.bottom - 36 ? (y - bounds.bottom + 36) / 5 : 0;
+        scroller.scrollTop += y < bounds.top + 36 ? (y - bounds.top - 36) / 5 : y > bounds.bottom - 36 ? (y - bounds.bottom + 36) / 5 : 0;
       }
       frame = requestAnimationFrame(paint);
     };

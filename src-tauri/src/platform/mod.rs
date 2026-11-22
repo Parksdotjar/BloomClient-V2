@@ -14,17 +14,6 @@ mod unix;
 #[cfg(not(any(windows, target_os = "macos")))]
 pub use unix::*;
 
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Hardware {
-    pub cpu: String,
-    pub cores: u32,
-    pub threads: u32,
-    pub ram_bytes: u64,
-    pub gpus: Vec<String>,
-    pub refresh_rate: Option<u32>,
-}
-
 pub fn default_game_alias(directory: &str) -> Result<Option<PathBuf>, String> {
     let normalized = directory.replace('\\', "/");
     if normalized == ".minecraft" {
@@ -115,7 +104,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn platform_mac_locations_and_hardware_are_native() {
+    fn platform_mac_locations_are_native() {
         let home = PathBuf::from(std::env::var_os("HOME").unwrap());
         assert_eq!(
             data_directory().unwrap(),
@@ -131,8 +120,5 @@ mod tests {
             java_library_stamp(Path::new("/jdk/Contents/Home/bin/java")),
             Path::new("/jdk/Contents/Home/lib/server/libjvm.dylib")
         );
-        let hardware = detect_hardware().unwrap();
-        assert!(hardware.ram_bytes > 0 && hardware.cores > 0 && hardware.threads > 0);
-        assert!(!hardware.cpu.is_empty());
     }
 }

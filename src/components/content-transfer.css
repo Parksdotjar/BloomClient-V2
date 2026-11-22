@@ -3,8 +3,7 @@
 :root[data-content-transfer] * { cursor: grabbing !important; user-select: none !important; }
 :root[data-content-transfer] .sidebar-instance-play { opacity: 0; pointer-events: none; }
 :root[data-content-transfer] .instance-list { overflow-y: auto; min-height: 80px; max-height: 38vh; flex-shrink: 1; }
-.app-shell .sidebar .sidebar-instance[data-content-drop-active],
-.app-shell[data-custom-background="on"] .sidebar .sidebar-instance[data-content-drop-active] { background: var(--theme-raised, #202223) !important; transition: background 160ms ease; }
+.app-shell .sidebar .sidebar-instance[data-content-drop-active] { background: var(--theme-raised, #202223) !important; transition: background 160ms ease; }
 .content-transfer-ghost { position: fixed; top: 0; left: 0; z-index: 15000; pointer-events: none; width: 256px; padding: 13px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); color: var(--theme-ink, #f1f4f1); opacity: .65; box-shadow: 0 8px 28px var(--theme-shadow, #0006); transform: translate3d(-1000px,-1000px,0); transition: transform 85ms cubic-bezier(.2,.7,.3,1); animation: content-transfer-enter 160ms ease both; }
 .content-transfer-ghost > span:nth-child(2), .content-transfer-file > span:last-child { min-width: 0; flex: 1; }
 .content-transfer-ghost b, .content-transfer-ghost small, .content-transfer-file b, .content-transfer-file small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

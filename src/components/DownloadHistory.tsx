@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Trash2 } from "lucide-react";
+import { Check } from "lucide-react";
 import "./download-feedback.css";
 
 function HistoryRow({ id, leaving, delay, motion, onExited, children }: {
@@ -53,8 +53,8 @@ function HistoryRow({ id, leaving, delay, motion, onExited, children }: {
     data-history-id={id} aria-hidden={leaving || undefined} inert={leaving}>{children}</div>;
 }
 
-export function DownloadHistory<T extends { id: string }>({ items, motion, onClear, renderItem }: {
-  items: T[]; motion: boolean; onClear: () => void; renderItem: (item: T) => ReactNode;
+export function DownloadHistory<T extends { id: string }>({ items, filtered = false, motion, onClear, renderItem }: {
+  items: T[]; filtered?: boolean; motion: boolean; onClear: () => void; renderItem: (item: T) => ReactNode;
 }) {
   // Exiting rows are presentation only. The parent remains the source of saved history.
   const [exiting, setExiting] = useState<Array<{ item: T; delay: number }>>([]);
@@ -80,13 +80,13 @@ export function DownloadHistory<T extends { id: string }>({ items, motion, onCle
   ];
   return <>
     <section className="download-section completed-section" data-motion={motion ? "on" : "off"}>
-      <h2>Completed</h2>
+      <form id="clear-download-history" onSubmit={event => { event.preventDefault(); clear(); }} />
       <div className="download-history-list">
         {rows.length ? rows.map(entry => <HistoryRow key={entry.item.id} id={entry.item.id} leaving={entry.leaving}
           delay={entry.delay} motion={motion} onExited={finish}>{renderItem(entry.item)}</HistoryRow>)
-          : <div className="downloads-empty compact download-history-empty" role="status"><Check size={18} /><div><b>No completed downloads yet</b><span>Finished installations will be saved here.</span></div></div>}
+          : <div className="downloads-empty compact download-history-empty" role="status"><Check size={18} /><div><b>{filtered ? "No matching completed downloads" : "No completed downloads yet"}</b></div></div>}
       </div>
     </section>
-    <footer className="downloads-footer"><span>Downloads are saved inside each instance directory.</span><button disabled={!items.length} onClick={clear}><Trash2 size={16} />Clear Completed</button></footer>
+
   </>;
 }

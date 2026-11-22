@@ -5,7 +5,7 @@ import "./connected-toolbar.css";
 export function ToolbarDrawer({ id, open, children, className = "" }: {
   id: string; open: boolean; children: ReactNode; className?: string;
 }) {
-  return <div id={id} className={`connected-toolbar-drawer ${className}`} data-open={open} inert={!open} aria-hidden={!open}>
+  return <div id={id} className={`connected-toolbar-drawer ${className}`} data-open={open} hidden={!open} inert={!open} aria-hidden={!open}>
     <div className="toolbar-drawer-clip"><div className="toolbar-drawer-body">{children}</div></div>
   </div>;
 }

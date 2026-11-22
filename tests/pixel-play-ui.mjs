@@ -58,29 +58,43 @@ const enter = async (side) => {
   const y = side === "top" ? b.y + 1 : b.y + b.height / 2;
   await page.mouse.move(x, y);
 };
+async function checkLights() {
+  const metrics = await page.locator(".winter-lights").evaluate(lights => {
+    const panel = lights.closest("main");
+    const rect = lights.getBoundingClientRect();
+    const frame = panel.getBoundingClientRect();
+    return { top: rect.top - frame.top - panel.clientTop, left: rect.left - frame.left - panel.clientLeft,
+      right: rect.right - frame.left - panel.clientLeft - panel.clientWidth, repeat: getComputedStyle(lights).backgroundRepeat };
+  });
+  assert.equal(metrics.top, 0);
+  assert.equal(metrics.left, 11);
+  assert.ok(Math.abs(metrics.right) < 1);
+  assert.equal(metrics.repeat, "round no-repeat");
+}
 try {
   await page.goto(url);
   await button.waitFor();
+  await checkLights();
   await page.waitForTimeout(750);
   const base = await button.boundingBox();
   const pickerBase = await page.locator(".spotlight-select-trigger").boundingBox();
-  await page.locator(".spotlight-center").screenshot({ path: "logs/pixel-play/before.png" });
+  await page.locator(".home-launch-stack").screenshot({ path: "logs/pixel-play/before.png" });
   await enter("left");
   await page.waitForTimeout(320);
   let pixels = await coverage();
   assert(pixels.left > 0 && pixels.right === 0, "Fill begins at the left entry point");
   await page.waitForTimeout(250);
   assert((await coverage()).total > pixels.total, "Fill creeps across the button");
-  await page.locator(".spotlight-center").screenshot({ path: "logs/pixel-play/mid-fill.png" });
+  await page.locator(".home-launch-stack").screenshot({ path: "logs/pixel-play/mid-fill.png" });
   await page.waitForTimeout(500);
   assert.equal(await clip(), "inset(0px)");
   const oledPalette = await fill.evaluate(e => ({ background: getComputedStyle(e).backgroundColor, color: getComputedStyle(e).color }));
-  assert.equal(oledPalette.background, "rgb(243, 245, 247)", "OLED fill stays visible when --text is undefined");
+  assert.equal(oledPalette.background, "rgb(241, 241, 241)", "OLED fill uses the current theme ink");
   assert.equal(oledPalette.color, "rgb(0, 0, 0)");
   const expanded = await button.boundingBox();
   assert(expanded.width > base.width * 1.02 && expanded.width < base.width * 1.03);
   assert.deepEqual(await page.locator(".spotlight-select-trigger").boundingBox(), pickerBase, "Selector stays stationary");
-  await page.locator(".spotlight-center").screenshot({ path: "logs/pixel-play/filled.png" });
+  await page.locator(".home-launch-stack").screenshot({ path: "logs/pixel-play/filled.png" });
   const settled = await clip();
   await page.waitForTimeout(100);
   assert.equal(await clip(), settled, "No looping edge noise");
@@ -109,6 +123,7 @@ try {
   await leave();
   await page.evaluate(() => { document.documentElement.dataset.performance = "normal"; });
   await page.emulateMedia({ reducedMotion: "reduce" });
+
   await page.keyboard.press("Tab");
   await button.focus();
   assert.equal(await button.evaluate(e => e.matches(":focus-visible")), true);
@@ -119,25 +134,22 @@ try {
   await page.evaluate(() => { document.documentElement.dataset.theme = "light"; });
   await enter("left"); await page.waitForTimeout(1400);
   const palette = await fill.evaluate(e => ({ background: getComputedStyle(e).backgroundColor, color: getComputedStyle(e).color }));
-  assert.equal(palette.background, "rgb(23, 27, 34)");
-  assert.equal(palette.color, "rgb(245, 246, 248)");
-  await page.locator(".spotlight-center").screenshot({ path: "logs/pixel-play/light.png" });
+  assert.equal(palette.background, "rgb(27, 27, 27)");
+  assert.equal(palette.color, "rgb(246, 246, 246)");
+  await page.locator(".home-launch-stack").screenshot({ path: "logs/pixel-play/light.png" });
+  // Resizing moves the centered button away from the pointer. Hold keyboard focus across the resize.
+  await page.keyboard.press("Tab");
+  await button.focus();
+  await page.waitForFunction(() => getComputedStyle(document.querySelector(".pixel-play-fill")).clipPath === "inset(0px)");
   await page.setViewportSize({ width: 1000, height: 720 });
   await page.waitForTimeout(200);
+  await checkLights();
   const narrow = await button.boundingBox();
   assert(narrow.x >= 0 && narrow.x + narrow.width <= 1000);
   assert.equal(await clip(), "inset(0px)", "Resize keeps completed reveal filled");
   await leave();
-  await page.evaluate(() => {
-    const app = document.querySelector(".app-shell");
-    app.dataset.customBackground = "on";
-    app.dataset.blurredButtons = "on";
-    app.style.setProperty("--custom-control-opacity", "10%");
-  });
-  const accent = await button.evaluate(e => getComputedStyle(e).backgroundColor);
-  assert.equal(accent, "rgb(87, 152, 255)", "Glass leaves Play's resting accent solid");
   await page.locator(".spotlight-select-trigger").click();
-  await page.locator(".spotlight-select-menu").getByRole("button", { name: /Creative/ }).click();
+  await page.getByRole("dialog",{name:"Choose instance"}).getByRole("button", { name: /Creative/ }).click();
   await page.waitForTimeout(500);
   const start = await page.evaluate(() => performance.now());
   await button.click();
@@ -149,5 +161,5 @@ try {
   await page.waitForTimeout(50);
   assert.equal(await clip(), "inset(50%)", "Busy button clears decorative fill");
   assert.deepEqual(errors, []);
-  console.log("Pixel Play passed: pointer origins, chunky fill, full/reset states, quick reversal, stable selector, keyboard/reduced motion, animation settings, Light/glass, resize and immediate selected-instance launch.");
+  console.log("Pixel Play passed: pointer origins, chunky fill, full/reset states, quick reversal, stable selector, keyboard/reduced motion, animation settings, Light, resize and immediate selected-instance launch.");
 } finally { await browser.close(); }

@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
-  WandSparkles,
 } from "lucide-react";
 import "./utilities.css";
 import { InfoTip } from "./InfoTip";
@@ -62,7 +61,7 @@ type GlobalFileSyncReport = {
 };
 
 type UtilityKey = "options" | "servers" | "voicechat" | "resourcepacks" | "shaderpacks";
-type SelectControlProps = { value: string; options: string[]; onChange: (value: string) => void };
+type SelectControlProps = { ariaLabel?: string; value: string; options: string[]; onChange: (value: string) => void };
 type ModpackShare = { code: string; url: string; expiresAt: string };
 export type ModpackShareImport = { instanceId: string; missingMods: string[] };
 type PackChannel = { code: string; url: string; revision: number; editorCount: number };
@@ -91,16 +90,15 @@ function UtilityToggle({ checked, onChange, label }: { checked: boolean; onChang
 export function UtilitiesPage({
   instances,
   SelectControl,
-  onOpenAutoTune,
   onMessage,
 }: {
   instances: UtilityInstance[];
   SelectControl: ComponentType<SelectControlProps>;
-  onOpenAutoTune: () => void;
   onMessage: (message: string, kind?: "notification" | "error") => void;
 }) {
   const [settings, setSettings] = useState<GlobalFileSyncSettings>(defaultSettings);
-  const [activeUtility, setActiveUtility] = useState<"sync" | null>(null);
+  const [report, setReport] = useState<GlobalFileSyncReport | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -129,11 +127,12 @@ export function UtilitiesPage({
   const instanceOptions = useMemo(() => ["Off — don’t copy", ...instanceChoices.map(instance => instance.label)], [instanceChoices]);
 
   const load = async () => {
-    setLoading(true);
+    setLoading(true); setLoadError("");
     try {
       const next = await invoke<GlobalFileSyncState>("get_global_file_sync_state");
       setSettings(next.settings);
     } catch (error) {
+      setLoadError(String(error));
       onMessage(String(error), "error");
     } finally {
       setLoading(false);
@@ -169,6 +168,7 @@ export function UtilitiesPage({
     setApplying(true);
     try {
       const report = await invoke<GlobalFileSyncReport>("apply_global_file_sync", { settings });
+      setReport(report);
       await load();
       setConfirming(false);
       const parts = [
@@ -189,44 +189,20 @@ export function UtilitiesPage({
     const value = sourceId ? labels.get(sourceId) ?? "Off — don’t copy" : "Off — don’t copy";
     return <div className="utility-setting-stack">
       <label><span>Copy from</span></label>
-      <SelectControl value={value} options={instanceOptions} onChange={label => chooseSource(key, label)} />
+      <SelectControl ariaLabel={sourceLabels[key] + " source"} value={value} options={instanceOptions} onChange={label => chooseSource(key, label)} />
       {key !== "voicechat" && <div className="utility-copy-destination"><span>Copy to</span><b>All other instances</b></div>}
     </div>;
   };
 
-  if (!activeUtility) return <div className="utilities-page">
-    <header className="utilities-heading">
-      <div><h1>Utilities</h1></div>
-      <button className="utilities-refresh" onClick={() => void load()} disabled={loading} aria-label="Refresh Utilities" title="Refresh Utilities"><RefreshCw size={17} /></button>
+  const sourceLabels = {options: "Game settings", servers: "Saved servers", voicechat: "Voice chat"};
+  return <div className="sync-workspace">
+    <header className="sync-heading"><h1>{confirming ? "Review sync" : report ? "Sync results" : "Global File Sync"}</h1>
+      {!confirming && !report && <button disabled={loading || saving} onClick={() => void load()} aria-label="Refresh Global File Sync" title="Refresh"><RefreshCw size={17}/></button>}
     </header>
-    <section className="utilities-workspace utilities-library">
-      <div className="utilities-grid">
-        <article className="utility-card utility-product-card">
-          <div className="utility-card-main">
-            <span className="utility-card-icon"><WandSparkles size={48} strokeWidth={1.8} /></span>
-            <h3>AutoTune</h3>
-          </div>
-          <div className="utility-card-footer"><button onClick={onOpenAutoTune}>Configure<ChevronRight size={15} /></button></div>
-        </article>
-        <article className="utility-card utility-product-card">
-          <div className="utility-card-main">
-            <span className="utility-card-icon"><RefreshCw size={48} strokeWidth={1.8} /></span>
-            <h3>Sync Across Instances</h3>
-          </div>
-          <div className="utility-card-footer"><button onClick={() => { setActiveUtility("sync"); setConfirming(false); }}>Configure<ChevronRight size={15} /></button></div>
-        </article>
-      </div>
-    </section>
-  </div>;
-
-  return <div className="utilities-page utility-detail-page">
-    <header className="utility-detail-heading">
-      <div className="utility-detail-title"><span><RefreshCw size={25} /></span><div><h1>Sync Across Instances</h1><InfoTip label="instance sync">Copy settings from one Minecraft instance to others, or let all instances use the same pack folders. Choose what to share, then select Sync now. Existing files are backed up before replacement.</InfoTip></div></div>
-      <button className="utility-back" onClick={() => { setActiveUtility(null); setConfirming(false); }} aria-label="Back to Utilities" title="Back to Utilities"><ArrowLeft size={19} /></button>
-    </header>
-
-    <section className="utility-config-panel utility-detail-panel">
-      <div className="utility-config-body">
+    {loadError && <div role="alert">{loadError} <button onClick={() => void load()}>Retry</button></div>}
+    {loading && !applying && <p role="status">Loading sync setup…</p>}
+    {!confirming && !report && !loading && !loadError && <section>
+      <fieldset disabled={saving} className="sync-rules">
         <UtilityRule Icon={FileCog} title="Game Settings" help="Copy Minecraft settings, including controls, video, and sound, from the selected instance to every other instance. This replaces their game settings. Choose Off to leave them alone.">
           {renderSource("options")}
         </UtilityRule>
@@ -252,19 +228,33 @@ export function UtilitiesPage({
         <UtilityRule Icon={Sparkles} title="Shared Shader Packs" help="Connect every instance to one shader-pack folder. Each instance still needs a compatible shader mod and chooses its own active shader. Changes to the shared files affect all connected instances.">
           <SharedFolderConfiguration checked={settings.shareShaderPacks} onChange={checked => setSettings(current => ({ ...current, shareShaderPacks: checked }))} onOpen={() => void invoke("open_global_sync_folder", { category: "shaderpacks" }).catch(error => onMessage(String(error), "error"))} />
         </UtilityRule>
-      </div>
-      <footer>
+      </fieldset>
+      <footer className="sync-actions">
         <InfoTip label="saving and syncing">Save setup remembers your choices without changing game files or the active sync rules. Sync now applies and activates these choices. Changed files are backed up first.</InfoTip>
-        <button className="utility-save" disabled={saving || applying} onClick={() => void save()}><Save size={15} />{saving ? "Saving…" : "Save setup"}</button>
-        <button className="utility-apply" disabled={saving || applying || !instances.length} onClick={() => setConfirming(true)}><RefreshCw size={15} />Sync now</button>
+        <button className="sync-save" disabled={saving || applying} onClick={() => void save()}><Save size={15} />{saving ? "Saving…" : "Save setup"}</button>
+        <button className="sync-apply" disabled={saving || applying || !instances.length} onClick={() => setConfirming(true)}><RefreshCw size={15} />Sync now</button>
       </footer>
-      {confirming && <div className="utility-confirmation">
-        <span><ShieldCheck size={22} /></span>
-        <div><b>Apply Global File Sync?</b><p>Changed files are backed up first.</p></div>
-        <button onClick={() => setConfirming(false)} disabled={applying}>Cancel</button>
-        <button onClick={() => void apply()} disabled={applying}>{applying ? "Syncing…" : "Apply sync"}</button>
-      </div>}
-    </section>
+    </section>}
+    {confirming && <section className="sync-review" aria-label="Confirm Global File Sync">
+      <p>Changed files are backed up before replacement.</p>
+      <dl>{(["options", "servers", "voicechat"] as const).map(key => {
+        const id = settings[sourceKeys[key]] as string | null;
+        const targets = instanceChoices.filter(item => item.id !== id && (key !== "voicechat" || settings.voiceChatTargets.includes(item.id)));
+        return <div key={key}><dt>{sourceLabels[key]}</dt><dd>{id && labels.has(id)
+          ? <>{labels.get(id)} → {targets.map(item => item.label).join(", ") || "No destinations"}</> : "Off"}</dd></div>;
+      })}
+      <div><dt>Resource pack folders</dt><dd>{settings.shareResourcePacks ? "Share across all instances" : "Use individual folders"}</dd></div>
+      <div><dt>Shader pack folders</dt><dd>{settings.shareShaderPacks ? "Share across all instances" : "Use individual folders"}</dd></div></dl>
+      {applying && <p role="status">Syncing files and updating folder connections…</p>}
+      <footer className="sync-actions"><button onClick={() => setConfirming(false)} disabled={applying}>Cancel</button>
+      <button onClick={() => void apply()} disabled={applying}>{applying ? "Syncing…" : "Apply sync"}</button></footer>
+    </section>}
+    {report && !confirming && <section className="sync-review" aria-label="Global File Sync results">
+      <dl>{[["Files copied",report.changedFiles],["Files already matched",report.unchangedFiles],["Folders connected",report.linkedFolders],["Folders disconnected",report.detachedFolders]].map(([label,value]) =>
+        <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+        {report.backupPath && <div><dt>Backup location</dt><dd>{report.backupPath}</dd></div>}
+      </dl><button onClick={() => setReport(null)}>Back to setup</button>
+    </section>}
   </div>;
 }
 

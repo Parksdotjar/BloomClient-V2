@@ -26,8 +26,8 @@
 .onboarding-welcome { gap: 20px; }
 .onboarding-welcome .onboarding-primary { margin-top: 5px; }
 
-.onboarding-primary { min-width: 245px; min-height: 50px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 28px; padding: 0 19px; border: 0; border-radius: 12px; color: var(--theme-on-accent, #fff); background: var(--accent); font: 800 13px/1 "Segoe UI", sans-serif; box-shadow: 0 14px 34px color-mix(in srgb, var(--accent) 18%, transparent); }
-.onboarding-primary.microsoft { width: 286px; min-height: 58px; display: flex; justify-content: center; gap: 14px; padding: 0 22px; color: var(--theme-on-accent, #050505); background: var(--theme-surface, #fff); font-size: 15px; box-shadow: 0 14px 34px var(--theme-shadow, #000a); }
+.onboarding-primary { min-width: 245px; min-height: 50px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 28px; padding: 0 19px; border: 0; border-radius: 12px; color: var(--theme-on-accent, #fff); background: var(--accent); font: 800 13px/1 var(--interface-font, "Segoe UI"), sans-serif; box-shadow: 0 14px 34px color-mix(in srgb, var(--accent) 18%, transparent); }
+.onboarding-primary.microsoft { width: 286px; min-height: 58px; display: flex; justify-content: center; gap: 14px; padding: 0 22px; color: var(--theme-on-accent, #050505); background: var(--bright-control, #ffffff); font-size: 15px; box-shadow: 0 14px 34px var(--theme-shadow, #000a); }
 .onboarding-primary.microsoft > span { width: 30px; height: 30px; display: grid; flex: 0 0 30px; place-items: center; border-radius: 0; background: transparent; }
 .onboarding-primary.microsoft img { width: 30px; height: 30px; }
 .onboarding-primary:hover { filter: brightness(1.09); }
@@ -44,9 +44,9 @@
 .onboarding-code-card { position: relative; z-index: 2; width: 100%; min-height: 0; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 16px 22px; overflow: hidden; border: 2px solid var(--theme-edge, #39424c); border-radius: 18px; color: var(--theme-ink, #fff); background: var(--theme-surface, #0d0f11); box-shadow: 0 18px 34px var(--theme-shadow, #000c); transition: border-radius 420ms cubic-bezier(.2,.8,.2,1), border-color 260ms ease, background-color 260ms ease; }
 .onboarding-code-card:hover { background: var(--theme-inset, #111418); }
 .onboarding-code-card:disabled { opacity: 1; cursor: default; }
-.onboarding-code-card small { color: var(--theme-muted-ink, #8d97a3); font: 700 10px/1 "Segoe UI", sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.onboarding-code-card small { color: var(--theme-muted-ink, #8d97a3); font: 700 10px/1 var(--interface-font, "Segoe UI"), sans-serif; letter-spacing: .12em; text-transform: uppercase; }
 .onboarding-code-card strong { font: 850 38px/1.1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .12em; }
-.onboarding-code-card span { display: flex; align-items: center; gap: 7px; color: var(--theme-ink, #f5f7f9); font: 750 11px/1 "Segoe UI", sans-serif; }
+.onboarding-code-card span { display: flex; align-items: center; gap: 7px; color: var(--theme-ink, #f5f7f9); font: 750 11px/1 var(--interface-font, "Segoe UI"), sans-serif; }
 .onboarding-code-stack.copied .onboarding-code-card { border-color: var(--theme-success-ink, #30d978); border-radius: 18px 18px 0 0; background: var(--theme-success-surface, #0d4a28); }
 .onboarding-code-stack.copied .onboarding-code-card strong { font-size: 24px; }
 
@@ -56,15 +56,15 @@
 .onboarding-browser-reveal button:hover { background: var(--theme-surface, #0d0f11); }
 .onboarding-browser-reveal span { display: grid; gap: 5px; }
 .onboarding-browser-reveal b { font-size: 12px; }
-.onboarding-browser-reveal small { color: var(--theme-muted-ink, #7f8995); font: 600 10px/1 "Segoe UI", sans-serif; }
+.onboarding-browser-reveal small { color: var(--theme-muted-ink, #7f8995); font: 600 10px/1 var(--interface-font, "Segoe UI"), sans-serif; }
 
-.onboarding-waiting { display: flex; align-items: center; gap: 7px; margin-top: -4px; color: var(--theme-muted-ink, #7e8792); font: 650 10px/1 "Segoe UI", sans-serif; }
-.onboarding-error { max-width: 410px; margin: 14px 0 -3px; color: var(--theme-danger-ink, #f28f98); font: 600 11px/1.45 "Segoe UI", sans-serif; }
+.onboarding-waiting { display: flex; align-items: center; gap: 7px; margin-top: -4px; color: var(--theme-muted-ink, #7e8792); font: 650 10px/1 var(--interface-font, "Segoe UI"), sans-serif; }
+.onboarding-error { max-width: 410px; margin: 14px 0 -3px; color: var(--theme-danger-ink, #f28f98); font: 600 11px/1.45 var(--interface-font, "Segoe UI"), sans-serif; }
 
 .onboarding-success { gap: 12px; }
-.onboarding-success p { margin: 0; color: var(--theme-muted-ink, #a4adb7); font: 750 13px/1 "Segoe UI", sans-serif; }
+.onboarding-success p { margin: 0; color: var(--theme-muted-ink, #a4adb7); font: 750 13px/1 var(--interface-font, "Segoe UI"), sans-serif; }
 .onboarding-success .onboarding-primary { margin-top: 13px; }
-.onboarding-failed p { max-width: 420px; margin: 16px 0 0; color: var(--theme-muted-ink, #a3acb6); font: 550 12px/1.55 "Segoe UI", sans-serif; }
+.onboarding-failed p { max-width: 420px; margin: 16px 0 0; color: var(--theme-muted-ink, #a3acb6); font: 550 12px/1.55 var(--interface-font, "Segoe UI"), sans-serif; }
 
 @keyframes onboarding-spin { to { transform: rotate(360deg); } }
 @keyframes onboarding-breathe { 50% { opacity: .62; } }

@@ -3,6 +3,9 @@ fn main() {
 
     println!("cargo:rerun-if-env-changed=BLOOM_BACKEND_URL");
     println!("cargo:rerun-if-env-changed=BLOOM_COSMETICS_ENABLED");
+    println!("cargo:rerun-if-changed=icons/icon.ico");
+    println!("cargo:rerun-if-changed=icons/icon.png");
+    println!("cargo:rerun-if-changed=icons/icon.icns");
     let enabled = std::env::var("BLOOM_COSMETICS_ENABLED").as_deref() != Ok("false");
     let release = std::env::var("PROFILE").as_deref() == Ok("release");
     let mut code = String::from("const BUNDLES: &[(&str, &str, &[u8], &str)] = &[\n");

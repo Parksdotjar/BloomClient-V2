@@ -173,7 +173,7 @@ pub fn apply_cached_catalog_artwork(items: &mut [super::CatalogMod]) {
     }
 }
 
-fn trusted_catalog_artwork_url(value: &str) -> bool {
+pub(super) fn trusted_catalog_artwork_url(value: &str) -> bool {
     url::Url::parse(value)
         .ok()
         .filter(|url| url.scheme() == "https")

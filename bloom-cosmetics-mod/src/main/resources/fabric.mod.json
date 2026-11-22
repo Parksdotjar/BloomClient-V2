@@ -7,7 +7,7 @@
   "description": "Delight capes, nametag badges, and multiplayer emotes. Press B for the emote wheel. Client-side, for Fabric Minecraft ${minecraft}.",
   "authors": ["Delight Client"],
   "contact": {
-    "homepage": "https://bloomclient.org",
+    "homepage": "https://delightproductions.org",
     "sources": "https://github.com/Parksdotjar/BloomClient-V2"
   },
   "license": "MIT",

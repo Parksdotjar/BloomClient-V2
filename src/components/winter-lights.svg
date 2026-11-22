@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="276" height="54" viewBox="0 0 276 54" preserveAspectRatio="none">
+  <defs>
+    <radialGradient id="bulb-0">
+      <stop stop-color="#ffc773" stop-opacity=".54"/><stop offset=".42" stop-color="#ffc773" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#ffc773" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bulb-1">
+      <stop stop-color="#ed8173" stop-opacity=".54"/><stop offset=".42" stop-color="#ed8173" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#ed8173" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bulb-2">
+      <stop stop-color="#8acba8" stop-opacity=".54"/><stop offset=".42" stop-color="#8acba8" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#8acba8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bulb-3">
+      <stop stop-color="#f6cc8e" stop-opacity=".54"/><stop offset=".42" stop-color="#f6cc8e" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#f6cc8e" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bulb-4">
+      <stop stop-color="#90badf" stop-opacity=".54"/><stop offset=".42" stop-color="#90badf" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#90badf" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bulb-5">
+      <stop stop-color="#e79787" stop-opacity=".54"/><stop offset=".42" stop-color="#e79787" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#e79787" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path d="M0 0 Q138 48 276 0" fill="none" stroke="#48544d" stroke-width="2"/>
+  <g transform="translate(23 7.333) rotate(-12.5)">
+    <circle cy="11" r="16" fill="url(#bulb-0)"/>
+    <path d="M-2 0h4v5h-4z" fill="#51594e"/>
+    <path d="M-2 5h4v2h1v6H2v2H0v-1h-2v-2h-1V7h1z" fill="#ffc773"/>
+    <path d="M-1 7h1.5v4H-1z" fill="#fff1d3" opacity=".8"/>
+  </g>
+  <g transform="translate(69 18.000) rotate(-7.5)">
+    <circle cy="11" r="16" fill="url(#bulb-1)"/>
+    <path d="M-2 0h4v5h-4z" fill="#51594e"/>
+    <path d="M-2 5h4v2h1v6H2v2H0v-1h-2v-2h-1V7h1z" fill="#ed8173"/>
+    <path d="M-1 7h1.5v4H-1z" fill="#fff1d3" opacity=".8"/>
+  </g>
+  <g transform="translate(115 23.333) rotate(-2.5)">
+    <circle cy="11" r="16" fill="url(#bulb-2)"/>
+    <path d="M-2 0h4v5h-4z" fill="#51594e"/>
+    <path d="M-2 5h4v2h1v6H2v2H0v-1h-2v-2h-1V7h1z" fill="#8acba8"/>
+    <path d="M-1 7h1.5v4H-1z" fill="#fff1d3" opacity=".8"/>
+  </g>
+  <g transform="translate(161 23.333) rotate(2.5)">
+    <circle cy="11" r="16" fill="url(#bulb-3)"/>
+    <path d="M-2 0h4v5h-4z" fill="#51594e"/>
+    <path d="M-2 5h4v2h1v6H2v2H0v-1h-2v-2h-1V7h1z" fill="#f6cc8e"/>
+    <path d="M-1 7h1.5v4H-1z" fill="#fff1d3" opacity=".8"/>
+  </g>
+  <g transform="translate(207 18.000) rotate(7.5)">
+    <circle cy="11" r="16" fill="url(#bulb-4)"/>
+    <path d="M-2 0h4v5h-4z" fill="#51594e"/>
+    <path d="M-2 5h4v2h1v6H2v2H0v-1h-2v-2h-1V7h1z" fill="#90badf"/>
+    <path d="M-1 7h1.5v4H-1z" fill="#fff1d3" opacity=".8"/>
+  </g>
+  <g transform="translate(253 7.333) rotate(12.5)">
+    <circle cy="11" r="16" fill="url(#bulb-5)"/>
+    <path d="M-2 0h4v5h-4z" fill="#51594e"/>
+    <path d="M-2 5h4v2h1v6H2v2H0v-1h-2v-2h-1V7h1z" fill="#e79787"/>
+    <path d="M-1 7h1.5v4H-1z" fill="#fff1d3" opacity=".8"/>
+  </g>
+</svg>

@@ -1,5 +1,5 @@
 .appearance-presets { min-width: 0; }
-.appearance-presets .appearance-preset-row { border-bottom: 1px solid var(--line); }
+.appearance-presets > .setting-row { border-bottom: 1px solid var(--line); }
 .appearance-preset-menu .appearance-preset-new { display: flex; align-items: center; gap: 8px; padding: 11px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; border-radius: 5px 5px 0 0; }
 .appearance-preset-option { display: flex; align-items: center; min-width: 0; border-radius: 6px; }
 .appearance-preset-option.selected { background: var(--dropdown-selected); }

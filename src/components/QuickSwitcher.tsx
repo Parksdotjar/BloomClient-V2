@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { ShortcutContext, shortcutMatches } from "../services/shortcuts";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Search, X, Layers3, Settings, ArrowUpRight } from "lucide-react";
 import "./library-navigation.css";
 export type SwitchTarget = {
@@ -12,6 +13,7 @@ export type SwitchTarget = {
 export function QuickSwitcher({ targets }: {
     targets: SwitchTarget[];
 }) {
+    const bindings = useContext(ShortcutContext);
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
     const [selected, setSelected] = useState(0);
@@ -23,7 +25,7 @@ export function QuickSwitcher({ targets }: {
     const close = () => { setOpen(false); dialog.current?.close(); previous.current?.focus(); };
     useEffect(() => {
         const key = (event: KeyboardEvent) => {
-            if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k" || event.altKey || event.isComposing)
+            if (event.repeat || !shortcutMatches("switch", bindings, event) || (!event.ctrlKey && !event.metaKey && !event.altKey && event.target instanceof Element && event.target.closest("input,textarea,[contenteditable=true]")))
                 return;
             if (document.querySelector("dialog[open]") && !dialog.current?.open)
                 return;
@@ -40,7 +42,7 @@ export function QuickSwitcher({ targets }: {
         };
         document.addEventListener("keydown", key, true);
         return () => document.removeEventListener("keydown", key, true);
-    }, []);
+    }, [bindings]);
     useEffect(() => { if (open) {
         dialog.current?.showModal();
         input.current?.focus();

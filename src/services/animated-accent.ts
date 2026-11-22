@@ -31,6 +31,3 @@ export function sampleAccent(stops: AccentStop[], position: number, intensity = 
   const gray = channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
   return "#" + channels.map(v => Math.round(gray + (v - gray) * clamp(intensity, 0, 100) / 100).toString(16).padStart(2, "0")).join("");
 }
-export function accentGradient(stops: AccentStop[]) {
-  return `linear-gradient(90deg, ${sortedStops(stops).map(s => `${s.color} ${s.position}%`).join(", ")})`;
-}

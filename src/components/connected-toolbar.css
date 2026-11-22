@@ -2,20 +2,10 @@
 .connected-toolbar-shelf { position: relative; z-index: 2; margin-top: -18px; padding-top: 18px; border: 1px solid var(--border); border-top: 0; border-radius: 0 0 14px 14px; background: color-mix(in srgb, var(--page) 78%, var(--panel)); }
 .connected-toolbar-shelf > .toolbar-shelf-actions { margin: 0; padding-top: 16px; background: transparent; border: 0; border-radius: 0; transition: padding-bottom 320ms cubic-bezier(.22,.72,.2,1); }
 .connected-toolbar-shelf[data-open="true"] > .toolbar-shelf-actions { padding-bottom: 4px; }
-.connected-toolbar-drawer {
-  position: relative; z-index: 1; display: grid; grid-template-rows: 0fr;
-  visibility: hidden; pointer-events: none;
-  transition: grid-template-rows 320ms cubic-bezier(.22,.72,.2,1), visibility 0s 320ms;
-}
-.connected-toolbar-drawer[data-open="true"] { grid-template-rows: 1fr; visibility: visible; pointer-events: auto; transition-delay: 0s; }
-.toolbar-drawer-clip { min-height: 0; overflow: hidden; }
-.toolbar-drawer-body { display: flex; align-items: end; gap: 16px; padding: 10px 20px 16px; opacity: 0; transform: translateY(4px) scale(.985); transform-origin: center center; transition: opacity 220ms ease, transform 320ms cubic-bezier(.22,.72,.2,1); }
-.connected-toolbar-drawer[data-open="true"] .toolbar-drawer-body { opacity: 1; transform: translateY(0) scale(1); }
-.connected-toolbar-drawer .toolbar-reveal-item { opacity: 0; transform: translateY(4px) scale(.98); transform-origin: center center; transition: opacity 180ms ease, transform 260ms cubic-bezier(.22,.72,.2,1); }
-.connected-toolbar-drawer[data-open="true"] .toolbar-reveal-item { opacity: 1; transform: translateY(0) scale(1); }
-.connected-toolbar-drawer[data-open="true"] .toolbar-reveal-item:nth-child(2) { transition-delay: 30ms; }
-.connected-toolbar-drawer[data-open="true"] .toolbar-reveal-item:nth-child(3) { transition-delay: 60ms; }
-.connected-toolbar-drawer[data-open="true"] .toolbar-reveal-item:nth-child(4) { transition-delay: 90ms; }
+.connected-toolbar-drawer { position: relative; }
+.connected-toolbar-drawer[hidden] { display: none; }
+.toolbar-drawer-clip { min-width: 0; }
+.toolbar-drawer-body { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border); }
 .toolbar-field { display: grid; gap: 8px; min-width: 0; flex: 1; }
 .toolbar-field > span { color: var(--muted); font-size: 11px; font-weight: 650; }
 .toolbar-segments { position: relative; display: grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); padding: 3px; border-radius: 9px; background: var(--control); }

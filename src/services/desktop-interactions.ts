@@ -5,13 +5,14 @@ const preventBrowserMenu = (event: Event) => {
 };
 
 const preventInspectorShortcut = (event: KeyboardEvent) => {
+  if (event.target instanceof Element && event.target.closest("[data-recording-shortcut]")) return;
   const key = event.key.toLowerCase();
   const inspector = ["i", "j", "c"].includes(key);
   if (
     key === "f12" ||
     (event.ctrlKey && event.shiftKey && inspector) ||
     (event.metaKey && event.altKey && inspector) ||
-    (event.ctrlKey && key === "u") ||
+    (event.ctrlKey && !event.shiftKey && !event.altKey && key === "u") ||
     (event.metaKey && event.altKey && key === "u")
   ) {
     event.preventDefault();

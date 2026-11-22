@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fitFloatingMenu } from "../services/menu-position";
+import { createPortal } from "react-dom";
 import { invoke } from "../services/invoke";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import QRCode from "qrcode";
@@ -34,7 +36,7 @@ import {
 import "./social.css";
 import { reconcileSocialMessages, summarizeReactions, type ReactionSummary } from "./social-message-state";
 
-type SocialUser = {
+export type SocialUser = {
   id: string;
   username: string | null;
   displayName: string | null;
@@ -87,7 +89,7 @@ const emptySession: SessionState = { signedIn: false, user: null, needsUsername:
 const emptySnapshot: Snapshot = { session: emptySession, friends: [], requests: { incoming: [], outgoing: [] }, conversations: [], groups: [], invites: [], messages: [], syncWarning: null };
 const reactionChoices = ["👍", "❤️", "😂", "🔥", "🎉", "👀"];
 
-const userLabel = (user: SocialUser) => user.displayName || user.username || "Delight user";
+export const userLabel = (user: SocialUser) => user.displayName || user.username || "Delight user";
 const initials = (user: SocialUser) => userLabel(user).slice(0, 2).toUpperCase();
 const formatTime = (value: number) => new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
@@ -111,7 +113,7 @@ async function groupIconData(file: File) {
   } finally { URL.revokeObjectURL(source); }
 }
 
-function Avatar({ user, large = false }: { user: SocialUser; large?: boolean }) {
+export function Avatar({ user, large = false }: { user: SocialUser; large?: boolean }) {
   const image = user.avatarUrl || (user.minecraftUuid ? `https://mc-heads.net/avatar/${encodeURIComponent(user.minecraftUuid)}/96` : null);
   return <span className={`social-avatar ${large ? "large" : ""}`} aria-hidden="true">{image ? <img src={image} alt="" referrerPolicy="no-referrer" /> : initials(user)}</span>;
 }
@@ -146,16 +148,53 @@ function FriendRow({ user, active, preview, time, unread, onClick }: { user: Soc
   </button>;
 }
 
+function useDismissPopup(open: boolean, boundary: string, dismiss: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest(boundary)) dismiss();
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") dismiss(); };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open, boundary, dismiss]);
+}
+
+function PersonMenu({ anchor, onClose, children }: { anchor: HTMLElement; onClose: () => void; children: React.ReactNode }) {
+  const menu = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(140);
+  const bounds = anchor.getBoundingClientRect();
+  const position = fitFloatingMenu(bounds, 190, height, bounds.right - 190);
+  useEffect(() => {
+    if (menu.current) setHeight(menu.current.scrollHeight + 2);
+    menu.current?.querySelector("button")?.focus();
+    const close = (event: Event) => { if (!(event.target instanceof Node) || !menu.current?.contains(event.target)) onClose(); };
+    window.addEventListener("resize", close);
+    document.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("resize", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, [anchor]); // The trigger stays mounted while its menu is open.
+  useDismissPopup(true, ".social-member-menu, .social-friend-manage-more, .social-member-menu-trigger", onClose);
+  return createPortal(<div ref={menu} className="social-member-menu social-person-popup" role="group" aria-label="Actions"
+    style={position} onKeyDown={event => { if (event.key === "Escape") anchor.focus(); }} onClick={onClose}>{children}</div>, document.body);
+}
+
 function FriendsView({ snapshot, busy, onAdd, onOpen, onRemove }: { snapshot: Snapshot; busy: boolean; onAdd: (name: string) => Promise<boolean>; onOpen: (user: SocialUser) => void; onRemove: (id: string) => void }) {
   const [name, setName] = useState("");
-  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   return <section className="social-directory-view">
     <header className="social-directory-heading-simple"><h2>Friends</h2><b>{snapshot.friends.length}</b></header>
     <form className="social-add-friend" onSubmit={async event => { event.preventDefault(); const submitted = name.trim(); if (submitted && await onAdd(submitted)) setName(""); }}>
       <Search size={18} /><input value={name} onChange={event => setName(event.target.value)} placeholder="Enter an exact Delight account username" autoComplete="off" /><button disabled={busy || name.trim().length < 3}><UserPlus size={18} /> Add friend</button>
     </form>
     <div className="social-people-list">
-      {snapshot.friends.length ? snapshot.friends.map(friend => <div key={friend.id} className="social-friend-manage-row"><button className="social-friend-manage-main" onClick={() => onOpen(friend)}><Avatar user={friend} /><span><b>{userLabel(friend)}</b><small>@{friend.username}</small></span></button><button className="social-friend-manage-more" onClick={() => setMenuFor(value => value === friend.id ? null : friend.id)} aria-label={`Actions for ${userLabel(friend)}`}><MoreHorizontal size={18} /></button>{menuFor === friend.id && <div className="social-member-menu"><button onClick={() => { if (friend.username) void navigator.clipboard.writeText(friend.username); setMenuFor(null); }}>Copy username</button><button onClick={() => onOpen(friend)}>Open direct message</button><button className="danger" disabled={busy} onClick={() => { setMenuFor(null); onRemove(friend.id); }}>Remove friend</button></div>}</div>) : <div className="social-empty-list"><UsersRound size={28} /><b>No friends yet</b><span>Add someone by their exact Delight account username.</span></div>}
+      {snapshot.friends.length ? snapshot.friends.map(friend => <div key={friend.id} className="social-friend-manage-row"><button className="social-friend-manage-main" onClick={() => onOpen(friend)}><Avatar user={friend} /><span><b>{userLabel(friend)}</b><small>@{friend.username}</small></span></button><button className="social-friend-manage-more" aria-expanded={menuFor?.id === friend.id} onClick={event => { const anchor = event.currentTarget; setMenuFor(value => value?.id === friend.id ? null : { id: friend.id, anchor }); }} aria-label={`Actions for ${userLabel(friend)}`}><MoreHorizontal size={18} /></button>{menuFor?.id === friend.id && <PersonMenu anchor={menuFor.anchor} onClose={() => setMenuFor(null)}><button onClick={() => { if (friend.username) void navigator.clipboard.writeText(friend.username); setMenuFor(null); }}>Copy username</button><button onClick={() => onOpen(friend)}>Open direct message</button><button className="danger" disabled={busy} onClick={() => { setMenuFor(null); onRemove(friend.id); }}>Remove friend</button></PersonMenu>}</div>) : <div className="social-empty-list"><UsersRound size={28} /><b>No friends yet</b><span>Add someone by their exact Delight account username.</span></div>}
     </div>
   </section>;
 }
@@ -172,14 +211,22 @@ function InstanceInviteCard({ invite, me, busy, onAccept, onDecline, onRevoke }:
   </article>;
 }
 
-function InboxView({ snapshot, busy, onAcceptFriend, onDeclineFriend }: { snapshot: Snapshot; busy: boolean; onAcceptFriend: (id: string) => void; onDeclineFriend: (id: string) => void }) {
+type InviteActions = Pick<Parameters<typeof InstanceInviteCard>[0], "onAccept" | "onDecline" | "onRevoke">;
+
+function InboxView({ snapshot, busy, onAcceptFriend, onDeclineFriend, ...inviteActions }: InviteActions & { snapshot: Snapshot; busy: boolean; onAcceptFriend: (id: string) => void; onDeclineFriend: (id: string) => void }) {
   return <section className="social-directory-view">
-    <header><div><span>INBOX</span><h2>Friend requests</h2></div><b>{snapshot.requests.incoming.length}</b></header>
+    <header className="social-directory-heading-simple"><h2>Inbox</h2></header>
+    {snapshot.requests.incoming.length > 0 && <h3 className="social-outgoing-title">Friend requests</h3>}
     <div className="social-request-list">
       {snapshot.requests.incoming.map(user => <article key={user.id}><Avatar user={user} large /><div><b>{userLabel(user)}</b><span>wants to be friends</span></div><button className="accept" disabled={busy} onClick={() => onAcceptFriend(user.id)}><Check size={18} /> Accept</button><button className="decline" disabled={busy} onClick={() => onDeclineFriend(user.id)} aria-label={`Decline ${userLabel(user)}`}><X size={18} /></button></article>)}
-      {!snapshot.requests.incoming.length && <div className="social-empty-list"><Inbox size={28} /><b>Your inbox is clear</b><span>New friend requests will appear here.</span></div>}
+      {!snapshot.requests.incoming.length && !snapshot.requests.outgoing.length && !snapshot.invites.length && <div className="social-empty-list"><Inbox size={28} /><b>Your inbox is clear</b><span>Friend requests and instance invites will appear here.</span></div>}
     </div>
-    {snapshot.requests.outgoing.length > 0 && <><h3 className="social-outgoing-title">Sent</h3><div className="social-request-list">{snapshot.requests.outgoing.map(user => <FriendRow key={user.id} user={user} onClick={() => {}} />)}</div></>}
+    {snapshot.requests.outgoing.length > 0 && <><h3 className="social-outgoing-title">Sent requests</h3><div className="social-request-list">{snapshot.requests.outgoing.map(user => <article key={user.id}><Avatar user={user} /><div><b>{userLabel(user)}</b><span>Pending</span></div></article>)}</div></>}
+    {snapshot.session.user && snapshot.invites.length > 0 && <section className="social-inbox-invites">
+      <h3 className="social-outgoing-title">Instance invites</h3>
+      {[...snapshot.invites].sort((a, b) => b.createdAt - a.createdAt).map(invite =>
+        <InstanceInviteCard key={invite.id} invite={invite} me={snapshot.session.user!} busy={busy} {...inviteActions} />)}
+    </section>}
   </section>;
 }
 
@@ -204,7 +251,7 @@ function EncryptionDrawer({ friend, details, loading, busy, onClose, onVerify, o
   useEffect(() => {
     let active = true;
     setQrImage("");
-    if (details?.qrPayload) void QRCode.toDataURL(details.qrPayload, { width: 216, margin: 1, color: { dark: "#050607", light: "#ffffff" }, errorCorrectionLevel: "M" }).then(value => { if (active) setQrImage(value); });
+    if (details?.qrPayload) void QRCode.toDataURL(details.qrPayload, { width: 216, margin: 4, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "M" }).then(value => { if (active) setQrImage(value); });
     return () => { active = false; };
   }, [details?.qrPayload]);
   const status = details?.status;
@@ -258,17 +305,18 @@ function EncryptionDrawer({ friend, details, loading, busy, onClose, onVerify, o
 
 function MessageContextMenu({ message, reactions, x, y, mine, disabled, onClose, onReply, onReact, onEdit, onPin }: { message: Message; reactions: ReactionSummary[]; x: number; y: number; mine: boolean; disabled: boolean; onClose: () => void; onReply: () => void; onReact: (emoji: string, add: boolean) => void; onEdit: () => void; onPin: () => void }) {
   const available = message.deliveryState === "sent" || message.deliveryState === "delivered";
-  return <div className="social-message-context" role="menu" style={{ left: x, top: y }} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
-    <button role="menuitem" disabled={!available} onClick={() => { onReply(); onClose(); }}><Reply size={16} /> Reply</button>
+  return createPortal(<div className="social-message-context" role="menu" style={{ left: x, top: y }} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
+    <button autoFocus role="menuitem" disabled={!available} onClick={() => { onReply(); onClose(); }}><Reply size={16} /> Reply</button>
     {mine && message.text && <button role="menuitem" disabled={!available || disabled} onClick={() => { onEdit(); onClose(); }}><Pencil size={16} /> Edit message</button>}
     <button role="menuitem" disabled={!available || disabled} onClick={() => { onPin(); onClose(); }}><Pin size={16} fill={message.pinned ? "currentColor" : "none"} /> {message.pinned ? "Unpin message" : "Pin message"}</button>
     <div className="social-context-reactions" aria-label="Reactions">{reactionChoices.map(emoji => { const reaction = reactions.find(value => value.emoji === emoji); return <button key={emoji} className={reaction?.reactedByMe ? "active" : ""} disabled={!available || disabled || reaction?.pending} onClick={() => { onReact(emoji, !reaction?.reactedByMe); onClose(); }}>{emoji}</button>; })}</div>
-  </div>;
+  </div>, document.body);
 }
 
 function ConversationView({ me, friend, messages, invites, busy, encryption, onOpenEncryption, onSend, onEdit, onScreenshot, onReact, onPin, onAcceptInvite, onDeclineInvite, onRevokeInvite }: { me: SocialUser; friend: SocialUser; messages: Message[]; invites: InstanceInvite[]; busy: boolean; encryption: EncryptionDetails | null; onOpenEncryption: () => void; onSend: (text: string, replyTo?: string) => void; onEdit: (messageId: string, text: string) => void; onScreenshot: () => void; onReact: (messageId: string, emoji: string, add: boolean) => void; onPin: (messageId: string, pinned: boolean) => void; onAcceptInvite: (invite: InstanceInvite) => void; onDeclineInvite: (id: string) => void; onRevokeInvite: (id: string) => void }) {
   const [draft, setDraft] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
+  useDismissPopup(emojiOpen, ".social-emoji-picker, button[aria-label='Add emoji']", () => setEmojiOpen(false));
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [contextMenu, setContextMenu] = useState<{ messageId: string; x: number; y: number } | null>(null);
@@ -288,7 +336,7 @@ function ConversationView({ me, friend, messages, invites, busy, encryption, onO
     window.addEventListener("blur", close);
     return () => { window.removeEventListener("pointerdown", close); window.removeEventListener("keydown", escape); window.removeEventListener("blur", close); };
   }, []);
-  useEffect(() => { setReplyTo(null); setEditing(null); setDraft(""); setContextMenu(null); }, [friend.id]);
+  useEffect(() => { setReplyTo(null); setEditing(null); setDraft(""); setContextMenu(null); setEmojiOpen(false); setPinsOpen(false); }, [friend.id]);
   const blocked = encryption?.status === "key_changed";
   const submit = () => { const value = draft.trim(); if (!value || busy || blocked) return; if (editing) onEdit(editing.id, value); else onSend(value, replyTo?.id); setDraft(""); setReplyTo(null); setEditing(null); setEmojiOpen(false); };
   return <section className="social-conversation">
@@ -300,7 +348,12 @@ function ConversationView({ me, friend, messages, invites, busy, encryption, onO
         const message = item.message;
         const mine = message.senderId === me.id;
         const replied = message.reactionOperation === "reply" && message.targetId ? visible.find(value => value.id === message.targetId) : null;
-        return <article key={message.id} className={`social-message ${mine ? "mine" : "theirs"} ${message.deliveryState}`} title={message.deliveryState === "pending" ? "Sending…" : message.deliveryState === "failed" ? "Message could not be sent" : undefined} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setContextMenu({ messageId: message.id, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 250) }); }}>
+        return <article key={message.id} className={`social-message ${mine ? "mine" : "theirs"} ${message.deliveryState}`} title={message.deliveryState === "pending" ? "Sending…" : message.deliveryState === "failed" ? "Message could not be sent" : undefined} tabIndex={0} onKeyDown={event => {
+          if (event.target !== event.currentTarget || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+          event.preventDefault();
+          const bounds = event.currentTarget.getBoundingClientRect();
+          setContextMenu({ messageId: message.id, x: Math.min(bounds.left, window.innerWidth - 220), y: Math.min(bounds.bottom, window.innerHeight - 250) });
+        }} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setContextMenu({ messageId: message.id, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 250) }); }}>
           {!mine && <Avatar user={friend} />}
           <div><span className="social-message-author"><b>{mine ? "You" : userLabel(friend)}</b><time>{formatTime(message.createdAt)}</time>{message.editedAt && <small>edited</small>}</span>{replied && <div className="social-message-reply"><Reply size={13} /><span><b>{replied.senderId === me.id ? "You" : userLabel(friend)}</b>{replied.text || "Screenshot"}</span></div>}{message.text && <p>{message.text}</p>}{message.imageDataUrl && <div className="social-message-image"><img src={message.imageDataUrl} alt="Encrypted screenshot" /></div>}{reactions.get(message.id)?.length ? <span className="social-reaction-row">{reactions.get(message.id)?.map(reaction => <button key={reaction.emoji} className={`${reaction.pending ? "pending" : ""} ${reaction.reactedByMe ? "mine" : ""}`} disabled={reaction.pending || blocked} aria-busy={reaction.pending} onClick={() => onReact(message.id, reaction.emoji, !reaction.reactedByMe)}><span>{reaction.emoji}</span><b>{reaction.count}</b></button>)}</span> : null}</div>
         </article>;
@@ -337,6 +390,7 @@ function GroupConversationView({ me, group, messages, busy, onMembers, onRename,
   const [nameDraft, setNameDraft] = useState(group.name);
   const [editingName, setEditingName] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  useDismissPopup(emojiOpen, ".social-emoji-picker, button[aria-label='Add emoji']", () => setEmojiOpen(false));
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [contextMenu, setContextMenu] = useState<{ messageId: string; x: number; y: number } | null>(null);
@@ -362,7 +416,12 @@ function GroupConversationView({ me, group, messages, busy, onMembers, onRename,
     <header><div><GroupAvatar group={group} size="large" editable onPick={onIcon} /><span>{editingName ? <input className="social-group-title-input" value={nameDraft} maxLength={48} autoFocus onChange={event => setNameDraft(event.target.value)} onBlur={commitName} onKeyDown={event => { if (event.key === "Enter") commitName(); if (event.key === "Escape") { setNameDraft(group.name); setEditingName(false); } }} /> : <b className="social-group-title" onDoubleClick={() => setEditingName(true)} title="Double-click to rename">{group.name}</b>}<small>{group.members.length} members</small></span></div><div className="social-header-actions"><button className={`social-pins-button ${pinsOpen ? "active" : ""}`} onClick={() => setPinsOpen(value => !value)} aria-label="Pinned messages" title="Pinned messages"><Pin size={17} fill={pinnedMessages.length ? "currentColor" : "none"} /></button><button className="social-encryption social-members-button" onClick={onMembers}><UsersRound size={17} /> Members</button></div></header>
     <div className="social-message-list" onScroll={() => setContextMenu(null)}>
       {!visible.length && <div className="social-conversation-empty"><GroupAvatar group={group} size="hero" /><h3>{group.name}</h3><p>Messages are encrypted separately for every member device.</p></div>}
-      {visible.map(message => { const mine = message.senderId === me.id; const author = member(message.senderId); const replied = message.reactionOperation === "reply" && message.targetId ? visible.find(value => value.id === message.targetId) : null; return <article key={message.id} className={`social-message ${mine ? "mine" : "theirs"} ${message.deliveryState}`} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setContextMenu({ messageId: message.id, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 250) }); }}>
+      {visible.map(message => { const mine = message.senderId === me.id; const author = member(message.senderId); const replied = message.reactionOperation === "reply" && message.targetId ? visible.find(value => value.id === message.targetId) : null; return <article key={message.id} className={`social-message ${mine ? "mine" : "theirs"} ${message.deliveryState}`} tabIndex={0} onKeyDown={event => {
+          if (event.target !== event.currentTarget || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+          event.preventDefault();
+          const bounds = event.currentTarget.getBoundingClientRect();
+          setContextMenu({ messageId: message.id, x: Math.min(bounds.left, window.innerWidth - 220), y: Math.min(bounds.bottom, window.innerHeight - 250) });
+        }} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setContextMenu({ messageId: message.id, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 250) }); }}>
         {!mine && <Avatar user={author} />}
         <div><span className="social-message-author"><b>{mine ? "You" : userLabel(author)}</b><time>{formatTime(message.createdAt)}</time>{message.editedAt && <small>edited</small>}</span>{replied && <div className="social-message-reply"><Reply size={13} /><span><b>{replied.senderId === me.id ? "You" : userLabel(member(replied.senderId))}</b>{replied.text || "Screenshot"}</span></div>}{message.text && <p>{message.text}</p>}{reactions.get(message.id)?.length ? <span className="social-reaction-row">{reactions.get(message.id)?.map(reaction => <button key={reaction.emoji} className={`${reaction.pending ? "pending" : ""} ${reaction.reactedByMe ? "mine" : ""}`} disabled={reaction.pending} aria-busy={reaction.pending} onClick={() => onReact(message.id, reaction.emoji, !reaction.reactedByMe)}><span>{reaction.emoji}</span><b>{reaction.count}</b></button>)}</span> : null}</div>
       </article>; })}
@@ -381,7 +440,7 @@ function GroupDrawer({ group, friends, me, busy, onClose, onCreate, onAdd, onRem
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const candidates = group ? friends.filter(friend => !group.members.some(member => member.id === friend.id)) : friends;
   if (!group) return <aside className="social-group-drawer">
     <header><div><b>New group chat</b><span>Up to 10 people</span></div><button onClick={onClose} aria-label="Close"><X size={19} /></button></header>
@@ -393,22 +452,27 @@ function GroupDrawer({ group, friends, me, busy, onClose, onCreate, onAdd, onRem
     <header><div><b>{group.name}</b><span>{group.members.length} of 10 people</span></div><button onClick={onClose} aria-label="Close"><X size={19} /></button></header>
     <button className="social-group-add-toggle" disabled={group.members.length >= 10} onClick={() => setAdding(value => !value)}><UserRoundPlus size={18} /><span>Add people</span><Plus size={16} /></button>
     {adding && <div className="social-group-candidates">{candidates.length ? candidates.map(friend => <button key={friend.id} disabled={busy} onClick={() => onAdd(friend.id)}><Avatar user={friend} /><span>{userLabel(friend)}</span><Plus size={16} /></button>) : <p>No more friends are available to add.</p>}</div>}
-    <div className="social-drawer-list social-member-list">{group.members.map(member => <div key={member.id} className="social-drawer-person"><Avatar user={member} /><span><b>{userLabel(member)}</b><small>{member.id === group.ownerId ? "Owner" : member.id === me.id ? "You" : `@${member.username}`}</small></span><button className="social-member-menu-trigger" onClick={() => setMenuFor(value => value === member.id ? null : member.id)} aria-label={`Actions for ${userLabel(member)}`}><MoreHorizontal size={18} /></button>{menuFor === member.id && <div className="social-member-menu"><button onClick={() => { if (member.username) void navigator.clipboard.writeText(member.username); setMenuFor(null); }}>Copy username</button>{friends.some(friend => friend.id === member.id) && member.id !== me.id && <button onClick={() => onOpenFriend(member)}>Open direct message</button>}{group.canManage && member.id !== group.ownerId && <button className="danger" onClick={() => onRemove(member.id)}>Remove from group</button>}{member.id === me.id && !group.canManage && <button className="danger" onClick={() => onRemove(member.id)}>Leave group</button>}</div>}</div>)}</div>
+    <div className="social-drawer-list social-member-list">{group.members.map(member => <div key={member.id} className="social-drawer-person"><Avatar user={member} /><span><b>{userLabel(member)}</b><small>{member.id === group.ownerId ? "Owner" : member.id === me.id ? "You" : `@${member.username}`}</small></span><button className="social-member-menu-trigger" aria-expanded={menuFor?.id === member.id} onClick={event => { const anchor = event.currentTarget; setMenuFor(value => value?.id === member.id ? null : { id: member.id, anchor }); }} aria-label={`Actions for ${userLabel(member)}`}><MoreHorizontal size={18} /></button>{menuFor?.id === member.id && <PersonMenu anchor={menuFor.anchor} onClose={() => setMenuFor(null)}><button onClick={() => { if (member.username) void navigator.clipboard.writeText(member.username); setMenuFor(null); }}>Copy username</button>{friends.some(friend => friend.id === member.id) && member.id !== me.id && <button onClick={() => onOpenFriend(member)}>Open direct message</button>}{group.canManage && member.id !== group.ownerId && <button className="danger" onClick={() => onRemove(member.id)}>Remove from group</button>}{member.id === me.id && !group.canManage && <button className="danger" onClick={() => onRemove(member.id)}>Leave group</button>}</PersonMenu>}</div>)}</div>
   </aside>;
 }
 
-export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (message: string, kind?: "error" | "notification") => void; onInstanceImported: (result: ModpackShareImport) => void }) {
+export type SocialDestination = { friendId?: string; section?: SocialSection };
+export const socialDirectoryChanged = "delight-social-directory-changed";
+
+export function SocialPage({ onNotify, onInstanceImported, destination, sidebarHost }: { sidebarHost: HTMLDivElement | null; onNotify: (message: string, kind?: "error" | "notification") => void; onInstanceImported: (result: ModpackShareImport) => void; destination?: SocialDestination }) {
   const [session, setSession] = useState<SessionState>(emptySession);
   const [snapshot, setSnapshot] = useState<Snapshot>(emptySnapshot);
   const [section, setSection] = useState<SocialSection>("messages");
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const [groupsOpen, setGroupsOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(true);
   const [directOpen, setDirectOpen] = useState(true);
   const [groupDrawer, setGroupDrawer] = useState<"create" | "members" | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  useDismissPopup(accountMenuOpen, ".social-account", () => setAccountMenuOpen(false));
+  const [query, setQuery] = useState("");
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [encryptionLoading, setEncryptionLoading] = useState(false);
   const [encryptionDetails, setEncryptionDetails] = useState<EncryptionDetails | null>(null);
@@ -420,8 +484,29 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
   const mutationVersion = useRef(0);
   const mutationInFlight = useRef(0);
   const outboundQueue = useRef<Promise<void>>(Promise.resolve());
-  const selectedFriend = snapshot.friends.find(friend => friend.id === selectedFriendId) || snapshot.friends[0] || null;
-  const selectedGroup = snapshot.groups.find(group => group.id === selectedGroupId) || null;
+  const activity = useMemo(() => new Map(snapshot.conversations.map(thread => [thread.friend.id, thread.updatedAt])), [snapshot.conversations]);
+  const friends = useMemo(() => [...snapshot.friends].sort((a, b) => (activity.get(b.id) ?? 0) - (activity.get(a.id) ?? 0)), [snapshot.friends, activity]);
+  const groups = useMemo(() => [...snapshot.groups].sort((a, b) => b.updatedAt - a.updatedAt), [snapshot.groups]);
+  const explicitFriend = friends.find(friend => friend.id === selectedFriendId);
+  const selectedGroup = groups.find(group => group.id === selectedGroupId) ??
+    (!explicitFriend && groups[0] && (!friends[0] || groups[0].updatedAt > (activity.get(friends[0].id) ?? 0)) ? groups[0] : null);
+  const selectedFriend = selectedGroup ? null : explicitFriend ?? friends[0] ?? null;
+  const activeFriendId = selectedFriend?.id;
+  const activeGroupId = selectedGroup?.id;
+  useEffect(() => {
+    if (activeGroupId && activeGroupId !== selectedGroupId) setSelectedGroupId(activeGroupId);
+    if (activeFriendId && activeFriendId !== selectedFriendId) setSelectedFriendId(activeFriendId);
+  }, [activeFriendId, activeGroupId, selectedFriendId, selectedGroupId]);
+
+  useEffect(() => {
+    if (!destination) return;
+    setSelectedFriendId(destination.friendId ?? null);
+    setSelectedGroupId(null);
+    setGroupDrawer(null);
+    setQuery("");
+    setEncryptionOpen(false);
+    setSection(destination.section ?? (destination.friendId ? "messages" : "friends"));
+  }, [destination]);
 
   const load = async (quiet = false, replace = false) => {
     const requestNumber = ++loadSequence.current;
@@ -439,7 +524,6 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
         setSession(next.session);
         if (next.syncWarning && next.syncWarning !== lastSyncWarning.current) onNotify(next.syncWarning, "error");
         lastSyncWarning.current = next.syncWarning;
-        setSelectedFriendId(current => current ?? next.friends[0]?.id ?? null);
       } else {
         setSession(state);
         if (!state.signedIn) setSnapshot(emptySnapshot);
@@ -498,11 +582,11 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
     } finally { if (requestNumber === encryptionSequence.current) setEncryptionLoading(false); }
   };
   useEffect(() => {
-    selectedFriendIdRef.current = selectedFriendId;
+    selectedFriendIdRef.current = activeFriendId ?? null;
     setEncryptionOpen(false);
     setEncryptionDetails(null);
-    if (selectedFriendId && session.signedIn) void refreshEncryption(selectedFriendId);
-  }, [selectedFriendId, session.signedIn]);
+    if (activeFriendId && session.signedIn) void refreshEncryption(activeFriendId);
+  }, [activeFriendId, session.signedIn]);
 
   useEffect(() => {
     if (!session.signedIn || session.needsUsername || !session.user?.id) return;
@@ -584,7 +668,7 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
 
   const action = async (task: () => Promise<Snapshot>, success?: string) => {
     setBusy(true);
-    try { const next = await task(); setSnapshot(next); setSession(next.session); if (success) onNotify(success); return true; }
+    try { const next = await task(); setSnapshot(next); setSession(next.session); window.dispatchEvent(new Event(socialDirectoryChanged)); if (success) onNotify(success); return true; }
     catch (error) { onNotify(String(error), "error"); return false; }
     finally { setBusy(false); }
   };
@@ -613,6 +697,7 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
         await new Promise(resolve => window.setTimeout(resolve, 650));
         const result = await invoke<SessionState | null>("social_poll_sign_in");
         if (result) {
+          window.dispatchEvent(new Event(socialDirectoryChanged));
           setLoading(true);
           setSnapshot(emptySnapshot);
           setSelectedFriendId(null);
@@ -649,13 +734,14 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
       setEncryptionOpen(false);
       setEncryptionDetails(null);
       lastSyncWarning.current = null;
+      window.dispatchEvent(new Event(socialDirectoryChanged));
       onNotify("Signed out of Delight Social.");
     } catch (error) { onNotify(String(error), "error"); }
     finally { setBusy(false); setLoading(false); }
   };
   if (loading) return <div className="social-loading"><RefreshCw className="spin" size={22} /> Loading Social…</div>;
   if (!session.signedIn) return <SignInView busy={busy} onSignIn={() => void beginSignIn()} />;
-  if (session.needsUsername) return <UsernameSetup busy={busy} onSave={username => { setBusy(true); void invoke<SocialUser>("social_set_username", { username }).then(() => { setLoading(true); onNotify("Delight account username saved."); return hydrate(true); }).catch(error => { setLoading(false); onNotify(String(error), "error"); }).finally(() => setBusy(false)); }} />;
+  if (session.needsUsername) return <UsernameSetup busy={busy} onSave={username => { setBusy(true); void invoke<SocialUser>("social_set_username", { username }).then(() => { setLoading(true); window.dispatchEvent(new Event(socialDirectoryChanged)); onNotify("Delight account username saved."); return hydrate(true); }).catch(error => { setLoading(false); onNotify(String(error), "error"); }).finally(() => setBusy(false)); }} />;
   if (!session.user) return <SignInView busy={busy} onSignIn={() => void beginSignIn()} />;
 
   const lastFor = (friendId: string) => snapshot.messages.filter(message => !message.groupId && message.friendId === friendId && message.kind === "message").at(-1);
@@ -832,22 +918,27 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
   };
   const declineInstanceInvite = (inviteId: string) => void action(() => invoke("social_decline_instance_invite", { inviteId }), "Invite declined.");
   const revokeInstanceInvite = (inviteId: string) => void action(() => invoke("social_revoke_instance_invite", { inviteId }), "Invite revoked.");
+  const matches = (value: string) => value.toLowerCase().includes(query.trim().toLowerCase());
+  const visibleFriends = friends.filter(friend => matches(userLabel(friend)) || matches(friend.username ?? ""));
+  const visibleGroups = groups.filter(group => matches(group.name));
+  const inboxCount = snapshot.requests.incoming.length + snapshot.invites.filter(invite => invite.recipient.id === session.user?.id && invite.status === "pending").length;
   return <div className="social-page" onClick={() => setAccountMenuOpen(false)}>
-    <aside className="social-rail">
-      <header><h1>Social</h1></header>
+    {sidebarHost && createPortal(<div className="social-rail">
       <nav aria-label="Social views">
         <button className={section === "messages" ? "active" : ""} onClick={() => setSection("messages")}><MessageCircle size={18} /><span>Messages</span></button>
-        <button className={section === "friends" ? "active" : ""} onClick={() => setSection("friends")}><UsersRound size={18} /><span>Friends</span><b>{snapshot.friends.length}</b></button>
-        <button className={section === "inbox" ? "active" : ""} onClick={() => setSection("inbox")}><Inbox size={18} /><span>Inbox</span>{snapshot.requests.incoming.length > 0 && <b className="unread">{snapshot.requests.incoming.length}</b>}</button>
+        <button className={section === "friends" ? "active" : ""} onClick={() => { setSection("friends"); setGroupDrawer(null); setEncryptionOpen(false); }}><UsersRound size={18} /><span>Friends</span><b>{snapshot.friends.length}</b></button>
+        <button className={section === "inbox" ? "active" : ""} onClick={() => { setSection("inbox"); setGroupDrawer(null); setEncryptionOpen(false); }}><Inbox size={18} /><span>Inbox</span>{inboxCount > 0 && <b className="unread">{inboxCount}</b>}</button>
       </nav>
+      <label className="social-thread-filter"><Search size={15} /><input aria-label="Search conversations" placeholder="Search conversations…" type="search" value={query} onChange={event => setQuery(event.target.value)} /></label>
       <div className="social-rail-lists">
-        <section className={`social-rail-section ${groupsOpen ? "open" : "closed"}`}>
-          <div className="social-rail-heading"><button className="social-rail-collapse" onClick={() => setGroupsOpen(value => !value)}><ChevronDown size={15} /><span>GROUP CHATS</span></button><button onClick={() => setGroupDrawer("create")} aria-label="Create group chat"><Plus size={17} /></button></div>
-          {groupsOpen && <div className="social-conversation-list">{snapshot.groups.map(group => <GroupRow key={group.id} group={group} active={section === "messages" && selectedGroup?.id === group.id} message={lastForGroup(group.id)} onClick={() => openGroup(group)} />)}</div>}
-        </section>
+        {query.trim() && !visibleFriends.length && !visibleGroups.length && <small className="social-filter-empty">No matching conversations</small>}
         <section className={`social-rail-section ${directOpen ? "open" : "closed"}`}>
-          <div className="social-rail-heading"><button className="social-rail-collapse" onClick={() => setDirectOpen(value => !value)}><ChevronDown size={15} /><span>DIRECT MESSAGES</span></button><button onClick={() => setSection("friends")} aria-label="Add friend"><Plus size={17} /></button></div>
-          {directOpen && <div className="social-conversation-list">{snapshot.friends.map(friend => { const message = lastFor(friend.id); const invite = lastInviteFor(friend.id); const inviteIsLatest = invite && (!message || invite.createdAt > message.createdAt); const incoming = invite?.recipient.id === session.user?.id; return <FriendRow key={friend.id} user={friend} active={section === "messages" && selectedFriend?.id === friend.id && !selectedGroup} preview={inviteIsLatest ? (incoming ? `Invited you to play ${invite.instanceName}` : `Invite sent: ${invite.instanceName}`) : message ? (message.text || "Image") : "Start a conversation"} time={inviteIsLatest ? invite.createdAt : message?.createdAt} onClick={() => openFriend(friend)} />; })}</div>}
+          <div className="social-rail-heading"><button className="social-rail-collapse" aria-expanded={directOpen} onClick={() => setDirectOpen(value => !value)}><ChevronDown size={15} /><span>Direct messages</span></button><button onClick={() => { setSection("friends"); setGroupDrawer(null); setEncryptionOpen(false); }} aria-label="Add friend"><Plus size={17} /></button></div>
+          {directOpen && <div className="social-conversation-list">{visibleFriends.map(friend => { const message = lastFor(friend.id); const invite = lastInviteFor(friend.id); const inviteIsLatest = invite && (!message || invite.createdAt > message.createdAt); const incoming = invite?.recipient.id === session.user?.id; return <FriendRow key={friend.id} user={friend} active={section === "messages" && selectedFriend?.id === friend.id && !selectedGroup} preview={inviteIsLatest ? (incoming ? `Invited you to play ${invite.instanceName}` : `Invite sent: ${invite.instanceName}`) : message ? (message.text || "Image") : "Start a conversation"} time={inviteIsLatest ? invite.createdAt : message?.createdAt} onClick={() => openFriend(friend)} />; })}</div>}
+        </section>
+        <section className={`social-rail-section ${groupsOpen ? "open" : "closed"}`}>
+          <div className="social-rail-heading"><button className="social-rail-collapse" aria-expanded={groupsOpen} onClick={() => setGroupsOpen(value => !value)}><ChevronDown size={15} /><span>Group chats</span></button><button onClick={() => setGroupDrawer("create")} aria-label="Create group chat"><Plus size={17} /></button></div>
+          {groupsOpen && <div className="social-conversation-list">{visibleGroups.map(group => <GroupRow key={group.id} group={group} active={section === "messages" && selectedGroup?.id === group.id} message={lastForGroup(group.id)} onClick={() => openGroup(group)} />)}</div>}
         </section>
       </div>
       <div className="social-account" onClick={event => event.stopPropagation()}>
@@ -858,9 +949,9 @@ export function SocialPage({ onNotify, onInstanceImported }: { onNotify: (messag
           <Avatar user={session.user} /><span><b>{userLabel(session.user)}</b><small>@{session.user.username}</small></span><ChevronUp className={accountMenuOpen ? "open" : ""} size={17} />
         </button>
       </div>
-    </aside>
+    </div>, sidebarHost)}
     <div className="social-main">
-      {section === "friends" ? <FriendsView snapshot={snapshot} busy={busy} onAdd={name => action(() => invoke("social_send_friend_request", { username: name }), "Friend request sent.")} onOpen={openFriend} onRemove={id => void action(() => invoke("social_remove_friend", { userId: id }), "Friend removed.")} /> : section === "inbox" ? <InboxView snapshot={snapshot} busy={busy} onAcceptFriend={id => void action(() => invoke("social_accept_friend_request", { userId: id }), "Friend request accepted.")} onDeclineFriend={id => void action(() => invoke("social_decline_friend_request", { userId: id }))} /> : selectedGroup ? <GroupConversationView me={session.user} group={selectedGroup} messages={snapshot.messages} busy={busy} onMembers={() => setGroupDrawer("members")} onRename={name => updateGroupName(selectedGroup.id, name)} onIcon={file => void updateGroupIcon(selectedGroup.id, file)} onSend={(text, replyTo) => void sendGroupMessage(selectedGroup.id, text, replyTo)} onEdit={(messageId, text) => void editGroupMessage(selectedGroup.id, messageId, text)} onReact={(messageId, emoji, add) => void sendGroupReaction(selectedGroup.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinGroupMessage(selectedGroup.id, messageId, pinned)} /> : selectedFriend ? <ConversationView me={session.user} friend={selectedFriend} messages={snapshot.messages} invites={snapshot.invites} busy={busy} encryption={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} onOpenEncryption={() => void refreshEncryption(selectedFriend.id, true)} onSend={(text, replyTo) => void sendMessage(selectedFriend.id, text, replyTo)} onEdit={(messageId, text) => void editMessage(selectedFriend.id, messageId, text)} onScreenshot={() => void sendScreenshot(selectedFriend.id)} onReact={(messageId, emoji, add) => void sendReaction(selectedFriend.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinMessage(selectedFriend.id, messageId, pinned)} onAcceptInvite={invite => void acceptInstanceInvite(invite)} onDeclineInvite={declineInstanceInvite} onRevokeInvite={revokeInstanceInvite} /> : <section className="social-no-conversation"><MessageCircle size={34} /><h2>No conversations yet</h2><p>Create a group chat or add a friend by their exact Delight account username.</p><button onClick={() => setSection("friends")}><UserPlus size={18} /> Add a friend</button></section>}
+      {section === "friends" ? <FriendsView snapshot={snapshot} busy={busy} onAdd={name => action(() => invoke("social_send_friend_request", { username: name }), "Friend request sent.")} onOpen={openFriend} onRemove={id => void action(() => invoke("social_remove_friend", { userId: id }), "Friend removed.")} /> : section === "inbox" ? <InboxView onAccept={acceptInstanceInvite} onDecline={declineInstanceInvite} onRevoke={revokeInstanceInvite} snapshot={snapshot} busy={busy} onAcceptFriend={id => void action(() => invoke("social_accept_friend_request", { userId: id }), "Friend request accepted.")} onDeclineFriend={id => void action(() => invoke("social_decline_friend_request", { userId: id }))} /> : selectedGroup ? <GroupConversationView key={selectedGroup.id} me={session.user} group={selectedGroup} messages={snapshot.messages} busy={busy} onMembers={() => setGroupDrawer("members")} onRename={name => updateGroupName(selectedGroup.id, name)} onIcon={file => void updateGroupIcon(selectedGroup.id, file)} onSend={(text, replyTo) => void sendGroupMessage(selectedGroup.id, text, replyTo)} onEdit={(messageId, text) => void editGroupMessage(selectedGroup.id, messageId, text)} onReact={(messageId, emoji, add) => void sendGroupReaction(selectedGroup.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinGroupMessage(selectedGroup.id, messageId, pinned)} /> : selectedFriend ? <ConversationView key={selectedFriend.id} me={session.user} friend={selectedFriend} messages={snapshot.messages} invites={snapshot.invites} busy={busy} encryption={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} onOpenEncryption={() => void refreshEncryption(selectedFriend.id, true)} onSend={(text, replyTo) => void sendMessage(selectedFriend.id, text, replyTo)} onEdit={(messageId, text) => void editMessage(selectedFriend.id, messageId, text)} onScreenshot={() => void sendScreenshot(selectedFriend.id)} onReact={(messageId, emoji, add) => void sendReaction(selectedFriend.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinMessage(selectedFriend.id, messageId, pinned)} onAcceptInvite={invite => void acceptInstanceInvite(invite)} onDeclineInvite={declineInstanceInvite} onRevokeInvite={revokeInstanceInvite} /> : <section className="social-no-conversation"><MessageCircle size={34} /><h2>No conversations yet</h2><p>Create a group chat or add a friend by their exact Delight account username.</p><button onClick={() => { setSection("friends"); setGroupDrawer(null); setEncryptionOpen(false); }}><UserPlus size={18} /> Add a friend</button></section>}
       {groupDrawer && <GroupDrawer group={groupDrawer === "members" ? selectedGroup : null} friends={snapshot.friends} me={session.user} busy={busy} onClose={() => setGroupDrawer(null)} onCreate={createGroup} onAdd={userId => void action(() => invoke("social_add_group_member", { groupId: selectedGroup?.id, userId }), "Person added to the group.")} onRemove={userId => void action(() => invoke("social_remove_group_member", { groupId: selectedGroup?.id, userId }), userId === session.user?.id ? "You left the group." : "Person removed from the group.")} onOpenFriend={openFriend} />}
       {encryptionOpen && selectedFriend && <EncryptionDrawer friend={selectedFriend} details={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} loading={encryptionLoading} busy={busy} onClose={() => setEncryptionOpen(false)} onVerify={() => void acknowledgeEncryption(selectedFriend.id, true)} onContinue={() => void acknowledgeEncryption(selectedFriend.id, false)} />}
     </div>

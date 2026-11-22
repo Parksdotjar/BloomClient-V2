@@ -97,7 +97,7 @@ export function InstanceFolders<T extends Item>({ instances, query, loader, crea
         const expanded = open === folder.id;
         return <section key={folder.id} className={`instance-folder-entry ${expanded ? "is-open" : ""}`} data-instance-folder-drop={`folder:${folder.id}`} data-folder-drop-label={`Move to ${folder.name}`}>
           <button type="button" className="instance-folder-cover" data-folder-toggle={folder.id} aria-expanded={expanded} aria-controls={`folder-tray-${folder.id}`} onClick={() => { setOpen(expanded ? null : folder.id); setRenaming(null); setDissolving(null); }}>
-            <span className="instance-folder-stack" aria-hidden="true">{members.length ? members.slice(0, 3).map((i, index) => <span key={i.id} style={{ "--stack-index": index } as CSSProperties}>{i.icon ? <img src={i.icon} alt="" draggable={false} /> : <b>?</b>}</span>) : <Folder size={48} strokeWidth={1.4} />}</span>
+            <span className="instance-folder-stack" aria-hidden="true"><Folder size={17} /></span>
             <span className="instance-folder-title"><strong>{folder.name}</strong><small>{members.length} {members.length === 1 ? "instance" : "instances"}</small></span><ChevronDown size={19} className="instance-folder-chevron" />
           </button>
           <div className="instance-folder-tray-reveal" data-open={expanded} inert={!expanded} id={`folder-tray-${folder.id}`}>

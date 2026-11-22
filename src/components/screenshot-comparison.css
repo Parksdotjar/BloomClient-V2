@@ -13,7 +13,7 @@
 .comparison-handle span { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 2px solid #fff; border-radius: 9px; background: #15181de6; color: #fff; }
 .comparison-handle:focus-visible { outline: 0; }
 .comparison-handle:focus-visible span { outline: 2px solid var(--accent); outline-offset: 3px; }
-.comparison-side { position: absolute; top: 12px; padding: 5px 9px; border-radius: 6px; background: #111a; color: #fff; font-size: 12px; font-weight: 800; pointer-events: none; }
+.comparison-side { position: absolute; top: 12px; }
 .comparison-side-left { left: 12px; }
 .comparison-side-right { right: 12px; }
 .comparison-state { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); text-align: center; }

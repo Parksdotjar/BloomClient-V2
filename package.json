@@ -35,10 +35,13 @@
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "skinview3d": "^3.4.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",
+    "@types/hast": "^3.0.5",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

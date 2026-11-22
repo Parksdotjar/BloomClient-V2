@@ -83,7 +83,7 @@ await page.addInitScript(() => {
 });
 
 const nav=()=>page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Instances',exact:true}).click();
-const open=async(name='Meadow')=>{await nav();await page.locator('.instance-library-card').filter({has:page.getByRole('heading',{name,exact:true})}).getByRole('button',{name:`Open ${name}`,exact:true}).click();await page.getByRole('button',{name:'Instance settings',exact:true}).click();await page.getByRole('heading',{name:'Instance settings',exact:true}).waitFor();};
+const open=async(name='Meadow')=>{await nav();await page.getByRole('navigation',{name:'Your instances'}).getByRole('button',{name,exact:true}).click();await page.getByRole('tab',{name:'Instance settings',exact:true}).click();await page.getByRole('heading',{name:'Instance settings',exact:true}).waitFor();};
 const selector=page.getByRole('button',{name:'Fabric Loader version',exact:true});
 const save=page.getByRole('button',{name:'Save changes',exact:true});
 const calls=command=>page.evaluate(command=>window.folderTest.calls.filter(call=>call.command===command),command);
@@ -95,6 +95,10 @@ try {
  await mkdir('logs/fabric-loader-settings',{recursive:true});
  await page.goto(url);await open();await page.waitForFunction(()=>!document.querySelector('.instance-fabric-loader .select-trigger').disabled);
  assert.match(await selector.innerText(),/0\.18\.4/);const beforeStyle=await page.addStyleTag({content:'.instance-fabric-loader{display:none!important}'});await shot('before-settings');await beforeStyle.evaluate(node=>node.remove());await shot('settings');
+ assert.deepEqual(await save.evaluate(el => {
+   const css = getComputedStyle(el);
+   return [css.backgroundImage, css.boxShadow, css.borderTopWidth];
+ }), ['none', 'none', '1px'], 'Save uses the flat outlined launcher control');
  // Draft changes are not persisted until Save, and all other settings travel through the same command.
  await pick('0.20.1 (latest stable)');assert.equal((await calls('update_instance_settings')).length,0);
  await page.getByRole('textbox',{name:'Instance name',exact:true}).fill('Meadow');

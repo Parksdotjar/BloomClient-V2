@@ -263,7 +263,7 @@ pub async fn list_portal() -> Result<Library, String> { tauri::async_runtime::sp
 pub async fn change_portal(change: Change) -> Result<Library, String> { tauri::async_runtime::spawn_blocking(|| access(Some(change))).await.map_err(|e| e.to_string())? }
 
 pub fn validate_target(instance: &super::InstanceConfig, target: &Target) -> Result<(), String> {
-    if !instance.visible || instance.id == super::AUTOTUNE_INSTANCE_ID { return Err("This instance is not available in Portal.".into()); }
+    if !instance.visible { return Err("This instance is not available in Portal.".into()); }
     if let Some(reason) = version_reason(&instance.version) { return Err(reason); }
     match target.kind {
         Kind::Server => { server_address(&target.target)?; },

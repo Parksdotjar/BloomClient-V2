@@ -1,0 +1,91 @@
+/* Shared heading and list treatment for tools reached through More. */
+.desktop-redesign :is(.logs-page,.utilities-page,.locker-workspace,.portal-page) { width: 100%; min-width: 0; max-width: none; margin-inline: 0; padding: 0; }
+.desktop-redesign :is(.utilities-heading,.utility-detail-heading,.logs-heading,.portal-heading,.screenshot-shelf .shelf-heading,.locker-platform) {
+  min-height: 56px; justify-content: space-between; margin: 0; padding: 4px 0 15px;
+  background: transparent; border: 0; border-bottom: 1px solid var(--desktop-line); border-radius: 0; box-shadow: none;
+}
+.desktop-redesign :is(.utilities-heading,.utility-detail-heading,.logs-heading,.portal-heading,.screenshot-shelf .shelf-heading) h1 {
+  margin: 0; text-align: left; color: var(--text); font: 650 clamp(24px,2.3vw,32px)/1.2 var(--interface-font, "Segoe UI"),system-ui,sans-serif; letter-spacing: -.025em;
+}
+.desktop-redesign :is(.utilities-workspace,.utility-detail-panel,.portal-header-panel,.locker-heading-shell,.locker-collection,.console-shell,.shelf-heading-shell .connected-toolbar-shelf) {
+  background: transparent; border: 0; border-radius: 0; box-shadow: none;
+}
+.desktop-redesign .utilities-workspace { margin-top: 14px; padding: 0; }
+.utility-directory { display: grid; max-width: 760px; }
+.utility-directory button { display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--desktop-line); background: transparent; color: var(--text); font: 500 16px/1.4 var(--interface-font, "Segoe UI"),system-ui,sans-serif; text-align: start; }
+.utility-directory button svg:last-child { margin-left: auto; color: var(--muted); }
+.utility-directory button:hover,.utility-directory button:focus-visible { background: var(--desktop-selection); }
+.desktop-redesign .shelf-heading-shell :is(.connected-toolbar-shelf,.shelf-toolbar) { margin-top: 0; padding: 0; background: transparent; border: 0; box-shadow: none; }
+.desktop-redesign .shelf-heading-shell .shelf-toolbar { padding: 12px 0; justify-content: flex-start; }
+.desktop-redesign .shelf-heading-shell .shelf-comparison-toolbar { margin-left: auto; }
+.desktop-redesign :is(.portal-group-title,.shop-collection-heading h2) { color: var(--text); text-transform: none; letter-spacing: normal; }
+.desktop-redesign .portal-tools-row .toolbar-segments > i { background: var(--desktop-selection); box-shadow: none; }
+.desktop-redesign .locker-platform { justify-content: flex-start; }
+.desktop-redesign .cosmetics-main-tabs { width: fit-content; background: transparent; border: 0; }
+.desktop-redesign .cosmetics-main-tabs > i { display: none; }
+.desktop-redesign .cosmetics-main-tabs > button { color: var(--muted); background: transparent; border-radius: 0; border-bottom: 2px solid transparent; }
+.desktop-redesign .cosmetics-main-tabs > [aria-selected="true"] { color: var(--text); border-bottom-color: currentColor; }
+.desktop-redesign .cape-redemption { margin: 0; padding: 0; border: 0; background: transparent; }
+.desktop-redesign .cape-redeem-trigger { top: -51px; right: 0; min-width: 0; border: 1px solid var(--desktop-line); background: transparent; }
+.desktop-redesign .locker-collection { padding-inline: 0; }
+.desktop-redesign .log-stats { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; }
+.desktop-redesign .log-stats > div { display: flex; align-items: baseline; gap: 7px; min-height: 0; padding: 0; background: transparent; border: 0; }
+.desktop-redesign .log-stats small { font-size: 13px; text-transform: none; letter-spacing: normal; }
+.desktop-redesign .console-filter { position: static; width: min(100%,600px); min-height: 38px; margin: 14px 0; transform: none; border: 1px solid var(--desktop-line); border-radius: 7px; box-shadow: none; background: transparent; }
+.desktop-redesign .console-output { padding-bottom: 12px; }
+.desktop-redesign .console-toolbar { padding-inline: 0; flex-wrap: wrap; gap: 8px; background: transparent; }
+.desktop-redesign :is(.utility-rule,.social-directory-view,.portal-place,.missing-mods-panel) {
+  background: transparent; border: 0; border-radius: 0; border-bottom: 1px solid var(--desktop-line); box-shadow: none;
+}
+.desktop-redesign .social-auth-state { text-align: start; }
+.desktop-redesign .social-auth-state { align-items: flex-start; max-width: 540px; margin-inline: 0; padding-inline: 0; background: transparent; box-shadow: none; }
+.desktop-redesign .social-auth-state :is(.social-auth-flower,.social-auth-icon) { width: 40px; height: 40px; }
+.desktop-redesign .missing-mods-heading { background: transparent; border-bottom: 1px solid var(--desktop-line); }
+.desktop-redesign .instance-manager.instance-preferences {
+  width: min(100%, 760px);
+  margin-inline: auto;
+  container-type: inline-size;
+}
+.desktop-redesign .instance-preferences-heading { padding: 18px 0 14px; border: 0; }
+.desktop-redesign .instance-preferences-heading h2 { font-size: 23px; font-weight: 650; }
+.desktop-redesign .instance-preference-row {
+  grid-template-columns: minmax(130px, 1fr) minmax(0, 1.55fr) 24px;
+  gap: 12px;
+}
+.desktop-redesign .instance-preference-row > :nth-child(2) { max-width: none; }
+.desktop-redesign .instance-preferences :is(.instance-preferences-save, .instance-preference-row > input, .instance-java-editor textarea) {
+  border: 1px solid var(--launcher-menu-line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+.desktop-redesign .instance-preferences .instance-preferences-save { min-height: 36px; font: inherit; font-weight: 550; }
+.desktop-redesign .instance-preferences-save:enabled:hover { background: var(--desktop-selection); }
+.desktop-redesign .instance-java-advanced { background: transparent; border: 0; border-top: 1px solid var(--desktop-line); border-radius: 0; }
+.desktop-redesign .instance-java-advanced > summary { padding: 16px 0; font-size: 15px; font-weight: 550; }
+.desktop-redesign .instance-java-editor { padding: 0 0 12px; }
+@container (max-width: 520px) {
+  .desktop-redesign .instance-preference-row { grid-template-columns: minmax(0, 1fr) 24px; gap: 8px; }
+  .desktop-redesign .instance-preference-row > :nth-child(2) { grid-row: 2; grid-column: 1 / -1; }
+  .desktop-redesign .instance-preference-row > .info-tip-trigger { grid-row: 1; grid-column: 2; }
+}
+.desktop-redesign .instance-preferences-fields { padding-inline: 0; }
+.desktop-redesign .rail-header { background: transparent; border-bottom: 1px solid var(--desktop-line); box-shadow: none; }
+
+/* Keep specialized artwork, live previews and status colors inside the common surfaces. */
+:is(dialog.quick-switcher,dialog.instance-folder-dialog,dialog.content-transfer-dialog,dialog.sidebar-crop-dialog,dialog.crash-details,.share-instance-dialog) {
+  color: var(--text); background: var(--launcher-menu); border: 1px solid var(--launcher-menu-line); border-radius: 12px; box-shadow: 0 14px 46px var(--theme-shadow-soft);
+}
+:is(.quick-switcher .switcher-search,.share-instance-dialog > header,.content-transfer-panel > header,.instance-folder-dialog header,.crash-details footer) {
+  background: transparent; box-shadow: none; border-color: var(--launcher-menu-line);
+}
+.quick-switcher .switcher-results button[aria-selected="true"] { color: var(--text); background: var(--launcher-menu-hover); }
+.onboarding-shell .onboarding-code-card { background: var(--launcher-menu); border: 1px solid var(--launcher-menu-line); border-radius: 8px; box-shadow: none; }
+
+.desktop-redesign .mod-detail-drawer { border-left-color: var(--desktop-line); border-radius: 10px 0 0 10px; background: var(--launcher-menu); box-shadow: -8px 0 22px var(--theme-shadow-soft); }
+.desktop-redesign .mod-detail-header { background: transparent; border-color: var(--desktop-line); }
+.desktop-redesign .mod-detail-section h3 { font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: normal; }
+.desktop-redesign .mod-detail-section > p { font-size: 13px; }
+.desktop-redesign .mod-detail-footer { justify-content: flex-end; align-items: center; min-height: 58px; padding: 9px 14px; background: transparent; box-shadow: none; }
+.desktop-redesign .mod-detail-footer > button { width: auto; min-height: 36px; padding: 0 18px; border-radius: 7px; font-weight: 600; }

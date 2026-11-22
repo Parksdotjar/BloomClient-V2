@@ -14,14 +14,6 @@
   --nav-selected-bottom: color-mix(in srgb, var(--panel) 80%, var(--panel-strong));
 }
 
-.app-shell[data-custom-background="on"] :is(.sidebar-navigation, .settings-tabs) {
-  --nav-idle-ink: color-mix(in srgb, var(--custom-sidebar-text) 84%, var(--theme-base, #000));
-  --nav-selected-ink: color-mix(in srgb, var(--custom-sidebar-text) 45%, var(--theme-ink, #f1f4f1));
-  --nav-idle-fill: color-mix(in srgb, var(--theme-base, #050607) calc(var(--custom-sidebar-control-opacity) * .3), transparent);
-  --nav-selected-opacity: max(86%, var(--custom-sidebar-control-opacity));
-}
-
-/* These local overrides protect route state from the shared !important glass rules. */
 :is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button {
   border: 0 !important;
   border-radius: 10px;
@@ -59,10 +51,10 @@
 }
 
 /* One ceramic surface paints the selection; route buttons only paint their ink. */
-.app-shell:not([data-custom-background="on"]):not([data-blurred-sidebars="on"]) > .sidebar {
+.app-shell > .sidebar {
   background: var(--ceramic-sidebar, #000);
 }
-:root[data-theme="light"] .app-shell:not([data-custom-background="on"]):not([data-blurred-sidebars="on"]) > .sidebar {
+:root[data-theme="light"] .app-shell > .sidebar {
   --ceramic-sidebar: #eeeeee;
 }
 .app-shell > .sidebar > .sidebar-navigation {

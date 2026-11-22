@@ -4,7 +4,7 @@ import { invoke } from "./invoke";
 
 export type NativeLaunchProgress = {
   state: string; progress: number; message: string; instanceId?: string;
-  downloadedBytes?: number; totalBytes?: number; bytesPerSecond?: number;
+  completedAt?: number; downloadedBytes?: number; totalBytes?: number; bytesPerSecond?: number;
 };
 
 type ActivityOptions = {

@@ -1,4 +1,4 @@
-use super::{Hardware, Path, PathBuf};
+use super::{Path, PathBuf};
 use crate::command_without_console;
 pub const JAVA_PROVIDER_OS: &str = "windows";
 pub const JAVA_ARCHIVE_EXTENSION: &str = "zip";
@@ -59,20 +59,4 @@ pub fn discover_java() -> Vec<String> {
         }
     }
     candidates
-}
-pub fn detect_hardware() -> Result<Hardware, String> {
-    let script = r#"$cpu=Get-CimInstance Win32_Processor | Select-Object -First 1; $system=Get-CimInstance Win32_ComputerSystem; $video=@(Get-CimInstance Win32_VideoController); [pscustomobject]@{cpu=[string]$cpu.Name;cores=[uint32]$cpu.NumberOfCores;threads=[uint32]$cpu.NumberOfLogicalProcessors;ramBytes=[uint64]$system.TotalPhysicalMemory;gpus=@($video | ForEach-Object {[string]$_.Name});refreshRate=[uint32](($video | Measure-Object CurrentRefreshRate -Maximum).Maximum)} | ConvertTo-Json -Compress"#;
-    let output = command_without_console("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
-        .output()
-        .map_err(|error| format!("Hardware scan could not start: {error}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "Hardware scan failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-    let hardware: Hardware = serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("Hardware scan returned invalid data: {error}"))?;
-    Ok(hardware)
 }

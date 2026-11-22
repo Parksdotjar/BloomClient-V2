@@ -1,19 +1,20 @@
+import { normalizeAccent } from "./accent-preferences";
 import type { SettingsState } from '../main';
 
-export const appearanceKeys = ['theme', 'accent', 'accentMode', 'accentStops', 'accentDuration', 'accentIntensity', 'customBackground', 'backgroundMode', 'liveBackground', 'backgroundOpacity', 'settingsPanelDarkness', 'sidebarSurfaceDarkness', 'sidebarElementDarkness', 'sidebarElementFrost', 'sidebarOutline', 'sidebarTextColor', 'sidebarFrost', 'elementFrost', 'sidebarOpacity', 'elementOpacity'] as const;
+export const appearanceKeys = ['theme', 'oledBackground', 'oledForeground', 'lightBackground', 'lightForeground', 'interfaceFont', 'interfaceSize', 'spacing', 'accent', 'customAccent', 'lastCustomAccent', 'oledSidebar', 'lightSidebar', 'oledPanel', 'lightPanel', 'dividerStrength'] as const;
 export type Appearance = Pick<SettingsState, typeof appearanceKeys[number]>;
-export type AppearancePreset = { id: string; name: string; appearance: Appearance; image: string | null; created: number };
+export type AppearancePreset = { id: string; name: string; appearance: Appearance; created: number };
 export function captureAppearance(settings: SettingsState): Appearance {
   return structuredClone(Object.fromEntries(appearanceKeys.map(key => [key, settings[key]]))) as Appearance;
 }
 export function sameAppearance(a: Appearance, b: Appearance): boolean {
-  // Stop IDs are editor identities and are normalized again at startup.
-  const comparable = (value: Appearance) => ({ ...value, accentStops: value.accentStops.map(({ color, position }) => ({ color, position })) });
-  return JSON.stringify(comparable(a)) === JSON.stringify(comparable(b));
+  // Earlier presets only compare and restore the controls they originally saved.
+  return appearanceKeys.every(key => {
+    if (!(key in b)) return true;
+    return a[key] === b[key];
+  });
 }
 
-// Images belong in IndexedDB rather than the small localStorage settings quota.
-// Each record owns its image, so changing the current wallpaper cannot alter a preset.
 async function database(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('bloom-appearance-presets', 1);
@@ -35,6 +36,14 @@ async function transact<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore
     });
   } finally { db.close(); }
 }
-export const readPresets = () => transact<AppearancePreset[]>('readonly', store => store.getAll());
+export async function readPresets() {
+  const presets = await transact<AppearancePreset[]>('readonly', store => store.getAll());
+  return presets.map(({ id, name, created, appearance }) => {
+    const normalized = normalizeAccent(appearance);
+    // Older presets can omit newer controls. Apply only supported keys they contain.
+    const supported = appearanceKeys.filter(key => key in normalized);
+    return { id, name, created, appearance: Object.fromEntries(supported.map(key => [key, normalized[key]])) as Appearance };
+  });
+}
 export const writePreset = (preset: AppearancePreset) => transact('readwrite', store => store.put(preset));
 export const deletePreset = (id: string) => transact('readwrite', store => store.delete(id));

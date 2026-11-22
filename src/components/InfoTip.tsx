@@ -11,7 +11,12 @@ export function InfoTip({ label, children }: { label: string; children: string }
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const show = () => { window.clearTimeout(timer.current); setOpen(true); };
-  const hide = () => { timer.current = window.setTimeout(() => setOpen(false), 120); };
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      if (document.activeElement !== trigger.current && !trigger.current?.matches(":hover") && !bubble.current?.matches(":hover")) setOpen(false);
+    }, 120);
+  };
   useEffect(() => () => window.clearTimeout(timer.current), []);
   useLayoutEffect(() => {
     if (!open) return;
@@ -24,19 +29,28 @@ export function InfoTip({ label, children }: { label: string; children: string }
       const top = below + bounds.height <= window.innerHeight - 12 ? below : Math.max(12, anchor.top - bounds.height - 10);
       setPosition({ top, left });
     };
-    const dismiss = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopImmediatePropagation();
+      setOpen(false);
+    };
     const outside = (event: PointerEvent) => {
       if (!trigger.current?.contains(event.target as Node) && !bubble.current?.contains(event.target as Node)) setOpen(false);
     };
+    const visibility = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) setOpen(false);
+    });
+    if (trigger.current) visibility.observe(trigger.current);
     place();
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
-    document.addEventListener("keydown", dismiss);
+    document.addEventListener("keydown", dismiss, true);
     document.addEventListener("pointerdown", outside);
     return () => {
+      visibility.disconnect();
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
-      document.removeEventListener("keydown", dismiss);
+      document.removeEventListener("keydown", dismiss, true);
       document.removeEventListener("pointerdown", outside);
     };
   }, [open]);

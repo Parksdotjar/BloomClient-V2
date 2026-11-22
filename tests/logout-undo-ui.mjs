@@ -46,10 +46,11 @@ const shot = name => page.screenshot({ path: `logs/logout-undo/${name}.png`, ful
 const calls = () => page.evaluate(() => window.logoutTest.calls.filter(call => call.command === 'sign_out_minecraft').length);
 const logOut = () => page.getByRole('menuitem', { name: 'Log out', exact: true });
 const undo = () => page.getByRole('menuitem', { name: 'Undo log out', exact: true });
-const openMenu = async () => { await page.locator('.profile-trigger').click(); await logOut().waitFor(); };
+const account = () => page.getByRole('button', { name: 'Account: Test', exact: true });
+const openMenu = async () => { await account().click(); await logOut().waitFor(); };
 try {
   await page.clock.install({ time: new Date('2026-11-18T17:00:00Z') });
-  await page.goto(url); await page.locator('.signed-in-name').waitFor();
+  await page.goto(url); await account().waitFor();
   await page.clock.pauseAt(new Date('2026-11-18T17:01:00Z'));
   await openMenu(); await shot('idle');
   const before = await logOut().boundingBox();
@@ -67,19 +68,19 @@ try {
   await openMenu(); await logOut().click(); await page.getByRole('button', { name: 'Home', exact: true }).click();
   await page.clock.fastForward(6000); assert.equal(await calls(), 0);
   // Switching to account settings closes the menu and cancels the queued logout.
-  await openMenu(); await logOut().click(); await page.getByRole('menuitem', { name: 'Profile & accounts' }).click();
+  await openMenu(); await logOut().click(); await page.getByRole('menuitem', { name: 'Account settings' }).click();
   await page.clock.fastForward(6000); assert.equal(await calls(), 0);
   // Errors must preserve the account and permit a fresh attempt.
   await openMenu(); await page.evaluate(() => window.logoutTest.fail = true); await logOut().click();
   await page.clock.fastForward(5000); await page.getByText('Could not sign out. Try again.', { exact: true }).waitFor();
-  assert.equal(await calls(), 1); assert.equal(await page.locator('.signed-in-name').isVisible(), true);
+  assert.equal(await calls(), 1); assert.equal(await account().isVisible(), true);
   await page.clock.fastForward(4100); // Let the existing error toast leave the account dock.
   await page.evaluate(() => { window.logoutTest.fail = false; window.logoutTest.delay = true; });
   await openMenu(); await logOut().click(); await page.clock.fastForward(5000);
   await page.getByRole('menuitem', { name: 'Signing out', exact: true }).waitFor();
   assert.equal(await page.getByRole('menuitem', { name: 'Signing out', exact: true }).isDisabled(), true);
   await page.clock.fastForward(7000); assert.equal(await calls(), 2);
-  await page.evaluate(() => window.logoutTest.finish()); await page.locator('.signin-button').waitFor();
+  await page.evaluate(() => window.logoutTest.finish()); await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor();
   await shot('signed-out'); assert.equal(await calls(), 2);
   // The undo window remains five seconds when motion is reduced or disabled.
   for (const [name, prefs, reduced] of [
@@ -91,8 +92,7 @@ try {
     await page.evaluate(prefs => localStorage.setItem('logout-test-prefs', JSON.stringify(prefs)), prefs);
     await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
     await page.setViewportSize(name === 'light-compact' ? { width: 900, height: 740 } : { width: 1280, height: 800 });
-    await page.reload(); await page.clock.fastForward(500); await page.locator('.signed-in-name').waitFor();
-    if (name === 'light-compact') await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+    await page.reload(); await page.clock.fastForward(500); await account().waitFor();
     await openMenu(); await logOut().click(); await page.clock.fastForward(2200); await undo().waitFor();
     assert.equal(await calls(), 0);
     if (name !== 'light-compact') assert.equal(await page.locator('.logout-countdown path').evaluate(el => getComputedStyle(el).transitionDuration), '0s');
