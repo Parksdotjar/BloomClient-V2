@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+page.setDefaultTimeout(6500);
 const errors = [];
 page.on("pageerror", error => errors.push(error.message));
 const url = process.env.BLOOM_TEST_URL || "http://localhost:1420";
@@ -83,10 +84,12 @@ await page.addInitScript(() => {
     },
   };
 });
-const downloads = () => page.getByRole("button", { name: "Downloads", exact: true }).click();
+const rail = page.getByRole("navigation",{name:"Main navigation"});
+const downloads = () => rail.getByRole("button", { name: "Downloads", exact: true }).click();
+const section = name => page.getByRole("navigation",{name:"Download sections"}).getByRole("button",{name,exact:true}).click();
 const openCatalog = async () => {
-  await page.getByRole("button", { name: "Open SMP", exact: true }).click();
-  await page.getByRole("button", { name: "Add Mods", exact: true }).first().click();
+  await rail.getByRole("button",{name:"Instances",exact:true}).click();
+  await page.getByRole("button",{name:"Add Mods",exact:true}).click();
   await page.locator(".catalog-item").first().waitFor();
 };
 const queueRows = () => page.locator(".content-download-task");
@@ -100,9 +103,13 @@ try {
   await page.locator(".catalog-install").evaluateAll(buttons => buttons.slice(0, 4).forEach(button => button.click()));
   await page.getByRole("button", { name: "Delta is queued for installation", exact: true }).waitFor();
   await downloads();
-  assert.equal(await queueRows().count(), 4);
+  assert.equal(await queueRows().count(), 1);
   assert.equal(await page.locator('[data-state="installing"]').count(), 1);
-  assert.equal(await page.locator('[data-state="queued"]').count(), 3);
+  await section("Queued"); assert.equal(await page.locator('[data-state="queued"]').count(), 3);
+  const search = page.getByRole("searchbox",{name:"Search downloads"});
+  await search.fill("Delta"); assert.equal(await queueRows().count(),1);
+  await row("Delta").getByText("Queued · 3").waitFor();
+  await search.fill(""); await page.screenshot({path:"logs/download-queue/queue-section.png"}); await section("Downloading");
   await page.evaluate(() => { const t = window.queueTest; t.progress(t.queue.tasks[0].id, 37); t.emit("minecraft-launch-progress", { state: "idle", progress: 0, message: "", instanceId: "" }); });
   await page.waitForFunction(() => document.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow") === "37");
   assert.equal(await page.locator('[data-state="queued"] [role="progressbar"]').count(), 0);
@@ -110,12 +117,12 @@ try {
   await page.evaluate(() => { const t = window.queueTest; t.gameProgress = { state: "complete", progress: 100, message: "Minecraft ready", instanceId: "separate-game" }; t.emit("minecraft-launch-progress", t.gameProgress); });
   await page.locator(".active-task").waitFor();
   await page.waitForFunction(() => !document.querySelector(".active-task"));
-  assert.equal(await queueRows().count(), 4, "Game completion expires independently of ongoing content progress");
+  assert.equal(await queueRows().count(), 1, "Game completion expires independently of ongoing content progress");
   await page.evaluate(() => { const t = window.queueTest; t.gameProgress = { state: "idle", progress: 0, message: "", instanceId: "" }; t.emit("minecraft-launch-progress", t.gameProgress); });
   await openCatalog();
   for (const title of ["Alpha", "Bravo", "Charlie", "Delta"]) assert.equal(await page.getByRole("button", { name: `${title} is queued for installation`, exact: true }).isDisabled(), true);
   await downloads(); await page.reload(); await downloads();
-  await page.waitForFunction(() => document.querySelectorAll(".content-download-task").length === 4);
+  await page.waitForFunction(() => document.querySelectorAll(".content-download-task").length === 1);
   assert.equal(await row("Alpha").getByRole("progressbar").getAttribute("aria-valuenow"), "37");
   // Stale snapshots and temporary polling failure must not erase or rewind known work.
   await page.evaluate(() => { const t = window.queueTest; t.holdPoll = true; window.dispatchEvent(new Event("focus")); });
@@ -129,11 +136,11 @@ try {
     for (const task of [...t.queue.tasks]) t.finish(task.id, "installed", false);
     window.dispatchEvent(new Event("focus"));
   });
-  await page.waitForFunction(() => document.querySelectorAll(".completed-task").length === 4);
+  await section("Completed"); await page.waitForFunction(() => document.querySelectorAll(".completed-task").length === 4);
   assert.deepEqual((await history()).map(task => task.name).sort(), ["Alpha", "Bravo", "Charlie", "Delta"]);
   await page.reload(); await downloads(); await page.getByText("No active downloads", { exact: true }).waitFor();
   assert.equal((await history()).length, 4);
-  await page.getByRole("button", { name: "Clear Completed", exact: true }).click();
+  await section("Completed"); await page.getByRole("button", { name: "Clear completed", exact: true }).click();
   await page.getByText("No completed downloads yet", { exact: true }).waitFor();
   await page.reload(); await downloads(); await page.waitForTimeout(150);
   assert.deepEqual(await history(), [], "Snapshots must not resurrect cleared history");
@@ -141,30 +148,33 @@ try {
   await openCatalog();
   for (const title of ["Echo", "Foxtrot", "Golf", "Hotel"]) await page.getByRole("button", { name: `Install ${title}`, exact: true }).click();
   await downloads();
-  await page.getByRole("button", { name: "Cancel Foxtrot", exact: true }).click();
-  assert.equal(await row("Foxtrot").getAttribute("data-state"), "cancelled");
-  assert.equal(await row("Echo").getAttribute("data-state"), "installing");
-  assert.equal(await row("Golf").getAttribute("data-state"), "queued");
-  await page.getByRole("button", { name: "Cancel Echo", exact: true }).click();
+  await section("Queued"); await page.getByRole("button", { name: "Cancel Foxtrot", exact: true }).click();
+  await section("Stopped"); assert.equal(await row("Foxtrot").getAttribute("data-state"), "cancelled");
+  await section("Downloading"); assert.equal(await row("Echo").getAttribute("data-state"), "installing");
+  await section("Queued"); assert.equal(await row("Golf").getAttribute("data-state"), "queued");
+  await section("Downloading"); await page.getByRole("button", { name: "Cancel Echo", exact: true }).click();
   assert.equal(await page.getByRole("button", { name: "Cancel Echo", exact: true }).isDisabled(), true);
   await finish("Echo", "cancelled");
   assert.equal(await row("Golf").getAttribute("data-state"), "installing");
   await finish("Golf", "error");
-  await row("Golf").getByText("Network unavailable", { exact: true }).waitFor();
-  assert.equal(await row("Hotel").getAttribute("data-state"), "installing");
-  await page.getByRole("button", { name: "Dismiss Foxtrot", exact: true }).click();
+  await section("Stopped"); await row("Golf").getByText("Network unavailable", { exact: true }).waitFor();
+  await section("Downloading"); assert.equal(await row("Hotel").getAttribute("data-state"), "installing");
+  await section("Stopped"); await page.getByRole("button", { name: "Dismiss Foxtrot", exact: true }).click();
   assert.equal(await row("Foxtrot").count(), 0);
   // Terminal recovery while the app is hidden: polling sees the completion on return.
   await finish("Hotel", "installed", false);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await page.waitForFunction(() => document.querySelectorAll(".completed-task").length === 1);
+  await section("Completed"); await page.waitForFunction(() => document.querySelectorAll(".completed-task").length === 1);
   assert.deepEqual((await history()).map(task => task.name), ["Hotel"]);
   await page.screenshot({ path: "logs/download-queue/outcomes.png" });
   await page.evaluate(() => localStorage.setItem("bloom-settings", JSON.stringify({ theme: "light", animations: false })));
   await page.setViewportSize({ width: 900, height: 720 }); await page.reload(); await downloads();
-  await row("Golf").waitFor();
+  await section("Stopped"); await row("Golf").waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: "logs/download-queue/compact-light.png" });
   assert.deepEqual(errors, []);
   console.log("Download queue passed: four rapid installs, every queued row, per-task progress, navigation/reload recovery, stale snapshots, dropped events, all four completions, clear persistence, individual queued/active cancellation, failure continuation, dismissal and compact Light layout.");
+} catch (error) {
+  console.error("Page errors",errors, "Visible controls", (await page.getByRole("button").allTextContents()).slice(-28));
+  throw error;
 } finally { await browser.close(); }

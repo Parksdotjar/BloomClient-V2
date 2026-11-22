@@ -1,6 +1,6 @@
 use std::{fs, io::Write, path::Path, sync::atomic::Ordering};
 
-fn validate_id(id: &str) -> Result<(), String> {
+pub(super) fn validate_id(id: &str) -> Result<(), String> {
     if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return Err("Invalid instance identifier.".into());
     }

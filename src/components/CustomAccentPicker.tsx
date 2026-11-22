@@ -1,9 +1,5 @@
-import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check } from "lucide-react";
-import { WallpaperAccents, WallpaperSourceContext } from "./WallpaperAccents";
-export const PRESET_ACCENTS = ["#8ee365", "#5d9dff", "#a56bff", "#e957ad", "#f4a340", "#f05454"] as const;
-
 type HsvColor = { hue: number; saturation: number; value: number };
 
 function clampColorChannel(value: number, minimum = 0, maximum = 100) {
@@ -43,9 +39,14 @@ function hexToHsv(input: string): HsvColor {
   };
 }
 
-export function CustomAccentPicker({ value, onApply, label = "Custom accent color", description = "Build your own Delight accent.", showValue = false, selected, trigger, wallpaperSource }: { wallpaperSource?: string | null; value: string; onApply: (color: string) => void; label?: string; description?: string; showValue?: boolean; selected?: boolean; trigger?: (props: { ref: RefObject<HTMLButtonElement | null>; onClick: () => void; expanded: boolean }) => ReactNode }) {
-  const sharedWallpaper = useContext(WallpaperSourceContext);
-  const paletteSource = wallpaperSource === undefined ? sharedWallpaper : wallpaperSource;
+type PickerProps = {
+  value: string;
+  onApply: (color: string) => void;
+  label?: string;
+
+};
+
+export function CustomAccentPicker({ value, onApply, label = "Custom accent color" }: PickerProps) {
   const [open, setOpen] = useState(false);
   const [color, setColor] = useState<HsvColor>(() => hexToHsv(value));
   const [hexDraft, setHexDraft] = useState(value.toUpperCase());
@@ -54,7 +55,6 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
   const pickerRef = useRef<HTMLDivElement>(null);
   const currentHex = /^#[0-9a-f]{6}$/i.test(hexDraft) ? hexDraft.toLowerCase() : hsvToHex(color);
   const hexValid = /^#[0-9a-f]{6}$/i.test(hexDraft);
-  const customSelected = selected ?? !PRESET_ACCENTS.some(preset => preset.toLowerCase() === value.toLowerCase());
 
   const setHsv = (next: HsvColor) => {
     const normalized = {
@@ -87,7 +87,10 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
     setPosition({ top: 0, left: 0 });
     setOpen(true);
   };
-  const closePicker = () => setOpen(false);
+  const closePicker = (restoreFocus = false) => {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true });
+  };
   const updateFromSquare = (event: ReactPointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     setHsv({
@@ -102,41 +105,42 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
     if (/^#[0-9a-f]{6}$/i.test(prefixed)) setColor(hexToHsv(prefixed));
   };
 
+  useLayoutEffect(() => {
+    if (open) placePicker();
+  }, [open]);
+  const positioned = position.top > 0;
+  useEffect(() => {
+    if (open && positioned) pickerRef.current?.querySelector<HTMLElement>('[role="slider"]')?.focus({ preventScroll: true });
+  }, [open, positioned]);
+
   useEffect(() => {
     if (!open) return;
-    const frame = window.requestAnimationFrame(placePicker);
     const observer = new ResizeObserver(placePicker);
     if (pickerRef.current) observer.observe(pickerRef.current);
     const closeOutside = (event: PointerEvent) => {
       const target = event.target as Node;
       if (!triggerRef.current?.contains(target) && !pickerRef.current?.contains(target)) closePicker();
     };
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") closePicker(); };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); closePicker(true); } };
     window.addEventListener("resize", placePicker);
     window.addEventListener("scroll", placePicker, true);
     document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", closeOnEscape, true);
     return () => {
-      window.cancelAnimationFrame(frame);
       observer.disconnect();
       window.removeEventListener("resize", placePicker);
       window.removeEventListener("scroll", placePicker, true);
       document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("keydown", closeOnEscape, true);
     };
   }, [open]);
 
   return <>
-    {trigger ? trigger({ ref: triggerRef, onClick: () => open ? closePicker() : openPicker(), expanded: open }) : <button
-      ref={triggerRef}
-      type="button"
-      className={`accent-custom-trigger ${customSelected ? "picked" : ""}`}
-      aria-label={`Choose ${label.toLowerCase()}`}
-      style={showValue ? { background: value } : undefined}
-      aria-expanded={open}
-      title={label}
-      onClick={() => open ? closePicker() : openPicker()}
-    />}
+    <button ref={triggerRef} type="button" className="appearance-color-chip"
+      aria-label={`Choose ${label.toLowerCase()}`} aria-expanded={open} aria-haspopup="dialog"
+      onClick={() => open ? closePicker() : openPicker()}>
+      <span aria-hidden="true" style={{ background: value }} />{value.toUpperCase()}
+    </button>
     {open && createPortal(
       <div
         ref={pickerRef}
@@ -155,15 +159,12 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
           "--picker-value": `${100 - color.value}%`,
         } as CSSProperties}
       >
-        <div className="accent-picker-heading">
-          <div><b>Custom color</b><span>{description}</span></div>
-          <span className="accent-picker-preview" aria-hidden="true" />
-        </div>
         <div
           className="accent-saturation-field"
           role="slider"
           tabIndex={0}
-          aria-label="Accent saturation and brightness"
+          aria-label="Saturation and brightness"
+          aria-valuenow={Math.round(color.saturation)}
           aria-valuetext={`${Math.round(color.saturation)}% saturation, ${Math.round(color.value)}% brightness`}
           onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); updateFromSquare(event); }}
           onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) updateFromSquare(event); }}
@@ -180,36 +181,31 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
           <i aria-hidden="true" />
         </div>
         <label className="accent-hue-control">
-          <span>Hue</span>
           <input
             type="range"
             min="0"
             max="359"
             value={Math.round(color.hue)}
-            aria-label="Accent hue"
+            aria-label="Hue"
             onChange={event => setHsv({ ...color, hue: Number(event.target.value) })}
           />
         </label>
         <label className="accent-hex-control">
-          <span>Hex</span>
+          <span aria-hidden="true" className="hex-preview" />
           <input
             value={hexDraft}
             maxLength={7}
             spellCheck={false}
             className={hexValid ? "" : "invalid"}
             aria-invalid={!hexValid}
-            aria-label="Custom accent hex color"
+            aria-label="Hex color"
             onChange={event => changeHex(event.target.value)}
             onKeyDown={event => {
-              if (event.key === "Enter" && hexValid) { onApply(currentHex); closePicker(); }
+              if (event.key === "Enter" && hexValid) { onApply(currentHex); closePicker(true); }
             }}
           />
         </label>
-        <div className="accent-picker-actions">
-          <button type="button" className="accent-picker-cancel" onClick={closePicker}>Cancel</button>
-          <button type="button" className="accent-picker-apply" disabled={!hexValid} onClick={() => { onApply(currentHex); closePicker(); }}><Check size={15} />Apply color</button>
-        </div>
-        {paletteSource !== undefined && <WallpaperAccents source={paletteSource} value={value} onApply={color => { onApply(color); closePicker(); }} />}
+        <button type="button" className="color-picker-apply" disabled={!hexValid} onClick={() => { onApply(currentHex); closePicker(true); }}>Apply color</button>
       </div>,
       document.body,
     )}

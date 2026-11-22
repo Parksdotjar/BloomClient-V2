@@ -24,7 +24,7 @@ use vodozemac::{
 use super::bloom_data_dir;
 
 const SOCIAL_API: &str = "https://api.north.bloomclient.org/minecraft/v1/social";
-const SOCIAL_AUTH: &str = "https://bloomclient.org/v1/social/native/authorize";
+const SOCIAL_AUTH: &str = "https://delightproductions.org/v1/social/native/authorize";
 const KEYRING_SERVICE: &str = "Bloom Client Social";
 
 #[derive(Default)]
@@ -670,6 +670,39 @@ fn authenticated_response(
     // Retry authentication once, never loop on revoked/expired credentials.
     let renewed = renew(&tokens)?;
     send(&renewed)
+}
+
+pub(crate) fn ask_delight_profile() -> Option<String> {
+    let _guard = social_credential_io().lock().ok()?;
+    let id = active_profile()?;
+    load_tokens()?;
+    Some(id)
+}
+
+pub(crate) fn ask_delight_request(account: &str, body: Option<serde_json::Value>) -> Result<serde_json::Value, String> {
+    let (profile, tokens) = {
+        let _guard = social_credential_io().lock().map_err(|_| "offline")?;
+        let profile = active_profile().ok_or("signed_out")?;
+        if !account.ends_with(&format!("-{profile}")) { return Err("account_changed".into()); }
+        let tokens = load_tokens().ok_or("signed_out")?;
+        if tokens.refresh_expires_at <= timestamp() { return Err("signed_out".into()); }
+        let tokens = if tokens.access_expires_at <= timestamp() + 30_000 {
+            refresh_tokens(&tokens).map_err(|_| "offline")?
+        } else { tokens };
+        (profile, tokens)
+    };
+    let url = format!("{SOCIAL_API}/ask-delight/{}", if body.is_some() { "answer" } else { "usage" });
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(28))
+        .redirect(reqwest::redirect::Policy::none())
+        .build().map_err(|_| "offline")?;
+    let mut request = client.request(if body.is_some() { reqwest::Method::POST } else { reqwest::Method::GET }, url)
+        .bearer_auth(tokens.access_token);
+    if let Some(body) = body { request = request.json(&body); }
+    let response = request.send().map_err(|_| "offline")?;
+    if ask_delight_profile().as_deref() != Some(profile.as_str()) { return Err("account_changed".into()); }
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED { return Err("signed_out".into()); }
+    response.json().map_err(|_| "offline".into())
 }
 
 fn authenticated_request(

@@ -1,0 +1,9 @@
+/* The top border starts just after the rounded left corner. Round repetition
+   fits complete swags across the available width, including the last one. */
+.winter-lights {
+  position: absolute;
+  inset: 0 0 auto 11px;
+  height: 54px;
+  pointer-events: none;
+  background: url("./winter-lights.svg") left top / 276px 54px round no-repeat;
+}

@@ -152,8 +152,6 @@
 .locker-tabs.toolbar-segments > i { top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / var(--segments)); border-radius: 9px; background: var(--dropdown-selected); box-shadow: var(--tab-slot-shadow); }
 .locker-tabs.toolbar-segments > button:hover { background: transparent; }
 :root[data-theme] .locker-tabs.toolbar-segments > button[aria-selected="true"] { background: transparent; box-shadow: none; }
-.locker-upload-skin { min-height: 226px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-strong); color: var(--accent-ink, var(--accent)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 17px; font: inherit; }
-.locker-upload-skin strong { color: var(--text); font-size: 12px; }
 .locker-skin-thumbnail { width: 132px; height: 176px; object-fit: contain; }
 .locker-skin-placeholder { color: var(--muted); font-size: 11px; }
 .locker-wardrobe-identity { display: flex; align-items: center; justify-content: space-between; gap: 7px; min-width: 0; }
@@ -188,3 +186,85 @@
 :root[data-animations="off"] .locker-card-equip,
 :root[data-performance="ultra"] .locker-cape-identity,
 :root[data-performance="ultra"] .locker-card-equip { transition: none; }
+
+/* The sidebar owns navigation; the collection and preview share the detail pane. */
+.desktop-locker { container-type: inline-size; }
+.look-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
+.look-heading h1 { margin: 0; font-size: clamp(24px, 2.3vw, 32px); font-weight: 650; }
+.desktop-locker .locker-content { grid-template-columns: minmax(0, 1fr) clamp(195px, 29%, 335px); gap: clamp(14px, 2vw, 32px); align-items: start; }
+.desktop-locker .locker-collection { padding: 0; }
+.desktop-locker .locker-grid { grid-template-columns: repeat(auto-fill,minmax(min(138px,100%),1fr)); }
+.desktop-locker .locker-detail { top: 8px; grid-row: auto; border: 0; border-left: 1px solid var(--desktop-line); border-radius: 0; background: transparent; padding-left: 16px; }
+.desktop-locker .locker-detail-base,.desktop-locker .locker-cape-name { margin: 0; background: transparent; box-shadow: none; border-radius: 0; }
+.desktop-locker .locker-detail-base { padding: 12px 0; }
+.desktop-locker .locker-cape-name { min-height: 40px; padding: 6px 10px; }
+.desktop-locker .locker-preview { min-height: 0; height: clamp(230px,33cqw,390px); background: transparent; }
+.desktop-locker .locker-preview .cape-preview { min-height: 0; height: 100%; }
+.desktop-locker .locker-cape { border-radius: 8px; box-shadow: none; background: transparent; }
+.desktop-locker .locker-cape.selected { border-color: var(--muted); }
+.desktop-locker .locker-cape .locker-cape-identity { opacity: 1; }
+.desktop-locker .locker-cape-name strong { color: var(--text); font-size: 14px; font-weight: 550; }
+.desktop-locker .locker-art { height: 155px; }
+.desktop-locker .locker-skin-thumbnail { max-height: 100%; max-width: 100%; }
+.desktop-locker :is(.locker-equip,.locker-state-action,.shop-claim,.locker-refresh,.locker-pagination button) { background: transparent; color: var(--text); border: 1px solid var(--launcher-menu-line); border-radius: 7px; box-shadow: none; }
+.desktop-locker .locker-pagination span { background: transparent; }
+.desktop-locker button:hover:enabled:not(.locker-art) { background-color: var(--launcher-menu-hover); }
+.look-slots { display: grid; }
+.look-slots button { display: flex; align-items: center; gap: 14px; text-align: start; padding: 15px 10px; color: var(--text); background: transparent; border: 0; border-bottom: 1px solid var(--desktop-line); font: inherit; }
+.look-slots button span { display: grid; gap: 4px; flex: 1; }
+.look-slots small { color: var(--muted); }
+@container (max-width: 470px) {
+  .desktop-locker .locker-content { grid-template-columns: minmax(0,1fr) minmax(138px,.8fr); gap: 8px; }
+  .desktop-locker .locker-detail { padding-left: 8px; }
+}
+
+.desktop-locker .locker-collection-heading span { background: transparent; padding: 0; min-width: 0; height: auto; font-size: 13px; font-weight: 500; }
+.desktop-locker .locker-cape.selected .locker-cape-name strong { color: var(--text); }
+
+/* Skin selection is local-first. Capes and cloaks use their confirmed equip state. */
+.desktop-locker .locker-grid .locker-cape { position: relative; border: 0; box-shadow: none; }
+.desktop-locker .locker-grid .locker-cape.selected { background: transparent; }
+.desktop-locker .locker-grid:not(.skin-grid) .locker-cape:has(> button[aria-description="Equipped"]),
+.desktop-locker .locker-grid:not(.skin-grid) .locker-art[aria-description="Equipped"],
+.desktop-locker .skin-grid .locker-cape:has(> button[aria-pressed="true"]),
+.desktop-locker .skin-grid .locker-art[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--panel) 80%, var(--text));
+}
+.desktop-locker .locker-grid .locker-cape:focus-within { outline: none; }
+.desktop-locker .locker-grid .locker-art:focus-visible { outline: 2px solid var(--text); outline-offset: -3px; }
+.desktop-locker .skin-grid .locker-cape { aspect-ratio: 2 / 3; }
+.desktop-locker .skin-grid .locker-art { width: 100%; height: 100%; padding: 5px 0; }
+.desktop-locker .skin-grid .locker-skin-thumbnail { width: 100%; height: 100%; object-fit: cover; }
+.desktop-locker .shop-empty { background: transparent; border: 0; }
+
+
+.desktop-locker .wardrobe-heading { flex-wrap: nowrap; gap: 8px; }
+.locker-inline-action {
+  --locker-action-fill: #202020;
+  --locker-action-hover: #303030;
+  --locker-action-line: #454545;
+  --locker-action-ink: #ededed;
+  --locker-action-focus: #969696;
+  flex: 0 1 auto; min-width: 0; margin: 0 0 0 auto; height: 35px; box-sizing: border-box;
+  display: flex; align-items: stretch; overflow: hidden; border-radius: 7px;
+  border: 1px solid var(--locker-action-line); background: var(--locker-action-fill); color: var(--locker-action-ink);
+}
+.locker-inline-action:focus-within { border-color: var(--locker-action-focus); }
+.locker-inline-action input { flex: 1; width: 0; min-width: 0; padding: 0 8px; font: inherit; font-size: 13px; color: inherit; background: transparent; border: 0; outline: 0; }
+.locker-inline-action button,.locker-inline-action output {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap;
+  padding: 0 7px; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px;
+}
+.locker-inline-action .inline-trigger,.locker-inline-action output { width: 100%; }
+
+:root[data-theme="light"] .locker-inline-action {
+  --locker-action-fill: #f4f4f4;
+  --locker-action-hover: #e4e4e4;
+  --locker-action-line: #bdbdbd;
+  --locker-action-ink: #222222;
+  --locker-action-focus: #707070;
+}
+.desktop-locker .locker-inline-action button:hover:enabled { background: var(--locker-action-hover); }
+.desktop-locker .locker-inline-action button:focus-visible { outline: 1px solid var(--locker-action-focus); outline-offset: -2px; }
+.desktop-locker .locker-inline-action input:focus { background: transparent; box-shadow: none; }
+.desktop-locker .locker-inline-action input::placeholder { color: var(--locker-action-focus); }

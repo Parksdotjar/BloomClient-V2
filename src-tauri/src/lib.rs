@@ -1,10 +1,10 @@
 mod platform;
 mod runtime_archive;
-mod autotune;
 mod fabric_loader;
 mod catalog_filters;
 mod launch_cache;
 mod screenshots;
+mod pack_artwork;
 mod content_transfer;
 mod content_downloads;
 mod instance_folders;
@@ -19,6 +19,8 @@ mod cache;
 mod cosmetics;
 mod modpack_sharing;
 mod social;
+mod ask_delight;
+
 mod wardrobe;
 
 mod utilities;
@@ -736,6 +738,8 @@ struct LauncherState {
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct LaunchProgress {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed_at: Option<u64>,
     instance_id: String,
     state: String,
     progress: u8,
@@ -769,6 +773,7 @@ static CURRENT_LAUNCH: OnceLock<Mutex<LaunchProgress>> = OnceLock::new();
 fn current_launch() -> &'static Mutex<LaunchProgress> {
     CURRENT_LAUNCH.get_or_init(|| {
         Mutex::new(LaunchProgress {
+            completed_at: None,
             instance_id: String::new(),
             state: "idle".into(),
             progress: 0,
@@ -788,6 +793,8 @@ fn emit_launch(
     message: impl Into<String>,
 ) {
     let payload = LaunchProgress {
+        completed_at: (state == "complete").then(|| std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64),
         instance_id: instance_id.to_string(),
         state: state.to_string(),
         progress,
@@ -812,6 +819,7 @@ fn emit_download(
     bytes_per_second: u64,
 ) {
     let payload = LaunchProgress {
+        completed_at: None,
         instance_id: instance_id.to_string(),
         state: "installing".into(),
         progress,
@@ -832,6 +840,7 @@ fn get_minecraft_launch_status() -> LaunchProgress {
         .lock()
         .map(|status| status.clone())
         .unwrap_or(LaunchProgress {
+            completed_at: None,
             instance_id: String::new(),
             state: "idle".into(),
             progress: 0,
@@ -1431,6 +1440,11 @@ async fn get_saved_minecraft_profile(
 
 #[tauri::command]
 async fn get_minecraft_skin(account_id: String) -> Result<String, String> {
+    let (skin_url, _) = minecraft_skin_metadata(&account_id).await?;
+    wardrobe::texture(&skin_url).await
+}
+
+async fn minecraft_skin_metadata(account_id: &str) -> Result<(String, &'static str), String> {
     use base64::Engine;
 
     let uuid: String = account_id
@@ -1473,53 +1487,12 @@ async fn get_minecraft_skin(account_id: String) -> Result<String, String> {
     let skin_url = textures["textures"]["SKIN"]["url"]
         .as_str()
         .ok_or("Minecraft did not provide a skin for this account.")?;
-    let mut parsed_url = reqwest::Url::parse(skin_url)
-        .map_err(|_| "Minecraft returned an invalid skin address.".to_string())?;
-    if parsed_url.host_str() != Some("textures.minecraft.net")
-        || parsed_url.username() != ""
-        || parsed_url.password().is_some()
-        || parsed_url.port().is_some()
-        || !matches!(parsed_url.scheme(), "http" | "https")
-    {
-        return Err("Minecraft returned an untrusted skin address.".to_string());
-    }
-    // Mojang's signed UUID profile payload still commonly returns an `http://`
-    // texture address. Never send that plaintext request: pin the exact trusted
-    // texture host above, then upgrade it to HTTPS before downloading the skin.
-    parsed_url
-        .set_scheme("https")
-        .map_err(|_| "Minecraft returned an invalid skin address.".to_string())?;
-
-    let texture_cache_key = parsed_url.as_str().to_owned();
-    if let Some(cached) = cache::read_json::<String>("minecraft-textures", &texture_cache_key, None)
-    {
-        return Ok(cached);
-    }
-
-    let response = bloom_http_client()?
-        .get(parsed_url)
-        .timeout(std::time::Duration::from_secs(8))
-        .send()
-        .await
-        .map_err(|error| format!("Minecraft's skin texture could not be downloaded: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Minecraft's skin texture could not be downloaded: {error}"))?;
-    if response.content_length().unwrap_or(0) > 1_048_576 {
-        return Err("Minecraft returned a skin texture that is too large.".to_string());
-    }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| format!("Minecraft's skin texture could not be read: {error}"))?;
-    if bytes.is_empty() || bytes.len() > 1_048_576 {
-        return Err("Minecraft returned an invalid skin texture.".to_string());
-    }
-    let data_url = format!(
-        "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    );
-    let _ = cache::write_json("minecraft-textures", &texture_cache_key, &data_url);
-    Ok(data_url)
+    let model = if textures["textures"]["SKIN"]["metadata"]["model"] == "slim" {
+        "slim"
+    } else {
+        "classic"
+    };
+    Ok((skin_url.to_owned(), model))
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -1649,7 +1622,7 @@ fn download_managed_java(
         0,
     );
     let client = reqwest::blocking::Client::builder()
-        .user_agent("BloomClient/1.0 (https://bloomclient.org)")
+        .user_agent("BloomClient/1.0 (https://delightproductions.org)")
         .build()
         .map_err(|error| error.to_string())?;
     let mut package = None;
@@ -1785,82 +1758,6 @@ fn download_managed_java(
     Ok(java)
 }
 
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct HardwareReport {
-    cpu: String,
-    cores: u32,
-    threads: u32,
-    ram_bytes: u64,
-    gpus: Vec<String>,
-    refresh_rate: Option<u32>,
-    java_versions: Vec<u32>,
-    recommended_memory_mb: u32,
-    recommended_render_distance: u32,
-    recommended_simulation_distance: u32,
-    recommended_graphics: String,
-}
-
-fn detect_hardware_report_blocking() -> Result<HardwareReport, String> {
-    let hardware = platform::detect_hardware()?;
-    let ram_gb = hardware.ram_bytes / 1_073_741_824;
-    let recommended_memory_mb = match ram_gb {
-        0..=7 => 2048,
-        8..=15 => 4096,
-        16..=31 => 6144,
-        _ => 8192,
-    };
-    let has_dedicated_gpu = hardware.gpus.iter().any(|gpu| {
-        let name = gpu.to_ascii_lowercase();
-        name.contains("nvidia") || name.contains("radeon") || name.contains("arc")
-    });
-    let recommended_render_distance = if has_dedicated_gpu && hardware.cores >= 8 {
-        16
-    } else if hardware.cores >= 6 {
-        12
-    } else {
-        8
-    };
-    let recommended_simulation_distance = if hardware.cores >= 8 {
-        10
-    } else if hardware.cores >= 6 {
-        8
-    } else {
-        6
-    };
-    let mut java_versions = detect_java_installations_blocking()
-        .into_iter()
-        .filter(|java| java.usable)
-        .filter_map(|java| java.major_version)
-        .collect::<Vec<_>>();
-    java_versions.sort_unstable();
-    java_versions.dedup();
-    Ok(HardwareReport {
-        cpu: hardware.cpu.trim().to_string(),
-        cores: hardware.cores,
-        threads: hardware.threads,
-        ram_bytes: hardware.ram_bytes,
-        gpus: hardware.gpus,
-        refresh_rate: hardware.refresh_rate,
-        java_versions,
-        recommended_memory_mb,
-        recommended_render_distance,
-        recommended_simulation_distance,
-        recommended_graphics: if has_dedicated_gpu && ram_gb >= 16 {
-            "High".into()
-        } else {
-            "Balanced".into()
-        },
-    })
-}
-
-#[tauri::command]
-async fn detect_hardware_report() -> Result<HardwareReport, String> {
-    tauri::async_runtime::spawn_blocking(detect_hardware_report_blocking)
-        .await
-        .map_err(|error| format!("The hardware scan stopped unexpectedly: {error}"))?
-}
-
 // Reject retired instance formats rather than silently treating them as Java.
 #[derive(Default, serde::Deserialize, serde::Serialize, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -1929,113 +1826,6 @@ fn bloom_data_dir() -> Result<std::path::PathBuf, String> {
     Ok(path)
 }
 
-fn custom_background_path() -> Result<std::path::PathBuf, String> {
-    Ok(bloom_data_dir()?.join("custom-background.image"))
-}
-
-fn custom_background_mime(bytes: &[u8]) -> Option<&'static str> {
-    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        Some("image/png")
-    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
-        Some("image/jpeg")
-    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
-        Some("image/webp")
-    } else {
-        None
-    }
-}
-
-fn save_custom_background_blocking(bytes: Vec<u8>) -> Result<String, String> {
-    use base64::Engine;
-    if bytes.is_empty() || bytes.len() > 32 * 1024 * 1024 {
-        return Err("Choose a background image smaller than 32 MB.".into());
-    }
-    let mime = custom_background_mime(&bytes)
-        .ok_or_else(|| "Choose a valid PNG, JPEG, or WebP background image.".to_string())?;
-    let path = custom_background_path()?;
-    let temporary = path.with_extension("image.part");
-    std::fs::write(&temporary, &bytes).map_err(|error| error.to_string())?;
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|error| error.to_string())?;
-    }
-    std::fs::rename(&temporary, &path).map_err(|error| error.to_string())?;
-    Ok(format!(
-        "data:{mime};base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    ))
-}
-
-#[tauri::command]
-async fn save_custom_background(bytes: Vec<u8>) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || save_custom_background_blocking(bytes))
-        .await
-        .map_err(|error| format!("The background image writer stopped unexpectedly: {error}"))?
-}
-
-fn load_custom_background_blocking() -> Result<Option<String>, String> {
-    use base64::Engine;
-    let path = custom_background_path()?;
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-    let mime = custom_background_mime(&bytes)
-        .ok_or_else(|| "The saved custom background is not a supported image.".to_string())?;
-    Ok(Some(format!(
-        "data:{mime};base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    )))
-}
-
-#[tauri::command]
-async fn load_custom_background() -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(load_custom_background_blocking)
-        .await
-        .map_err(|error| format!("The background image reader stopped unexpectedly: {error}"))?
-}
-
-#[tauri::command]
-fn clear_custom_background() -> Result<(), String> {
-    let path = custom_background_path()?;
-    match std::fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct AutoTuneProfile {
-    target_fps: u32,
-    memory_mb: u32,
-    jvm_profile: String,
-    graphics: String,
-    render_distance: u32,
-    simulation_distance: u32,
-    average_fps: f64,
-    one_percent_low: f64,
-    low_ratio: f64,
-    confidence: String,
-    benchmark_completed_at: u64,
-    #[serde(default)]
-    reasons: Vec<serde_json::Value>,
-}
-
-fn saved_autotune_profile() -> Option<AutoTuneProfile> {
-    let path = bloom_data_dir().ok()?.join("autotune-profile.json");
-    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
-}
-
-fn autotune_jvm_arguments(profile: &str) -> String {
-    if profile.eq_ignore_ascii_case("performance") {
-        "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+DisableExplicitGC -XX:MaxGCPauseMillis=50"
-            .into()
-    } else {
-        String::new()
-    }
-}
-
 fn patch_options(path: &std::path::Path, updates: &[(&str, String)]) -> Result<(), String> {
     let existing = match std::fs::read_to_string(path) {
         Ok(value) => value,
@@ -2065,224 +1855,6 @@ fn patch_options(path: &std::path::Path, updates: &[(&str, String)]) -> Result<(
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     std::fs::write(path, format!("{}\n", output.join("\n"))).map_err(|error| error.to_string())
-}
-
-fn apply_autotune_to_config(
-    config: &mut InstanceConfig,
-    profile: &AutoTuneProfile,
-) -> Result<(), String> {
-    config.memory = profile.memory_mb.clamp(1024, 16384);
-    config.jvm_arguments = autotune_jvm_arguments(&profile.jvm_profile);
-    let preset = match profile.graphics.to_ascii_lowercase().as_str() {
-        "fast" => "fast",
-        "high" => "fabulous",
-        _ => "fancy",
-    };
-    let (
-        ao,
-        blend,
-        updates,
-        particles,
-        mipmaps,
-        shadows,
-        entity_scale,
-        blur,
-        cloud_range,
-        leaves,
-        transparency,
-        weather,
-        anisotropy,
-        filtering,
-    ) = match preset {
-        "fast" => (
-            "false", "1", "0", "1", "2", "false", "0.75", "2", "32", "false", "false", "5", "1",
-            "0",
-        ),
-        "fabulous" => (
-            "true", "2", "1", "0", "4", "true", "1.25", "5", "128", "true", "true", "10", "2", "2",
-        ),
-        _ => (
-            "true", "2", "1", "0", "4", "true", "1.0", "5", "64", "true", "false", "10", "1", "1",
-        ),
-    };
-    let (clouds, vignette, chunk_fade) = match preset {
-        "fast" => ("\"fast\"", "false", "0.0"),
-        "fabulous" => ("\"true\"", "true", "0.75"),
-        _ => ("\"true\"", "true", "0.5"),
-    };
-    patch_options(
-        &std::path::PathBuf::from(&config.directory).join("options.txt"),
-        &[
-            ("graphicsPreset", format!("\"{preset}\"")),
-            ("maxFps", profile.target_fps.clamp(30, 260).to_string()),
-            ("graphicsMode", if preset == "fast" { "0" } else if preset == "fabulous" { "2" } else { "1" }.into()),
-            ("ao", ao.into()),
-            ("biomeBlendRadius", blend.into()),
-            ("prioritizeChunkUpdates", updates.into()),
-            ("particles", particles.into()),
-            ("mipmapLevels", mipmaps.into()),
-            ("entityShadows", shadows.into()),
-            ("entityDistanceScaling", entity_scale.into()),
-            ("menuBackgroundBlurriness", blur.into()),
-            ("cloudRange", cloud_range.into()),
-            ("cutoutLeaves", leaves.into()),
-            ("improvedTransparency", transparency.into()),
-            ("weatherRadius", weather.into()),
-            ("maxAnisotropyBit", anisotropy.into()),
-            ("textureFiltering", filtering.into()),
-            ("renderClouds", clouds.into()),
-            ("vignette", vignette.into()),
-            ("chunkSectionFadeInTime", chunk_fade.into()),
-            (
-                "renderDistance",
-                profile.render_distance.clamp(2, 32).to_string(),
-            ),
-            (
-                "simulationDistance",
-                profile.simulation_distance.clamp(5, 32).to_string(),
-            ),
-        ],
-    )
-}
-
-fn apply_autotune_profile_blocking(profile: AutoTuneProfile) -> Result<usize, String> {
-    let measured = get_autotune_benchmark_result()?.ok_or("Run the benchmark before applying a profile.")?;
-    if measured["completedAt"].as_u64() != Some(profile.benchmark_completed_at)
-        || !(1024..=8192).contains(&profile.memory_mb) || !(30..=1000).contains(&profile.target_fps)
-        || !(2..=32).contains(&profile.render_distance) || !(5..=32).contains(&profile.simulation_distance)
-        || !matches!(profile.jvm_profile.as_str(), "Default" | "Performance")
-        || !matches!(profile.graphics.as_str(), "Fast" | "Balanced" | "High") {
-        return Err("The tuning profile is outdated or invalid. Build it again from the latest test.".into());
-    }
-    apply_autotune_profile_in(&bloom_data_dir()?, &profile)
-}
-
-fn apply_autotune_profile_in(data: &std::path::Path, profile: &AutoTuneProfile) -> Result<usize, String> {
-    let mut configs = Vec::new();
-    let mut snapshots: Vec<(std::path::PathBuf, Option<Vec<u8>>)> = Vec::new();
-    for entry in std::fs::read_dir(data.join("instances")).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        if entry.path().extension().and_then(|value| value.to_str()) != Some("json") { continue; }
-        let bytes = std::fs::read(entry.path()).map_err(|error| error.to_string())?;
-        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| format!("Could not read an instance: {error}"))?;
-        if value.get("engine").is_some_and(|engine| engine != "java") { continue; }
-        let config: InstanceConfig = serde_json::from_value(value).map_err(|error| format!("Could not read an instance: {error}"))?;
-        if !config.visible || config.id == AUTOTUNE_INSTANCE_ID { continue; }
-        let options_path = std::path::PathBuf::from(&config.directory).join("options.txt");
-        let options = match std::fs::read(&options_path) {
-            Ok(bytes) => Some(bytes), Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-            Err(error) => return Err(format!("Could not read settings for {}: {error}", config.name)),
-        };
-        snapshots.push((entry.path(), Some(bytes)));
-        snapshots.push((options_path, options));
-        configs.push((entry.path(), config));
-    }
-    let saved_profile = data.join("autotune-profile.json");
-    let previous_profile = match std::fs::read(&saved_profile) {
-        Ok(bytes) => Some(bytes), Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error.to_string()),
-    };
-    snapshots.push((saved_profile.clone(), previous_profile));
-    let result = (|| -> Result<usize, String> {
-        for (path, config) in &mut configs {
-            apply_autotune_to_config(config, profile)?;
-            std::fs::write(path, serde_json::to_vec_pretty(config).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        }
-        // Publish future defaults only once every eligible instance has saved successfully.
-        std::fs::write(saved_profile, serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-        Ok(configs.len())
-    })();
-    if let Err(error) = result {
-        let mut rollback_failed = false;
-        for (path, bytes) in snapshots.into_iter().rev() {
-            if bytes.as_ref().is_some_and(|original| std::fs::read(&path).ok().as_ref() == Some(original)) { continue; }
-            let restored = match bytes {
-                Some(bytes) => std::fs::write(path, bytes),
-                None => match std::fs::remove_file(path) { Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), outcome => outcome },
-            };
-            rollback_failed |= restored.is_err();
-        }
-        return Err(format!("AutoTune could not save: {error}. {}", if rollback_failed { "Some settings could not be restored; review your instance settings before playing." } else { "Previous settings were restored." }));
-    }
-    result
-}
-
-#[tauri::command]
-fn get_applied_autotune_profile() -> Option<AutoTuneProfile> { saved_autotune_profile() }
-
-#[cfg(test)]
-mod autotune_application_tests {
-    use super::*;
-    fn fixture() -> (std::path::PathBuf, AutoTuneProfile) {
-        let root = std::env::temp_dir().join(format!("bloom-autotune-apply-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("instances")).unwrap();
-        for (id, engine, visible) in [("java", "java", true), ("native", "retired", true), ("hidden", "java", false)] {
-            let dir = root.join(id);
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join("options.txt"), "fullscreen:false\nenableVsync:true\nrenderDistance:20\ncustomSetting:keep\n").unwrap();
-            let config = serde_json::json!({"id":id,"name":id,"engine":engine,"version":"26.3","directory":dir,"java":"Automatic","memory":4096,"jvmArguments":"custom","mods":true,"resourcePacks":true,"shaderPacks":true,"config":true,"customResolution":false,"visible":visible,"shortcut":false});
-            std::fs::write(root.join("instances").join(format!("{id}.json")), config.to_string()).unwrap();
-        }
-        let profile = serde_json::from_value(serde_json::json!({"targetFps":144,"memoryMb":3072,"jvmProfile":"Default","graphics":"Fast","renderDistance":8,"simulationDistance":5,"averageFps":100,"onePercentLow":60,"lowRatio":0.6,"confidence":"Measured","benchmarkCompletedAt":123,"reasons":[]})).unwrap();
-        (root, profile)
-    }
-    #[test]
-    fn autotune_apply_counts_only_java_and_preserves_window_preferences() {
-        let (root, profile) = fixture();
-        let native_before = std::fs::read(root.join("instances/native.json")).unwrap();
-        let hidden_before = std::fs::read(root.join("hidden/options.txt")).unwrap();
-        assert_eq!(apply_autotune_profile_in(&root, &profile).unwrap(), 1);
-        let options = std::fs::read_to_string(root.join("java/options.txt")).unwrap();
-        for line in ["fullscreen:false", "enableVsync:true", "customSetting:keep", "maxFps:144", "renderDistance:8", "graphicsMode:0"] { assert!(options.contains(line)); }
-        assert_eq!(native_before, std::fs::read(root.join("instances/native.json")).unwrap());
-        assert_eq!(hidden_before, std::fs::read(root.join("hidden/options.txt")).unwrap());
-        assert!(root.join("autotune-profile.json").is_file());
-        std::fs::remove_dir_all(root).unwrap();
-    }
-    #[test]
-    fn instance_format_accepts_legacy_java_and_rejects_unknown_engines() {
-        let (root, profile) = fixture();
-        let path = root.join("instances/java.json");
-        let mut java: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        assert!(serde_json::from_value::<InstanceConfig>(java.clone()).is_ok());
-        java.as_object_mut().unwrap().remove("engine");
-        assert!(serde_json::from_value::<InstanceConfig>(java.clone()).is_ok());
-        std::fs::write(&path, serde_json::to_vec(&java).unwrap()).unwrap();
-        assert!(serde_json::from_slice::<InstanceConfig>(&std::fs::read(root.join("instances/native.json")).unwrap()).is_err());
-        let options_before = std::fs::read(root.join("native/options.txt")).unwrap();
-        assert_eq!(apply_autotune_profile_in(&root, &profile).unwrap(), 1);
-        assert_eq!(options_before, std::fs::read(root.join("native/options.txt")).unwrap());
-        std::fs::remove_dir_all(root).unwrap();
-    }
-    #[cfg(windows)]
-    #[test]
-    fn autotune_failed_save_restores_options_and_does_not_publish_defaults() {
-        let (root, profile) = fixture();
-        let path = root.join("instances/java.json");
-        let before = std::fs::read(root.join("java/options.txt")).unwrap();
-        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
-        permissions.set_readonly(true); std::fs::set_permissions(&path, permissions.clone()).unwrap();
-        let result = apply_autotune_profile_in(&root, &profile);
-        permissions.set_readonly(false); std::fs::set_permissions(&path, permissions).unwrap();
-        assert!(result.unwrap_err().contains("Previous settings were restored"));
-        assert_eq!(before, std::fs::read(root.join("java/options.txt")).unwrap());
-        assert!(!root.join("autotune-profile.json").exists());
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
-
-#[tauri::command]
-async fn apply_autotune_profile(profile: AutoTuneProfile, state: tauri::State<'_, LauncherState>) -> Result<usize, String> {
-    let active = state.launch_active.clone();
-    {
-        let mut guard = active.lock().map_err(|_| "The launcher is busy.")?;
-        if *guard || state.game_running.load(Ordering::SeqCst) { return Err("Close Minecraft and wait for downloads to finish before applying AutoTune.".into()); }
-        *guard = true;
-    }
-    let result = tauri::async_runtime::spawn_blocking(move || apply_autotune_profile_blocking(profile))
-        .await.map_err(|error| format!("The AutoTune writer stopped unexpectedly: {error}"));
-    if let Ok(mut guard) = active.lock() { *guard = false; }
-    result?
 }
 
 fn java_major(path: &str) -> Option<u32> {
@@ -2387,7 +1959,7 @@ fn resolve_instance_target(
     Ok(target)
 }
 
-fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, String> {
+fn save_instance_with_id(config: InstanceConfig, pack_id: Option<String>) -> Result<InstanceConfig, String> {
     if config.name.trim().is_empty() {
         return Err("Choose an instance name first.".into());
     }
@@ -2406,10 +1978,25 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
         .collect::<String>()
         .trim_matches('-')
         .to_string();
-    if config.id.is_empty() {
+    if pack_id.is_none() && config.id.is_empty() {
         return Err("Choose an instance name containing letters or numbers.".into());
     }
-    let target = resolve_instance_target(&config.directory, &config.id)?;
+    let creating_pack = pack_id.is_some();
+    let target = if let Some(id) = pack_id {
+        config.id = id;
+        let root = bloom_data_dir()?.join("alula-packs");
+        std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+        let target = root.join(&config.id);
+        if bloom_data_dir()?.join("instances").join(format!("{}.json", config.id)).exists() {
+            return load_instance(&config.id).and_then(|saved| {
+                if saved.directory == target.to_string_lossy() && saved.version == config.version && saved.loader == config.loader {
+                    Ok(saved)
+                } else { Err("This draft already belongs to another instance.".into()) }
+            });
+        }
+        std::fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+        target
+    } else { resolve_instance_target(&config.directory, &config.id)? };
     std::fs::create_dir_all(&target).map_err(|error| error.to_string())?;
     for (enabled, folder) in [
         (
@@ -2425,13 +2012,7 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
         }
     }
     config.directory = target.to_string_lossy().to_string();
-    // Reconciled explicitly after creation and before launch, never during reads.
-    if config.visible {
-        if let Some(profile) = saved_autotune_profile() {
-            apply_autotune_to_config(&mut config, &profile)?;
-        }
-    }
-    utilities::apply_active_setup_to_instance(&config)?;
+    if !creating_pack { utilities::apply_active_setup_to_instance(&config)?; }
     let path = bloom_data_dir()?
         .join("instances")
         .join(format!("{}.json", config.id));
@@ -2444,8 +2025,17 @@ fn save_instance_blocking(config: InstanceConfig) -> Result<InstanceConfig, Stri
 }
 
 #[tauri::command]
+async fn create_alula_instance(config: InstanceConfig, pack_draft: uuid::Uuid) -> Result<InstanceConfig, String> {
+    static PACK_CREATE: Mutex<()> = Mutex::new(());
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = PACK_CREATE.lock().map_err(|_| "Instance creation is busy.")?;
+        save_instance_with_id(config, Some(format!("alula-{pack_draft}")))
+    }).await.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 async fn save_instance(config: InstanceConfig) -> Result<InstanceConfig, String> {
-    tauri::async_runtime::spawn_blocking(move || save_instance_blocking(config))
+    tauri::async_runtime::spawn_blocking(move || save_instance_with_id(config, None))
         .await
         .map_err(|error| format!("The instance creator stopped unexpectedly: {error}"))?
 }
@@ -2484,11 +2074,27 @@ fn list_instances_blocking() -> Result<Vec<InstanceConfig>, String> {
     Ok(instances)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryInstance {
+    #[serde(flatten)]
+    config: InstanceConfig,
+    last_game_log_ms: Option<u64>,
+}
+
 #[tauri::command]
-async fn list_instances() -> Result<Vec<InstanceConfig>, String> {
-    tauri::async_runtime::spawn_blocking(list_instances_blocking)
-        .await
-        .map_err(|error| format!("The instance library reader stopped unexpectedly: {error}"))?
+async fn list_instances() -> Result<Vec<LibraryInstance>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        Ok(list_instances_blocking()?.into_iter().map(|config| {
+            let last_game_log_ms = std::fs::metadata(std::path::Path::new(&config.directory).join("logs/latest.log"))
+                .and_then(|metadata| metadata.modified()).ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|elapsed| elapsed.as_millis() as u64);
+            LibraryInstance { config, last_game_log_ms }
+        }).collect())
+    })
+    .await
+    .map_err(|error| format!("The instance library reader stopped unexpectedly: {error}"))?
 }
 
 fn copy_instance_directory(source: &std::path::Path, target: &std::path::Path) -> Result<(), String> {
@@ -3049,188 +2655,6 @@ fn open_game_folder() -> Result<(), String> {
     platform::open_folder(&target)
 }
 
-const AUTOTUNE_INSTANCE_ID: &str = "bloom-autotune-benchmark";
-const AUTOTUNE_VERSION: &str = autotune::VERSION;
-const AUTOTUNE_FABRIC_LOADER: &str = "0.19.5";
-const AUTOTUNE_FABRIC_API: &str = "0.163.0+26.3";
-const AUTOTUNE_MOD: &[u8] = include_bytes!("../resources/bloom-autotune-benchmark-26.3.jar");
-
-fn write_autotune_options(game_directory: &std::path::Path) -> Result<(), String> {
-    let options = concat!(
-        "version:4903\n",
-        "enableVsync:false\n",
-        "fullscreen:false\n",
-        "pauseOnLostFocus:false\n",
-        "renderDistance:12\n",
-        "simulationDistance:8\n",
-        "graphicsPreset:\"fancy\"\n",
-        "maxFps:260\n",
-        "narrator:0\n",
-        "narratorHotkey:false\n",
-        "onboardAccessibility:false\n",
-        "soundCategory_master:0.0\n",
-        "soundCategory_music:0.0\n",
-        "soundCategory_record:0.0\n",
-        "soundCategory_weather:0.0\n",
-        "soundCategory_block:0.0\n",
-        "soundCategory_hostile:0.0\n",
-        "soundCategory_neutral:0.0\n",
-        "soundCategory_player:0.0\n",
-        "soundCategory_ambient:0.0\n",
-        "soundCategory_voice:0.0\n",
-        "soundCategory_ui:0.0\n",
-    );
-    std::fs::write(game_directory.join("options.txt"), options).map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-fn install_autotune_benchmark(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, LauncherState>,
-) -> Result<String, String> {
-    let game_directory = platform::game_directory()?
-        .join("instances")
-        .join(AUTOTUNE_INSTANCE_ID);
-    let mut config = InstanceConfig {
-        id: AUTOTUNE_INSTANCE_ID.into(),
-        name: "Delight AutoTune Benchmark".into(),
-        engine: InstanceEngine::Java,
-        icon: None,
-        loader: "Fabric".into(),
-        loader_version: Some(AUTOTUNE_FABRIC_LOADER.into()),
-        version: AUTOTUNE_VERSION.into(),
-        directory: game_directory.to_string_lossy().to_string(),
-        java: "Automatic (Recommended)".into(),
-        memory: 4096,
-        jvm_arguments: String::new(),
-        mods: true,
-        resource_packs: false,
-        shader_packs: false,
-        config: true,
-        custom_resolution: true,
-        visible: false,
-        shortcut: false,
-    };
-    {
-        let mut active = state
-            .launch_active
-            .lock()
-            .map_err(|_| "The task manager is busy.")?;
-        if *active {
-            return Err("Another download or game launch is already active.".into());
-        }
-        *active = true;
-    }
-    state.cancel_requested.store(false, Ordering::SeqCst);
-    let active = state.launch_active.clone();
-    let cancel = state.cancel_requested.clone();
-    let instance_id = AUTOTUNE_INSTANCE_ID.to_string();
-    emit_launch(&app, &instance_id, "installing", 0, "Preparing the private AutoTune instance");
-    std::thread::spawn(move || {
-        let result = (|| -> Result<(), String> {
-            emit_launch(
-                &app,
-                &instance_id,
-                "installing",
-                1,
-                "Preparing the private AutoTune instance",
-            );
-            config.memory = autotune::benchmark_memory(detect_hardware_report_blocking()?.ram_bytes)?;
-            if game_directory.exists() {
-                autotune::require_managed_directory(&game_directory)?;
-                std::fs::remove_dir_all(&game_directory).map_err(|error| error.to_string())?;
-            }
-            let mods = game_directory.join("mods");
-            std::fs::create_dir_all(&mods).map_err(|error| error.to_string())?;
-            std::fs::write(game_directory.join(".bloom-autotune-managed"), b"managed")
-                .map_err(|error| error.to_string())?;
-            write_instance(&config)?;
-            write_autotune_options(&game_directory)?;
-            std::fs::write(mods.join("bloom-autotune-benchmark-26.3.jar"), AUTOTUNE_MOD)
-                .map_err(|error| error.to_string())?;
-            let mut plan = mc_launcher_core::net::download::DownloadPlan::default();
-            plan.tasks.push(mc_launcher_core::net::download::DownloadTask {
-                url: format!("https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/{0}/fabric-api-{0}.jar", AUTOTUNE_FABRIC_API),
-                destination: mods.join(format!("fabric-api-{AUTOTUNE_FABRIC_API}.jar")), checksum: None,
-                label: "Downloading Fabric API".into(),
-            });
-            execute_download_plan(
-                &app,
-                &instance_id,
-                &plan,
-                &cancel,
-                2,
-                18,
-                "Downloading Fabric API",
-                false,
-            )?;
-            let shared = bloom_data_dir()?.join("minecraft");
-            install_instance_files(&app, &instance_id, &config, &shared, &cancel, 19, 99)?;
-            Ok(())
-        })();
-        match result {
-            Ok(()) => emit_launch(
-                &app,
-                &instance_id,
-                "complete",
-                100,
-                "AutoTune benchmark installed",
-            ),
-            Err(error) if error == "__cancelled__" => emit_launch(
-                &app,
-                &instance_id,
-                "cancelled",
-                0,
-                "Benchmark installation cancelled",
-            ),
-            Err(error) => emit_launch(&app, &instance_id, "error", 0, error),
-        }
-        if let Ok(mut value) = active.lock() {
-            *value = false;
-        }
-    });
-    Ok(AUTOTUNE_INSTANCE_ID.into())
-}
-
-#[tauri::command]
-fn get_autotune_benchmark_result() -> Result<Option<serde_json::Value>, String> {
-    let config = load_instance(AUTOTUNE_INSTANCE_ID)?;
-    let path = std::path::PathBuf::from(&config.directory).join("bloom-benchmark-result.json");
-    if !path.exists() {
-        return Ok(None);
-    }
-    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| format!("Benchmark result is invalid: {error}"))?;
-    autotune::validate_result(&value)?;
-    let run_id = std::fs::read_to_string(std::path::PathBuf::from(config.directory).join("bloom-benchmark-run-id.txt")).map_err(|error| error.to_string())?;
-    if value["runId"].as_str() != Some(run_id.trim()) { return Err("The benchmark result belongs to an earlier run.".into()); }
-    Ok(Some(value))
-}
-
-#[tauri::command]
-fn get_autotune_benchmark_status() -> Result<Option<serde_json::Value>, String> {
-    let config = load_instance(AUTOTUNE_INSTANCE_ID)?;
-    let path = std::path::PathBuf::from(config.directory).join("bloom-benchmark-status.json");
-    if !path.exists() {
-        return Ok(None);
-    }
-    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
-    serde_json::from_slice(&bytes)
-        .map(Some)
-        .map_err(|error| format!("Benchmark status is invalid: {error}"))
-}
-
-#[tauri::command]
-fn cancel_autotune_benchmark(state: tauri::State<'_, LauncherState>) -> Result<(), String> {
-    let launch = current_launch().lock().map_err(|_| "The benchmark status is busy.")?;
-    if launch.instance_id != AUTOTUNE_INSTANCE_ID || !matches!(launch.state.as_str(), "installing" | "launching" | "running") {
-        return Err("There is no active AutoTune test to stop.".into());
-    }
-    // A simultaneous resource-pack download must not redirect this cancellation.
-    state.cancel_requested.store(true, Ordering::SeqCst);
-    Ok(())
-}
-
 fn safe_pack_path(raw: &str) -> Result<std::path::PathBuf, String> {
     use std::path::Component;
     // Modpacks move between operating systems. Interpret both separator styles
@@ -3305,14 +2729,9 @@ fn import_fabric_modpack_path(
     import_fabric_modpack_path_with_icon(app, state, pack_path, None)
 }
 
-fn import_fabric_modpack_path_with_icon(
-    app: tauri::AppHandle,
-    state: &LauncherState,
-    pack_path: std::path::PathBuf,
-    icon: Option<String>,
-) -> Result<String, String> {
+fn read_fabric_pack_index(pack_path: &std::path::Path) -> Result<(serde_json::Value, String, String, String), String> {
     use std::io::Read;
-    let file = std::fs::File::open(&pack_path).map_err(|error| error.to_string())?;
+    let file = std::fs::File::open(pack_path).map_err(|error| error.to_string())?;
     let mut archive = zip::ZipArchive::new(file)
         .map_err(|_| "Choose a valid .mrpack or ZIP containing modrinth.index.json.".to_string())?;
     let mut index_text = String::new();
@@ -3350,6 +2769,16 @@ fn import_fabric_modpack_path_with_icon(
     } else {
         name.to_string()
     };
+    Ok((index, name, minecraft_version, fabric_version))
+}
+
+fn import_fabric_modpack_path_with_icon(
+    app: tauri::AppHandle,
+    state: &LauncherState,
+    pack_path: std::path::PathBuf,
+    icon: Option<String>,
+) -> Result<String, String> {
+    let (index, name, minecraft_version, fabric_version) = read_fabric_pack_index(&pack_path)?;
     let base_id = name
         .to_ascii_lowercase()
         .chars()
@@ -3379,7 +2808,7 @@ fn import_fabric_modpack_path_with_icon(
         platform::game_directory()?
             .join("instances")
             .join(&id);
-    let mut config = InstanceConfig {
+    let config = InstanceConfig {
         id: id.clone(),
         name,
         engine: InstanceEngine::Java,
@@ -3399,9 +2828,6 @@ fn import_fabric_modpack_path_with_icon(
         visible: true,
         shortcut: false,
     };
-    if let Some(profile) = saved_autotune_profile() {
-        apply_autotune_to_config(&mut config, &profile)?;
-    }
     let mut plan = mc_launcher_core::net::download::DownloadPlan::default();
     for file in index["files"]
         .as_array()
@@ -3530,17 +2956,33 @@ fn import_fabric_modpack_path_with_icon(
     Ok(id)
 }
 
+fn pick_fabric_pack() -> Option<std::path::PathBuf> {
+    rfd::FileDialog::new()
+        .add_filter("Fabric Modrinth pack", &["mrpack", "zip"])
+        .pick_file()
+}
+
+#[tauri::command]
+async fn choose_fabric_modpack_file() -> Result<Option<serde_json::Value>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let Some(path) = pick_fabric_pack() else { return Ok(None) };
+        let (_, name, minecraft, fabric) = read_fabric_pack_index(&path)?;
+        Ok(Some(serde_json::json!({
+            "path": path,
+            "name": name,
+            "minecraft": minecraft,
+            "fabric": fabric,
+        })))
+    }).await.map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 fn import_fabric_modpack(
     app: tauri::AppHandle,
     state: tauri::State<'_, LauncherState>,
+    pack_path: Option<std::path::PathBuf>,
 ) -> Result<Option<String>, String> {
-    let Some(pack_path) = rfd::FileDialog::new()
-        .add_filter("Fabric Modrinth pack", &["mrpack", "zip"])
-        .pick_file()
-    else {
-        return Ok(None);
-    };
+    let Some(pack_path) = pack_path.or_else(pick_fabric_pack) else { return Ok(None) };
     import_fabric_modpack_path(app, &state, pack_path).map(Some)
 }
 
@@ -3636,7 +3078,7 @@ fn install_fabric_api(config: &InstanceConfig) -> Result<(), String> {
         return Ok(());
     }
     let client = reqwest::blocking::Client::builder()
-        .user_agent("BloomClient/0.1.0 (https://bloomclient.org)")
+        .user_agent("BloomClient/0.1.0 (https://delightproductions.org)")
         .build()
         .map_err(|error| error.to_string())?;
     let loaders = serde_json::to_string(&["fabric"]).map_err(|error| error.to_string())?;
@@ -3756,7 +3198,7 @@ fn execute_content_download_plan(
         }
     };
     let client = reqwest::blocking::Client::builder()
-        .user_agent("BloomClient/0.1.0 (https://bloomclient.org)")
+        .user_agent("BloomClient/0.1.0 (https://delightproductions.org)")
         .build()
         .map_err(|error| error.to_string())?;
     let total_tasks = plan.tasks.len().max(1) as f64;
@@ -4497,7 +3939,7 @@ fn install_instance_files_internal(
         extract_natives_cached(&vanilla.libraries, minecraft_dir, &version_id, repair)
         .map_err(|error| error.to_string())?;
     }
-    if config.id != AUTOTUNE_INSTANCE_ID { cosmetics::reconcile(config)?; }
+    cosmetics::reconcile(config)?;
     prepared_paths.push(minecraft_dir.join("versions").join(&config.version).join(format!("{}.json", config.version)));
     prepared_paths.push(minecraft_dir.join("versions").join(&version_id).join(format!("{version_id}.json")));
     let natives = mc_launcher_core::install::natives::natives_directory(minecraft_dir, &version_id);
@@ -4517,7 +3959,7 @@ fn prepare_instance_files(app: &tauri::AppHandle, instance_id: &str, config: &In
     if launch_cache::reusable(config) {
         if let Some(receipt) = cache::read_json::<launch_cache::Receipt>("launch-installations", &launch_cache::key(config, root), None) {
             if receipt.valid() {
-                if config.id != AUTOTUNE_INSTANCE_ID { cosmetics::reconcile(config)?; }
+                cosmetics::reconcile(config)?;
                 emit_launch(app, instance_id, "installing", end, "Using verified Minecraft installation");
                 return Ok(receipt.version_id);
             }
@@ -4632,20 +4074,6 @@ async fn launch_minecraft(
             }
             "Sign in with Microsoft before launching Minecraft.".to_string()
         })?;
-    if instance_id == AUTOTUNE_INSTANCE_ID {
-        let prepared = (|| -> Result<(), String> {
-            let config = load_instance(&instance_id)?;
-            if config.version != AUTOTUNE_VERSION { return Err("Reinstall the Minecraft 26.3 benchmark before running this test.".into()); }
-            let directory = std::path::Path::new(&config.directory);
-            autotune::prepare_run(directory)?;
-            write_autotune_options(directory)?;
-            Ok(())
-        })();
-        if let Err(error) = prepared {
-            if let Ok(mut active) = state.launch_active.lock() { *active = false; }
-            return Err(error);
-        }
-    }
     let session_store = state.session.clone();
     let authentication_id = instance_id.clone();
     let authentication_error = Arc::new(Mutex::new(None::<String>));
@@ -4663,9 +4091,9 @@ async fn launch_minecraft(
         let auth_ms = auth_started.elapsed().as_millis();
         let cosmetics_started = std::time::Instant::now();
         let cosmetic_session = session.clone();
-        let token = if authentication_id == AUTOTUNE_INSTANCE_ID { None } else { tauri::async_runtime::spawn_blocking(move || {
+        let token = tauri::async_runtime::spawn_blocking(move || {
             load_instance(&authentication_id).ok().and_then(|config| cosmetics::prepare_session(&config, &cosmetic_session))
-        }).await.map_err(|_| "Cosmetics preparation stopped unexpectedly.")? };
+        }).await.map_err(|_| "Cosmetics preparation stopped unexpectedly.")?;
         Ok::<_, String>((session, token, auth_ms, cosmetics_started.elapsed().as_millis()))
         }.await;
         if let Err(error) = &outcome {
@@ -4691,7 +4119,7 @@ async fn launch_minecraft(
                 return;
             }
         };
-        if let Err(error) = if config.id == AUTOTUNE_INSTANCE_ID { Ok(()) } else { utilities::apply_active_setup_to_instance(&config) } {
+        if let Err(error) = utilities::apply_active_setup_to_instance(&config) {
             emit_launch(
                 &app,
                 &instance_id,
@@ -4842,7 +4270,7 @@ async fn launch_minecraft(
                 .position(|arg| version.main_class.as_deref() == Some(arg.as_str()))
                 .ok_or("Minecraft launch metadata did not include a main class.")?;
             let mut args = command.args;
-            let quick_play = portal::supports_quick_play(&version) && instance_id != AUTOTUNE_INSTANCE_ID;
+            let quick_play = portal::supports_quick_play(&version);
             if let Some(target) = &portal_target {
                 if !quick_play { return Err("This Minecraft version does not support direct play. Open the instance to play normally.".into()); }
                 portal::validate_target(&config, target)?;
@@ -4922,7 +4350,7 @@ async fn launch_minecraft(
                 }
                 if cancel_requested.load(Ordering::SeqCst) {
                     let _ = child.kill();
-                    return Err("Minecraft launch was cancelled.".into());
+                    return Err("__cancelled__".into());
                 }
                 while let Ok((stream, line)) = log_receiver.try_recv() {
                     if debug_logging
@@ -4968,9 +4396,10 @@ async fn launch_minecraft(
                     if let Some(tracker) = &mut portal_tracker {
                         if matches!(tracker.observe(&config), Ok(true)) { let _ = app.emit("portal-changed", ()); }
                     }
-                    if !ready && !status.success() {
+                    if !status.success() {
+                        let description = if ready { "Minecraft crashed" } else { "Minecraft exited before opening" };
                         return Err(format!(
-                            "Minecraft exited before opening (exit code {}).",
+                            "{description} (exit code {}).",
                             status
                                 .code()
                                 .map(|code| code.to_string())
@@ -5117,9 +4546,6 @@ pub fn run() {
             cosmetics::get_cosmetics_preferences,
             cosmetics::set_cosmetics_preferences,
             cosmetics::reconcile_cosmetics,
-            save_custom_background,
-            load_custom_background,
-            clear_custom_background,
             search_modrinth_content,
             catalog_filters::get_catalog_filter_choices,
             get_modrinth_project_details,
@@ -5130,11 +4556,9 @@ pub fn run() {
             detect_java_installations,
             list_managed_java_runtimes,
             remove_managed_java_runtime,
-            detect_hardware_report,
-            apply_autotune_profile,
-            get_applied_autotune_profile,
             get_minecraft_releases,
             save_instance,
+            create_alula_instance,
             list_instances,
             portal::list_portal,
             portal::change_portal,
@@ -5145,6 +4569,7 @@ pub fn run() {
             instance_actions::export_instance,
             delete_instance,
             list_instance_content,
+            pack_artwork::get_pack_artwork,
             content_transfer::preview_content_transfer,
             content_transfer::copy_instance_content,
             toggle_instance_content,
@@ -5156,10 +4581,7 @@ pub fn run() {
             import_instance_mod_files,
             import_instance_content_files,
             open_game_folder,
-            install_autotune_benchmark,
-            get_autotune_benchmark_result,
-            get_autotune_benchmark_status,
-            cancel_autotune_benchmark,
+            choose_fabric_modpack_file,
             import_fabric_modpack,
             import_modrinth_modpack,
             modpack_sharing::create_modpack_share,
@@ -5195,6 +4617,7 @@ pub fn run() {
             wardrobe::get_minecraft_wardrobe,
             wardrobe::set_official_cape,
             wardrobe::import_locker_skin,
+            wardrobe::import_skin_by_username,
             wardrobe::apply_locker_skin,
             list_minecraft_accounts,
             switch_minecraft_account,
@@ -5205,6 +4628,9 @@ pub fn run() {
             social::social_prepare_sign_in,
             social::social_poll_sign_in,
             social::social_session_state,
+            ask_delight::ask_delight_scope,
+            ask_delight::ask_delight_history,
+            ask_delight::ask_delight_remote,
             social::social_set_username,
             social::social_snapshot,
             social::social_wait_for_updates,
@@ -5246,7 +4672,7 @@ mod tests {
     use super::{
         account_credential_name, allowed_pack_download, content_import_details, patch_options,
         dependency_is_already_installed, resolve_instance_target, safe_pack_path,
-        split_credential_secret, CatalogInstallFile,
+        split_credential_secret, CatalogInstallFile, InstanceConfig,
     };
 
     #[test]
@@ -5373,7 +4799,17 @@ mod tests {
     }
 
     #[test]
-    fn autotune_only_patches_selected_options() {
+    fn instance_engine_accepts_legacy_java_and_rejects_unknown_values() {
+        let mut config = serde_json::json!({"id":"java","name":"Java","version":"26.3","directory":"game","java":"Automatic","memory":4096,"jvmArguments":"","mods":true,"resourcePacks":true,"shaderPacks":true,"config":true,"customResolution":false,"visible":true,"shortcut":false});
+        assert!(serde_json::from_value::<InstanceConfig>(config.clone()).is_ok());
+        config["engine"] = "java".into();
+        assert!(serde_json::from_value::<InstanceConfig>(config.clone()).is_ok());
+        config["engine"] = "retired".into();
+        assert!(serde_json::from_value::<InstanceConfig>(config).is_err());
+    }
+
+    #[test]
+    fn only_patches_selected_options() {
         let path = std::env::temp_dir().join(format!("bloom-options-{}.txt", std::process::id()));
         std::fs::write(&path, "music:0.5\nrenderDistance:8\ncustomSetting:keep\n").unwrap();
         patch_options(

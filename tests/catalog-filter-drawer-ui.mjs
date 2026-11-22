@@ -51,21 +51,28 @@ await page.addInitScript(() => {
     },
   };
 });
-const filter = page.getByRole("button", { name: "Filter mods", exact: true });
-const drawer = page.locator(".content-toolbar-drawer");
+const filter = page.locator('.content-filter-trigger[aria-label="Filter mods"]');
+const drawer = page.locator(".launcher-filter-menu:not(.filter-choice-menu)");
 const search = page.locator(".content-search input");
 const settle = () => page.waitForTimeout(380);
 const choose = async (name, option) => {
-  await page.getByRole("button", { name, exact: true }).click();
-  await page.locator(".select-menu-portal").getByRole("button", { name: option, exact: true }).click();
-  assert.equal(await filter.getAttribute("aria-expanded"), "true", "Selecting a dropdown must keep its drawer open");
+  if (!await drawer.count()) await filter.click();
+  const row = drawer.getByRole("menuitem", {name, exact:true});
+  await row.click();
+  const choices = page.getByRole("menu", {name, exact:true});
+  const parent = await drawer.boundingBox(), anchor = await row.boundingBox(), child = await choices.boundingBox();
+  assert.ok(Math.abs(child.y - anchor.y) <= 1, "Choices align with the selected section");
+  assert.ok(child.x >= parent.x + parent.width || child.x + child.width <= parent.x, "Choices open beside the first menu");
+  await choices.getByRole("menuitemradio", {name:option, exact:true}).click();
+  assert.equal(await filter.getAttribute("aria-expanded"), "false");
 };
 const lastSearch = () => page.evaluate(() => window.toolbarTest.calls.filter(c => c.command === "search_modrinth_content" && !c.args.offset).at(-1)?.args);
 const results = async title => { await page.locator(".catalog-item").filter({ hasText: title }).waitFor(); };
 try {
   await mkdir("logs/catalog-filter-drawer", { recursive: true });
   await page.goto(url);
-  await page.getByRole("button", { name: "Open Fabric", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Instances", exact: true }).click();
+  await page.locator(".desktop-instance-link").getByRole("button", { name: "Fabric", exact: true }).click();
   await page.getByRole("button", { name: "Add Mods", exact: true }).click();
   await results("Catalog Sample");
   await settle();
@@ -73,29 +80,34 @@ try {
   const before = await page.locator(".catalog-item").first().boundingBox();
   await page.screenshot({ path: "logs/catalog-filter-drawer/closed.png" });
   await filter.click(); await settle();
-  await page.getByRole("button", { name: "Retry filter choices" }).waitFor();
+  await page.getByRole("menuitem", { name: "Retry filter choices" }).waitFor();
   await page.evaluate(() => { window.toolbarTest.failChoices = false; });
-  await page.getByRole("button", { name: "Retry filter choices" }).click();
-  await page.waitForFunction(() => !document.querySelector('[aria-label="Mod category"]').disabled);
+  await page.getByRole("menuitem", { name: "Retry filter choices" }).click();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('[role="menuitem"]')).some(el => el.textContent === "Category" && !el.disabled));
   const after = await page.locator(".catalog-item").first().boundingBox();
   assert.equal(after.width, before.width, "Full-width row layout stays unchanged");
   assert.ok(Math.abs((await search.boundingBox()).y - dock.y) < 1, "Drawer must not move the search dock");
-  const bounds = await drawer.boundingBox();
-  assert.ok(after.y >= bounds.y + bounds.height, "Drawer must not cover results");
+  assert.equal(after.y, before.y, "Opening filters leaves results stationary");
+  assert.ok(await drawer.evaluate(el => getComputedStyle(el).position === "fixed"));
+  const section = drawer.getByRole("menuitem", {name:"Environment",exact:true});
+  await section.press("ArrowRight");
+  await page.getByRole("menuitemradio", {name:"Any environment"}).waitFor();
   await page.screenshot({ path: "logs/catalog-filter-drawer/open.png" });
+  await page.keyboard.press("ArrowLeft");
+  assert.ok(await section.evaluate(el => document.activeElement === el));
 
-  await choose("Mod category", "Optimization"); await results("Fast Mod");
+  await choose("Category", "Optimization"); await results("Fast Mod");
   assert.equal((await lastSearch()).filters.category, "optimization");
-  await choose("Mod environment", "Client-side"); await results("Fast Mod");
+  await choose("Environment", "Client-side"); await results("Fast Mod");
   assert.equal((await lastSearch()).filters.environment, "client");
-  await choose("Sort mod results", "Most downloaded"); await results("Fast Mod");
+  await choose("Sort results", "Most downloaded"); await results("Fast Mod");
   assert.equal((await lastSearch()).filters.sort, "downloads");
   await page.waitForFunction(() => window.toolbarTest.calls.some(c => c.command === "search_modrinth_content" && c.args.offset === 50 && c.args.filters?.sort === "downloads" && c.args.filters?.category === "optimization"));
-  await choose("Mod loader filter", "Forge"); await results("Fast Mod");
+  await choose("Mod loader", "Forge"); await results("Fast Mod");
   assert.equal((await lastSearch()).filters.loader, "forge");
   assert.equal(await page.locator(".catalog-install").first().isDisabled(), true, "Wrong loader cannot install");
-  await choose("Mod loader filter", "Fabric"); await results("Fast Mod");
-  await choose("Minecraft version filter", "26.3"); await results("Fast Mod");
+  await choose("Mod loader", "Fabric"); await results("Fast Mod");
+  await choose("Minecraft version", "26.3"); await results("Fast Mod");
   assert.equal((await lastSearch()).gameVersion, "26.3");
   assert.equal(await page.locator(".catalog-install").first().isDisabled(), true, "Wrong Minecraft version cannot install");
   await page.getByRole("button", { name: "Open details for Fast Mod" }).click();
@@ -103,16 +115,17 @@ try {
   assert.equal(details?.versionId, "v-fabric-26.3", "Details must refer to the actual selected file");
   await page.keyboard.press("Escape");
   if (await filter.getAttribute("aria-expanded") !== "true") await filter.click();
-  await page.getByRole("button", { name: "Reset filters", exact: true }).click(); await results("Catalog Sample");
+  await page.getByRole("menuitem", { name: "Reset filters", exact: true }).click(); await results("Catalog Sample");
   assert.equal((await lastSearch()).filters, undefined, "Reset uses existing default native search");
   assert.equal((await lastSearch()).gameVersion, "1.21.1");
   assert.equal(await filter.getAttribute("data-filtered"), "false");
 
-  await page.getByRole("button", { name: "Mod category", exact: true }).click();
+  await filter.click();
+  await page.getByRole("menuitem", { name: "Category", exact: true }).click();
   await page.keyboard.press("Escape");
   assert.equal(await filter.getAttribute("aria-expanded"), "true", "First Escape closes only submenu");
   await page.keyboard.press("Escape"); await settle();
-  assert.equal(await drawer.getAttribute("inert"), "");
+  assert.equal(await drawer.count(), 0);
   assert.equal(await filter.evaluate(el => el === document.activeElement), true);
   await page.getByRole("button", { name: "Install Catalog Sample", exact: true }).click();
   await page.waitForFunction(() => window.toolbarTest.calls.some(c => c.command === "install_modrinth_content" && c.args.instanceId === "0" && c.args.projectId === "catalog-1"));
@@ -120,26 +133,27 @@ try {
   // Delayed old filters must not replace the current results.
   await filter.click();
   await page.evaluate(() => { window.toolbarTest.delaySearch = true; });
-  await choose("Mod category", "Optimization");
+  await choose("Category", "Optimization");
   await page.waitForFunction(() => typeof window.toolbarTest.releaseSearch === "function");
-  await choose("Mod category", "Utility"); await results("Utility Mod");
+  await choose("Category", "Utility"); await results("Utility Mod");
   await page.evaluate(() => window.toolbarTest.releaseSearch()); await settle();
   assert.equal(await page.locator(".catalog-item").first().locator("b").textContent(), "Utility Mod");
   // Search failures offer retry without showing results from another filter.
   await page.evaluate(() => { window.toolbarTest.failSearch = true; });
-  await choose("Sort mod results", "Newest");
+  await choose("Sort results", "Newest");
   await page.getByRole("button", { name: "Retry search", exact: true }).waitFor();
   assert.equal(await page.locator(".catalog-item").count(), 0);
   await page.evaluate(() => { window.toolbarTest.failSearch = false; });
   await page.getByRole("button", { name: "Retry search", exact: true }).click(); await results("Utility Mod");
   if (await filter.getAttribute("aria-expanded") !== "true") await filter.click();
-  await page.getByRole("button", { name: "Reset filters", exact: true }).click(); await results("Catalog Sample");
+  await page.getByRole("menuitem", { name: "Reset filters", exact: true }).click(); await results("Catalog Sample");
 
+  await filter.click();
   await page.setViewportSize({ width: 900, height: 900 }); await settle();
   for (const theme of ["oled", "light"]) {
     await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
     const box = await drawer.boundingBox();
-    for (const control of await page.locator(".catalog-filter-grid button").all()) {
+    for (const control of await drawer.locator("button").all()) {
       const rect = await control.boundingBox();
       assert.ok(rect.x >= box.x && rect.x + rect.width <= box.x + box.width + 1 && rect.y + rect.height <= box.y + box.height + 1, "All compact dropdowns must fit");
     }
@@ -155,10 +169,11 @@ try {
   }
   await filter.click();
   await page.getByRole("button", { name: "Back to installed mods" }).click();
-  assert.equal(await drawer.getAttribute("inert"), "", "Back closes catalog filters without opening installed filters");
+  assert.equal(await drawer.count(), 0, "Back closes catalog filters without opening installed filters");
   await page.getByRole("button", { name: /^Filter content:/ }).click();
-  await page.getByRole("button", { name: "Disabled", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Show", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "Disabled", exact: true }).click();
   assert.equal(await page.locator(".installed-content-item").count(), 8, "Installed filters retain existing behavior");
   assert.deepEqual(errors, []);
-  console.log("Passed: attached drawer, stationary search/full-width rows, all real native filter arguments, metadata retry, warm-cache isolation, stale response protection, search retry, compatibility/install/details, reset, submenu Escape/focus, compact Light/OLED and motion overrides. Native calls simulated.");
+  console.log("Passed: cascading filter menus, stationary search/full-width rows, all real native filter arguments, metadata retry, warm-cache isolation, stale response protection, search retry, compatibility/install/details, reset, submenu Escape/focus, compact Light/OLED and motion overrides. Native calls simulated.");
 } finally { await browser.close(); }

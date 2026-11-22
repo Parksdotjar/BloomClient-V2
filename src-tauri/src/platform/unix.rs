@@ -1,5 +1,5 @@
 // Keep non-Mac Unix builds explicit; this task does not claim Linux feature parity.
-use super::{Hardware, Path, PathBuf};
+use super::{Path, PathBuf};
 pub const JAVA_PROVIDER_OS: &str = "linux";
 pub const JAVA_ARCHIVE_EXTENSION: &str = "tar.gz";
 pub const JAVA_EXECUTABLE: &str = "java";
@@ -41,7 +41,4 @@ pub fn discover_java() -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
-}
-pub fn detect_hardware() -> Result<Hardware, String> {
-    Err("AutoTune hardware detection is currently supported on Windows and macOS.".into())
 }

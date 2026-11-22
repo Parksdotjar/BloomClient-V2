@@ -8,7 +8,7 @@
 .cape-redeem-field { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 7px 6px 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--control); color: var(--muted); }
 .cape-redeem-field:focus-within { border-color: color-mix(in srgb,var(--accent) 65%,var(--line)); }
 .cape-redeem-field input { flex: 1; min-width: 0; padding: 0; border: 0; outline: none; box-shadow: none; background: transparent; color: var(--text); font: inherit; font-size: 14px; letter-spacing: .04em; }
-.cape-redeem-field button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-contrast, #111); }
+.cape-redeem-field button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: var(--launcher-menu-hover); color: var(--text); }
 .cape-redeem-field button:disabled { opacity: .4; }
 .cape-redeem-error { margin: 9px 0 0; color: var(--danger, var(--text)); font-size: 12px; }
 .cape-redeem-spinner { animation: cape-code-spin 900ms linear infinite; }

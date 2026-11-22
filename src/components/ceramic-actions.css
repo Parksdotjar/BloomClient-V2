@@ -2,6 +2,8 @@
    belong to each control; this layer survives its hover/back/cancel state.
    Home Play already owns its pixel-reveal bevel and is deliberately not doubled. */
 :root {
+  --launcher-bevel: inset 1px 2px 2px var(--theme-highlight, #ffffff42),
+    inset -1px -2px 3px var(--theme-shadow-soft, #0005);
   --ceramic-action-depth: inset 1px 2px 5px -3px color-mix(in srgb, var(--theme-highlight, #ffffff42) 36%, transparent),
     0 4px 10px -5px color-mix(in srgb, var(--theme-shadow, #000b) 55%, transparent);
   --ceramic-compact-depth: inset 1px 2px 4px -3px color-mix(in srgb, var(--theme-highlight, #ffffff42) 28%, transparent),
@@ -9,7 +11,7 @@
 }
 :root :is(
   .ceramic-action,
-  /* Instance, folder and content actions */
+
   .instances-create,
   .instances-create-folder,
   .create-instance-action,
@@ -17,14 +19,10 @@
   .sidebar-empty-instance,
   .instance-folder-dialog footer button,
   .instance-folder-primary,
-  .instance-preferences-save,
   .play-instance,
   .library-play,
-  .instance-play,
-  .add-content,
-  .content-toolbar-action,
-  .catalog-close,
-  .catalog-install,
+  .floating-player-play.instance-play,
+  .catalog-install:where(:not(.catalog-result-add)),
   .content-empty-primary,
   .content-empty button,
   .import-pack-action,
@@ -39,13 +37,12 @@
   .content-dots,
   .filter-select.filtered .select-trigger,
   .filter-select .select-trigger[aria-expanded="true"],
-  /* Account, setup and settings */
+
   .microsoft-button,
   .onboarding-primary,
   .account-confirm,
   .profile-switch-confirm button,
   .profile-add-account,
-  .sidebar-update-button,
   .settings-update-button,
   .cache-location-row button,
   .cache-actions button,
@@ -56,57 +53,25 @@
   .settings-card .danger-button,
   .appearance-preset-editor button,
   .accent-picker-actions button,
-  .background-enable.on,
   .fill-checkbox.checked,
-  .toggle.on,
-  .utility-toggle.on,
-  .background-upload-control > button,
-  .background-editor-footer button,
   .device-code > button,
-  /* Home, Portal and screenshots */
+
   .hero-card button,
   .hero-recent-instance button,
-  .portal-add-toggle,
-  .shelf-comparison-toolbar button,
-  .shelf-card-actions button,
-  .shelf-preview button,
-  .shelf-refresh,
-  .shelf-more,
-  .comparison-actions button,
-  .comparison-state > button,
-  /* Cosmetics, sharing and social */
-  .cape-redeem-field button,
-  .shop-claim,
-  .locker-card-equip,
-  .locker-equip,
-  .locker-state-action,
+
   .share-next,
   .share-back,
   .share-mode-step > button.selected,
-  .social-invite-actions button:first-child,
-  .social-send,
-  .social-security-actions button.primary,
-  .social-add-friend button,
-  .social-no-conversation button,
-  .social-request-list article .accept,
-  .social-auth-state > button,
-  .social-name-setup form button,
-  .social-drawer-primary,
-  /* Utilities, confirmation and return actions */
+
   .utility-card-footer button,
   .utility-apply,
   .utility-confirmation button,
   .utility-back,
-  .utility-save:hover:not(:disabled),
-  .utility-open-folder:hover,
   .pack-console-actions > button:hover,
   .pack-share-result button:hover,
   .create-editor-code,
   .pack-flow-choices > button:hover,
-  .utility-targets > button.selected,
   .group-update-ready,
-  .cancel-download,
-  .autotune-accept,
   .benchmark-start button,
   .benchmark-consent button,
   .benchmark-result-actions button,
@@ -116,11 +81,7 @@
   .tuner-empty button,
   .tuner-summary button,
   .apply-action > button,
-  .apply-confirm > button,
-  .autotune-action-card > button,
-  .autotune-primary-action,
-  .autotune-confirm-row > button,
-  .autotune-secondary-action
+  .apply-confirm > button
 ) {
   background-image: linear-gradient(160deg,
     color-mix(in srgb, var(--theme-highlight, #ffffff42) var(--ceramic-action-shine, 18%), transparent),
@@ -130,23 +91,20 @@
   box-shadow: var(--ceramic-action-depth) !important;
 }
 /* Keep white labels readable on red surfaces, including Light theme. */
-.settings-card .danger-button, .shelf-compare-cancel, .catalog-close { --ceramic-action-shine: 14%; }
+.settings-card .danger-button, .catalog-close { --ceramic-action-shine: 14%; }
 /* Small utility controls catch light only at the upper left, without a surrounding rim. */
-:root :is(.library-folder, .library-more, .instance-more, .content-dots,
-  .shelf-card-actions button, .shelf-refresh) {
+:root :is(.library-folder, .library-more, .instance-more, .content-dots) {
   --ceramic-action-shine: 10%;
   --ceramic-action-depth: var(--ceramic-compact-depth);
   background-color: color-mix(in srgb, var(--control) 94%, var(--theme-base, #000));
 }
-:root :is(.library-folder, .library-more, .instance-more, .content-dots,
-  .shelf-card-actions button, .shelf-refresh):is(:hover, :focus-visible):not(:disabled) {
+:root :is(.library-folder, .library-more, .instance-more, .content-dots):is(:hover, :focus-visible):not(:disabled) {
   background-color: color-mix(in srgb, var(--control) 96%, var(--theme-ink, #fff));
   color: var(--text);
 }
 @media (prefers-reduced-motion: no-preference) {
   :root:not([data-animations="off"]):not([data-performance="ultra"])
-    :is(.library-folder, .library-more, .instance-more, .content-dots,
-      .shelf-card-actions button, .shelf-refresh) {
+    :is(.library-folder, .library-more, .instance-more, .content-dots) {
     transition: background-color 200ms ease, color 200ms ease;
   }
 }

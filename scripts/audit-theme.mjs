@@ -7,7 +7,7 @@ function componentStyles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const path = `${directory}/${entry.name}`;
     if (entry.isDirectory()) return componentStyles(path);
-    return entry.isFile() && entry.name.endsWith(".css") && entry.name !== "organic-background.css" ? [path] : [];
+    return entry.isFile() && entry.name.endsWith(".css") ? [path] : [];
   });
 }
 const files = ["src/styles.css", ...componentStyles("src/components")];

@@ -1,13 +1,29 @@
-.instance-manager:has(.content-toolbar[data-catalog-filters="true"]) { --content-toolbar-drawer-space: 160px; }
-.content-toolbar[data-catalog-filters="true"] .content-toolbar-drawer-body { display: block; }
-.catalog-filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; width: 100%; }
-.catalog-filter-field { min-width: 0; display: grid; gap: 6px; }
-.catalog-filter-field > span { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
-.catalog-filter-field > span > svg { color: var(--accent-ink, var(--accent)); opacity: .75; }
-.catalog-filter-field .select-wrap { width: 100%; min-width: 0; }
-.catalog-filter-field .select-trigger { min-height: 39px; padding: 9px 11px; border-radius: 8px; background: var(--control); border-color: color-mix(in srgb, var(--border) 80%, var(--panel-strong)); font-size: 11px; }
-.catalog-filter-field .select-trigger:hover:not(:disabled), .catalog-filter-field .select-trigger[aria-expanded="true"] { background: var(--panel-strong); border-color: color-mix(in srgb, var(--accent) 22%, var(--border)); }
-.catalog-filter-field .select-trigger:disabled { opacity: .5; cursor: default; }
-.catalog-filter-actions { display: flex; flex-wrap: wrap; align-content: end; justify-content: flex-end; align-items: center; gap: 4px; }
-.catalog-filter-actions > span { color: var(--muted); font-size: 10px; }
-.catalog-filter-actions .content-toolbar-reset { min-height: 33px; font-size: 10px; }
+/* Anchored filter menus and their side-opening choice lists share one surface. */
+.launcher-filter-menu {
+  position: fixed; z-index: 12000; box-sizing: border-box; min-width: 0; padding: 5px; overflow: auto;
+  overscroll-behavior: contain; scrollbar-width: thin; color: var(--text); background: var(--launcher-menu);
+  border: 1px solid var(--launcher-menu-line); border-radius: 9px; box-shadow: 0 8px 22px var(--theme-shadow-soft);
+  font: 14px/1.4 var(--interface-font, "Segoe UI"), system-ui, sans-serif;
+}
+.launcher-filter-menu button {
+  box-sizing: border-box; display: flex; align-items: center; justify-content: flex-start; gap: 10px;
+  min-height: 33px; width: 100%; padding: 6px 9px; border: 0; border-radius: 5px;
+  background: transparent; color: var(--text); font: inherit; text-align: start; cursor: pointer;
+}
+.launcher-filter-menu button span { overflow-wrap: anywhere; }
+.launcher-filter-menu button svg { flex: none; color: var(--muted); }
+.launcher-filter-menu button:is(:hover:enabled,:focus-visible,[aria-expanded="true"]) { background: var(--launcher-menu-hover); }
+.launcher-filter-menu button:focus-visible { outline: 1px solid var(--muted); outline-offset: -2px; }
+.launcher-filter-menu button[aria-checked="true"] svg { color: var(--launcher-mark); }
+.launcher-filter-menu button > svg:last-child:not(:first-child) { margin-inline-start: auto; }
+.launcher-filter-menu button:disabled { opacity: .48; cursor: default; }
+.launcher-filter-menu .filter-reset { justify-content: flex-start; color: var(--muted); }
+.launcher-filter-menu .filter-reset:first-of-type,.filter-menu-actions { border-top: 1px solid var(--launcher-menu-line); border-radius: 0; margin-top: 3px; padding-top: 6px; }
+.filter-menu-actions .filter-reset:first-of-type { margin-top: 0; border: 0; }
+.filter-menu-actions [role="status"] { display: block; padding: 5px 9px; color: var(--muted); }
+.launcher-filter-menu .instance-nav-filters { display: grid; gap: 2px; margin: 0; }
+.launcher-filter-menu .instance-nav-filters label { border-color: var(--launcher-menu-line); }
+.download-search-tools .download-filter-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--launcher-menu-line); border-radius: 7px; background: transparent; color: var(--text); font: inherit; }
+.instance-nav-heading button[data-filtered="true"],.download-search-tools .download-filter-trigger[data-filtered="true"] { background: var(--launcher-menu-hover); }
+
+:root[data-theme] .launcher-filter-menu, :root[data-theme] .launcher-filter-menu button { animation: none !important; transition: none !important; }

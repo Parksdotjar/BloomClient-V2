@@ -1,0 +1,7 @@
+{
+  "minecraft-accounts": {"label":"Open accounts","section":"My Profile","selector":".profile-account-picker button"},
+  "cache-storage": {"label":"Open cache settings","section":"Cache"},
+  "right-sidebar": {"label":"Open sidebar settings","section":"Sidebar"},
+  "appearance-presets": {"label":"Open appearance settings","section":"Appearance"},
+  "instance-memory": {"label":"Open instance memory","selector":"input[aria-label='Minecraft memory']"}
+}

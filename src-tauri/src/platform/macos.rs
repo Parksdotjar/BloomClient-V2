@@ -1,4 +1,4 @@
-use super::{Hardware, Path, PathBuf};
+use super::{Path, PathBuf};
 use crate::command_without_console;
 
 pub const JAVA_PROVIDER_OS: &str = "mac";
@@ -90,80 +90,4 @@ pub fn java_matches_host(path: &Path) -> bool {
             "x86_64" => matches!(arch.trim(), "x86_64" | "amd64"),
             _ => false,
         })
-}
-
-fn sysctl(name: &str) -> Result<String, String> {
-    let output = command_without_console("/usr/sbin/sysctl")
-        .args(["-n", name])
-        .output()
-        .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        return Err(format!("macOS could not read {name}."));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-pub fn detect_hardware() -> Result<Hardware, String> {
-    let cpu = sysctl("machdep.cpu.brand_string").or_else(|_| sysctl("hw.model"))?;
-    let ram_bytes = sysctl("hw.memsize")?
-        .parse()
-        .map_err(|_| "macOS returned invalid memory information.")?;
-    let cores = sysctl("hw.physicalcpu")?
-        .parse()
-        .map_err(|_| "macOS returned invalid CPU information.")?;
-    let threads = sysctl("hw.logicalcpu")?
-        .parse()
-        .map_err(|_| "macOS returned invalid CPU information.")?;
-    let output = command_without_console("/usr/sbin/system_profiler")
-        .args([
-            "SPDisplaysDataType",
-            "-json",
-            "-detailLevel",
-            "mini",
-            "-timeout",
-            "10",
-        ])
-        .output();
-    let gpus = output
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| serde_json::from_slice::<serde_json::Value>(&o.stdout).ok())
-        .and_then(|value| {
-            value["SPDisplaysDataType"].as_array().map(|items| {
-                items
-                    .iter()
-                    .filter_map(|gpu| gpu["sppci_model"].as_str().map(str::to_owned))
-                    .collect()
-            })
-        })
-        .unwrap_or_default();
-    Ok(Hardware {
-        cpu,
-        cores,
-        threads,
-        ram_bytes,
-        gpus,
-        refresh_rate: display_refresh_rate(),
-    })
-}
-
-fn display_refresh_rate() -> Option<u32> {
-    use std::ffi::c_void;
-    #[link(name = "CoreGraphics", kind = "framework")]
-    extern "C" {
-        fn CGMainDisplayID() -> u32;
-        fn CGDisplayCopyDisplayMode(display: u32) -> *const c_void;
-        fn CGDisplayModeGetRefreshRate(mode: *const c_void) -> f64;
-        fn CGDisplayModeRelease(mode: *const c_void);
-    }
-    // Copy returns a retained display mode. Some variable-refresh modes report 0: keep that unknown.
-    unsafe {
-        let mode = CGDisplayCopyDisplayMode(CGMainDisplayID());
-        if mode.is_null() {
-            return None;
-        }
-        let hz = CGDisplayModeGetRefreshRate(mode);
-        CGDisplayModeRelease(mode);
-        (hz.is_finite() && hz >= 1.0).then_some(hz.round() as u32)
-    }
 }

@@ -29,6 +29,8 @@ await page.addInitScript(() => {
       test.calls.push({ command, args });
       if (command === "plugin:event|listen") { const id = next++; await new Promise(resolve => setTimeout(resolve, 15)); listeners.set(id, args); return id; }
       if (command === "plugin:event|unlisten") { listeners.delete(args.eventId); return null; }
+      if (command === "ask_delight_scope") return "test-account";
+      if (command === "ask_delight_remote" && args.body) return { result: { status: "answered", answer: "Test diagnosis", action: null, helpIds: [] } };
       if (command === "get_minecraft_launch_status") {
         if (test.failPoll) throw "Temporary connection failure";
         const snapshot = structuredClone(test.progress);
@@ -56,12 +58,12 @@ await page.addInitScript(() => {
 const play = () => page.getByRole("button", { name: "Play", exact: true });
 const nav = name => page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name, exact: true });
 const focus = () => page.evaluate(() => window.dispatchEvent(new Event("focus")));
-const native = (state, running = false, emit = false) => page.evaluate(({ state, running, emit }) => {
+const native = (state, running = false, emit = false, message = state) => page.evaluate(({ state, running, emit, message }) => {
   const t = window.launchTest;
   t.running = running;
-  t.progress = { ...t.progress, state, progress: state === "running" || state === "complete" ? 100 : state === "installing" ? 10 : 0, message: state === "error" ? "Minecraft test launch failed" : state };
+  t.progress = { ...t.progress, state, progress: state === "running" || state === "complete" ? 100 : state === "installing" ? 10 : 0, message };
   if (emit) { t.emit("minecraft-launch-progress", t.progress); t.emit("minecraft-process-state", running); }
-}, { state, running, emit });
+}, { state, running, emit, message });
 const enabled = () => page.waitForFunction(() => !document.querySelector(".spotlight-play")?.disabled, null, { timeout: 8000 });
 try {
   await page.goto(url);
@@ -87,8 +89,30 @@ try {
   await focus(); await enabled();
   for (const terminal of ["error", "cancelled", "complete"]) {
     await play().click(); await page.waitForTimeout(150);
-    await native(terminal); await focus(); await enabled();
-    if (terminal === "error") assert((await page.locator(".launch-toast").textContent()).includes("test launch failed"));
+    if (terminal === "error") await native("running", true, true);
+    await native(terminal, false, false, terminal === "error" ? "Minecraft crashed (exit code 1)." : terminal);
+    await focus(); await enabled();
+    if (terminal === "error") {
+      const toast = page.locator(".launch-toast");
+      assert((await toast.textContent()).includes("Minecraft crashed (exit code 1)."));
+      const count = () => page.evaluate(() => launchTest.calls.filter(x => x.command === "ask_delight_remote" && x.args?.body).length);
+      const before = await count();
+      await toast.getByRole("button", { name: "Share crash details" }).click();
+      const preview = page.getByRole("dialog", { name: "Share crash details" });
+      assert((await preview.getByRole("textbox").inputValue()).includes("exit code 1"));
+      await preview.getByRole("button", { name: "Cancel" }).click();
+      assert.equal(await count(), before);
+      await page.getByRole("button", { name: "Logs", exact: true }).click();
+      await page.locator(".console-actions").getByRole("button", { name: "Share crash details" }).click();
+      await preview.getByRole("textbox").fill("My reviewed launch details");
+      await preview.getByRole("button", { name: "Send to Alula" }).click();
+      await page.getByText("Test diagnosis", { exact: true }).waitFor();
+      const sent = await page.evaluate(() => launchTest.calls.filter(x => x.command === "ask_delight_remote" && x.args?.body).at(-1).args.body);
+      assert.equal(sent.question, "My reviewed launch details");
+      assert.deepEqual(sent.recent, []);
+      await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+      await nav("Home").click();
+    }
   }
   // An old delayed idle reset must not clear a new launch.
   await native("idle", false, true); await enabled();

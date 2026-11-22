@@ -13,8 +13,11 @@ await page.addInitScript(() => {
   localStorage.setItem("bloom-onboarding-complete-v1", "complete");
   localStorage.setItem("bloom-settings", JSON.stringify({ theme: "oled", accent: "#f24f54", animations: true, buttonPressDuration: 0 }));
   const instances = ["Meadow", "Vanilla", "Creative"].map((name, i) => ({ id: String(i), name, loader: i === 1 ? "Vanilla" : "Fabric", version: "1.21.1", directory: "test", java: "Automatic", memory: 4096, jvmArguments: "", mods: true, resourcePacks: true, shaderPacks: true, config: true, visible: true }));
-  const shots = Array.from({ length: 4 }, (_, i) => ({ instanceId: String(i % 2), instanceName: instances[i % 2].name, name: `landscape-${i}.png`, modified: 1792454400000 + i * 1000, revision: String(i) }));
+  const shots = Array.from({ length: 4 }, (_, i) => ({ instanceId: String(i % 2), instanceName: instances[i % 2].name, name: `landscape-${i}.png`, modified: 1792454400000 + i * 86400000, revision: String(i) }));
   const image = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#769aab"/><path d="M0 280L180 100L330 290L470 160L640 260V360H0Z" fill="#476d61"/><path d="M0 310L240 250L500 320L640 280V360H0Z" fill="#2b4c3e"/></svg>');
+  instances[0].icon = image;
+  instances[0].loaderVersion = "0.18.4";
+  instances[2].icon = "data:image/png;base64,AAAA";
   window.toolbarTest = { calls: [], delayRefresh: false, releaseRefresh: null };
   let next = 1;
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
@@ -23,6 +26,16 @@ await page.addInitScript(() => {
     transformCallback() { return next++; }, unregisterCallback() {}, convertFileSrc(path) { return path; },
     async invoke(command, args) {
       window.toolbarTest.calls.push({ command, args });
+      if (command === "ask_delight_scope") return "fixture";
+      if (command === "ask_delight_history") return { version: 1, save: true, selected: null, threads: ["Shader setup", "Fabric mods"].map(text => ({ id: text, updated: Date.now(), messages: [{ id: text, role: "question", text }] })) };
+      if (command === "ask_delight_remote") return args.body ? {error: "provider_unavailable"} : {
+        usage: {mode: "mock", dailyRemaining: 99, dailyLimit: 100, monthlyRemaining: 999, monthlyLimit: 1000,
+          serverTime: Date.now(), dailyReset: Date.now() + 60000, monthlyReset: Date.now() + 60000, blocking: null}
+      };
+      if (command === "list_instance_content" && window.toolbarTest.checkInventory && args.category === "mods") {
+        return Array.from({length:106}, (_, i) => ({name:"Fixture mod " + i, version:"2.4", fileName:i + (i ? ".jar" : ".jar.disabled"), enabled:!!i}));
+      }
+      if (command === "list_instance_content") return [];
       if (command === "list_instances") return instances;
       if (command === "list_instance_folders") return [];
       if (command === "list_screenshots") {
@@ -63,39 +76,115 @@ try {
   await page.goto(url);
   await nav("Instances");
   await settle();
-  const drawer = page.locator(".instances-filter-drawer");
-  const trigger = page.getByRole("button", { name: /^Filter instances:/ });
-  const dock = page.locator(".instances-search-dock");
-  const sidebar = await page.locator(".sidebar-navigation").boundingBox();
-  const dockBefore = await dock.boundingBox();
-  assert.equal(await page.locator(".instance-library-card").count(), 3);
-  await trigger.click(); await settle();
-  assert.equal(await drawer.getAttribute("inert"), null);
-  assert.ok(Math.abs((await dock.boundingBox()).y - dockBefore.y) < 1, `Instance search stays anchored: ${dockBefore.y} -> ${(await dock.boundingBox()).y}`);
-  const heading = await page.locator(".instances-page-heading").boundingBox();
-  const tools = await drawer.boundingBox();
-  assert.ok(Math.abs(heading.width - tools.width) <= 2 && tools.y > heading.y + heading.height, "Drawer attaches below the full-width title and action shelf");
-  assert.equal(await drawer.evaluate(el => getComputedStyle(el).backgroundColor), "rgba(0, 0, 0, 0)", "Tools extend the existing shelf without a third surface");
-  assert.deepEqual(await page.locator(".sidebar-navigation").boundingBox(), sidebar);
-  await drawer.getByRole("button", { name: "Fabric", exact: true }).click();
-  assert.equal(await page.locator(".instance-library-card").count(), 2);
-  await settle();
-  await shot("instances-filters");
-  await page.keyboard.press("Escape"); await settle();
-  assert.equal(await drawer.getAttribute("inert"), "");
-  assert.equal(await trigger.evaluate(el => el === document.activeElement), true);
-  await page.getByRole("textbox", { name: "Search your instances" }).fill("Creative");
-  assert.equal(await page.locator(".instance-library-card").count(), 1);
-  await page.getByRole("button", { name: "Clear instance search" }).click();
+  const library = page.getByRole("navigation", { name: "Your instances" });
+  const first = library.locator(".instance-nav-name").first();
+  assert.equal(await first.getAttribute("aria-current"), "page");
+  assert.equal(await library.locator(".desktop-instance-link").count(), 3);
+  const mainBefore = await page.locator("main.content").boundingBox();
+  const trigger = page.getByRole("button", { name: "Filter instances" });
   await trigger.click();
-  await drawer.getByRole("button", { name: "All", exact: true }).click();
-  await page.getByRole("textbox", { name: "Search your instances" }).click();
-  assert.equal(await trigger.getAttribute("aria-expanded"), "false");
-
-  await nav("Screenshots");
+  const drawer = page.locator(".instance-nav-filters");
+  await drawer.getByRole("menuitem", { name: "Mod loader" }).click();
+  await page.getByRole("menuitemradio", { name: "Fabric", exact: true }).click();
+  await trigger.click();
+  assert.equal(await library.locator(".desktop-instance-link").count(), 2);
+  await drawer.getByRole("textbox", { name: "Search instances" }).fill("Creative");
+  assert.equal(await library.locator(".desktop-instance-link").count(), 1);
+  assert.deepEqual(await page.locator("main.content").boundingBox(), mainBefore);
+  await shot("instances-filters");
+  await page.keyboard.press("Escape");
+  assert.equal(await library.locator(".desktop-instance-link").count(), 1);
+  await trigger.click();
+  await page.getByRole("menuitem", { name: "Reset filters", exact: true }).click();
+  assert.equal(await library.locator(".desktop-instance-link").count(), 3);
+  await page.getByRole("menuitem", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Screenshots", exact: true }).click();
   await page.locator(".shelf-grid article").first().waitFor();
+  assert.equal(await page.locator(".shot-day").count(), 4);
+  await nav("Alula");
+  const chat = page.locator("main.content").getByRole("region", {name:"Alula", exact:true});
+  await chat.getByRole("textbox", {name:"Your question"}).fill("Draft for later");
+  assert.equal(await page.locator("aside[aria-label='Alula']").count(), 0);
+  await nav("Home");
+  await nav("Alula");
+  assert.equal(await chat.getByRole("textbox", {name:"Your question"}).inputValue(), "Draft for later");
+  const chats = page.locator(".desktop-context").getByRole("region", {name: "Recent chats"});
+  for (const title of ["Shader setup", "Fabric mods"]) {
+    await chats.getByRole("button", {name: new RegExp("^" + title)}).click();
+    await chat.getByRole("log").getByText(title, {exact: true}).waitFor();
+  }
+  await chats.getByRole("button", {name: "New chat"}).click();
+  await chat.getByRole("heading", {name: "How can I help?"}).waitFor();
+  assert.equal(await chat.getByRole("button", {name: "Chat history"}).count(), 0);
+  await page.evaluate(() => {window.toolbarTest.checkInventory = true;});
+  await chat.getByRole("button", {name:"Select modpack", exact:true}).click();
+  await chat.getByRole("button", {name:/^Meadow/}).click();
+  const info = chat.getByRole("button", {name:"Preview pack context"});
+  const review = chat.getByRole("region", {name:"Review pack context"});
+  assert.equal(await review.count(), 0);
+  await info.click(); assert.equal(await review.count(), 0);
+  await info.dblclick(); await review.getByText(/Fixture mod 105/).waitFor();
+  await info.press("Enter"); assert.equal(await review.count(), 0);
+  const question = chat.getByRole("textbox", {name:"Your question"});
+  await question.fill("Which mods should I keep?"); await question.press("Enter");
+  await page.waitForFunction(() => window.toolbarTest.calls.some(call => call.args?.body?.context?.inventory));
+  const attached = await page.evaluate(() => window.toolbarTest.calls.find(call => call.args?.body?.context?.inventory).args.body);
+  assert.equal(attached.question, "Which mods should I keep?");
+  assert.equal(attached.context.inventory.mods.length, 105);
+  assert.deepEqual(attached.context.inventory.disabled, ["Fixture mod 0 2.4"]);
+  assert.equal(attached.context.inventory.minecraft, "1.21.1");
+  assert.equal(attached.context.inventory.loaderVersion, "0.18.4");
+  assert.equal(attached.context.inventory.mods.at(-1), "Fixture mod 105 2.4");
+  await page.evaluate(() => {window.toolbarTest.checkInventory = false;});
+  await nav("Screenshots");
+  const filters = page.getByRole("navigation", {name: "Screenshot library"});
+  const meadow = filters.getByRole("button", {name: "Meadow", exact: true});
+  const art = meadow.locator("img");
+  await art.evaluate(img => img.decode());
+  assert.deepEqual(await art.evaluate(img => [getComputedStyle(img).width, getComputedStyle(img).borderRadius]), ["29px", "8px"]);
+  for (const name of ["Vanilla", "Creative"]) await filters.getByRole("button", {name}).locator("svg").waitFor();
+  await meadow.click();
+  assert.equal(await page.locator(".shelf-grid article").count(), 2);
+  await filters.getByRole("button", {name: "All screenshots"}).click();
+  const actions = page.getByRole("button",{name:"Actions for landscape-3.png"});
+  const assertFlat = async button => {
+    const material = await button.evaluate(el => {
+      const style = getComputedStyle(el);
+      return [style.backgroundImage, style.boxShadow];
+    });
+    assert.deepEqual(material, ["none", "none"], "Screenshot actions use a flat surface");
+  };
+  await assertFlat(page.getByRole("button",{name:"Refresh screenshots"}));
+  await assertFlat(page.getByRole("button",{name:"Compare",exact:true}));
+  await actions.click();
+  for (const item of await page.getByRole("menu",{name:"Screenshot actions"}).getByRole("menuitem").all()) {
+    const gap = await item.evaluate(el => {
+      const label = document.createRange();
+      label.selectNodeContents(el.lastChild);
+      return label.getBoundingClientRect().left - el.querySelector("svg").getBoundingClientRect().right;
+    });
+    assert.ok(gap >= 5 && gap <= 14, "Menu label sits next to its leading icon");
+  }
+  await page.getByRole("menuitem",{name:"Copy image"}).click();
+  await page.getByRole("button",{name:"Preview landscape-3.png from Vanilla"}).click();
+  const viewer = page.getByRole("dialog",{name:"landscape-3.png"});
+  const viewerImage = viewer.locator(".shot-stage img");
+  await viewerImage.waitFor();
+  await page.waitForFunction(() => !!document.querySelector(".shot-viewer")?.style.getPropertyValue("--shot-aspect"));
+  assert.ok(await viewerImage.evaluate(img => {
+    const bounds = img.getBoundingClientRect(), dialog = img.closest("dialog").getBoundingClientRect();
+    return Math.abs(bounds.width - dialog.width + 2) < 1 && Math.abs(bounds.bottom - dialog.bottom + 1) < 1
+      && Math.abs(bounds.height - bounds.width * img.naturalHeight / img.naturalWidth) < 1;
+  }), "Image fills the viewer edge-to-edge at its natural aspect ratio");
+  assert.equal(await viewer.locator("footer").count(), 0);
+  assert.deepEqual(await viewer.locator("header button").evaluateAll(buttons => buttons.map(b => [b.getAttribute("aria-label"), b.textContent])), [
+    ["Copy image",""], ["Open folder",""], ["Close preview",""],
+  ]);
+  await viewer.getByRole("button",{name:"Open folder"}).click();
+  await viewer.getByRole("button",{name:"Close preview"}).click();
+  for (const action of ["copy","folder"]) assert.ok(await page.evaluate(action=>window.toolbarTest.calls.some(c=>c.command==="screenshot_action" && c.args.action===action && c.args.name==="landscape-3.png"),action));
   const compare = page.locator(".shelf-comparison-toolbar button");
-  const shelfHeading = page.locator(".shelf-heading-shell");
+  const shelfHeading = page.locator(".shot-library-heading");
   const firstImage = page.locator('.shelf-thumbnail').first();
   const headingBefore = await shelfHeading.boundingBox();
   const compareBefore = await compare.boundingBox();
@@ -111,12 +200,12 @@ try {
   assert.equal((await compare.boundingBox()).width, compareBefore.width, "The count does not move neighboring controls");
   assert.equal(await compare.isEnabled(), true, "Incomplete selection can still be cancelled");
   await toolbarShot("screenshot-toolbar-empty");
-  await page.locator(".shelf-heading").hover();
+  await page.locator(".shot-library-heading h1").hover();
   await compare.hover();
   assert.equal(await compare.textContent(), "Cancel");
   assert.equal((await compare.boundingBox()).width, compareBefore.width);
   await settle(); await toolbarShot("screenshot-toolbar-cancel");
-  await page.locator(".shelf-heading").hover();
+  await page.locator(".shot-library-heading h1").hover();
   assert.equal(await compare.textContent(), "Compare (0/2)", "Leaving hover restores the count");
   await compare.click();
   assert.equal(await compare.textContent(), "Compare", "Cancelling at zero returns to browsing");
@@ -143,23 +232,38 @@ try {
 
   await compare.click();
   await firstImage.click();
-  const select = page.locator(".shelf-toolbar .select-trigger");
-  await select.click(); await page.keyboard.press("Escape");
-  assert.equal(await compare.textContent(), "Compare (1/2)", "Dropdown Escape preserves comparison selection");
-  await select.click(); await page.locator(".select-menu-portal").getByRole("button", { name: "Vanilla", exact: true }).click();
+  const shotNav = page.getByRole("navigation", {name:"Screenshot library"});
+  await shotNav.getByRole("button", {name:"Vanilla",exact:true}).click();
   await page.getByRole("button", { name: "Select landscape-1.png from Vanilla for comparison", exact: true }).click();
   assert.equal(await compare.textContent(), "Compare (2/2)", "Selection survives instance filters");
   await compare.hover();
   assert.equal(await compare.textContent(), "Compare (2/2)", "A complete pair compares instead of cancelling on hover");
+  await assertFlat(compare);
   await settle(); await shot("screenshots-selection");
   await toolbarShot("screenshot-toolbar");
   await compare.click();
   await page.getByRole("slider", { name: "Screenshot comparison divider" }).waitFor();
+  const slider = page.getByRole("slider",{name:"Screenshot comparison divider"});
+  await slider.press("End");
+  assert.equal(await slider.getAttribute("aria-valuenow"),"100");
+  await page.getByRole("button",{name:"Reset",exact:true}).click();
+  assert.equal(await slider.getAttribute("aria-valuenow"),"50");
+  await page.getByRole("button",{name:"Swap",exact:true}).click();
+  await page.getByRole("button",{name:"Export",exact:true}).click();
+  await page.waitForFunction(()=>window.toolbarTest.calls.some(c=>c.command==="save_screenshot_comparison" && c.args.png.startsWith("data:image/png")));
   await page.getByRole("button", { name: "Close comparison" }).click();
   assert.equal(await compare.evaluate(el => el === document.activeElement), true);
-  await page.getByRole("button", { name: "Select landscape-1.png from Vanilla for comparison", exact: true }).click();
-  assert.equal(await compare.textContent(), "Compare (1/2)");
-  await page.keyboard.press("Escape"); await settle();
+  const letters = page.locator(".shelf-selection-mark");
+  assert.deepEqual(await letters.allTextContents(), ["A","B"]);
+  await page.getByRole("button",{name:"Cancel",exact:true}).click();
+  assert.equal(await letters.count(),0);
+  await compare.click();
+  await page.locator(".shelf-thumbnail").nth(0).click();
+  await page.locator(".shelf-thumbnail").nth(1).click();
+  await compare.click();
+  await page.getByRole("dialog").getByRole("button",{name:"Cancel",exact:true}).click();
+  assert.equal(await page.getByRole("dialog").count(),0);
+  assert.equal(await letters.count(),0);
   assert.equal(await compare.textContent(), "Compare");
   assert.equal(await compare.evaluate(el => el === document.activeElement), true);
   await page.evaluate(() => { window.toolbarTest.delayRefresh = true; });
@@ -173,7 +277,7 @@ try {
   for (const theme of ["light", "oled"]) {
     await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
     await compare.click(); await settle(); await toolbarShot(`${theme}-comparison-button`);
-    await page.locator(".shelf-heading").hover(); await compare.hover();
+    await page.locator(".shot-library-heading h1").hover(); await compare.hover();
     await settle(); await toolbarShot(`${theme}-comparison-cancel`);
     assert.equal(await compare.textContent(), "Cancel");
     await compare.click();
@@ -185,7 +289,7 @@ try {
   assert.ok(buttonBounds.x >= bounds.x && buttonBounds.x + buttonBounds.width <= bounds.x + bounds.width && buttonBounds.y + buttonBounds.height <= bounds.y + bounds.height);
   for (const mode of ["off", "ultra", "reduced"]) {
     await noMotion(mode, compare.locator(".toolbar-icon-swap svg").first());
-    await page.locator(".shelf-heading").hover(); await compare.hover();
+    await page.locator(".shot-library-heading h1").hover(); await compare.hover();
     assert.equal(await compare.textContent(), "Cancel");
     assert.equal(await compare.locator(".toolbar-copy").evaluate(el => getComputedStyle(el).animationName), "none");
   }
@@ -193,18 +297,18 @@ try {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.evaluate(() => { document.documentElement.dataset.animations = "on"; document.documentElement.dataset.performance = "normal"; });
 
-  await nav("Locker");
-  const tabs = page.getByRole("tablist", { name: "Locker category" });
-  await tabs.getByRole("tab", { name: "Capes", exact: true }).click();
-  assert.equal(await page.getByRole("tabpanel").getAttribute("aria-labelledby"), "locker-tab-capes");
-  await page.keyboard.press("ArrowRight");
-  assert.equal(await tabs.getByRole("tab", { name: "Skins", exact: true }).getAttribute("aria-selected"), "true");
-  await settle();
-  const marker = await tabs.locator("i").boundingBox();
-  const activeTab = await tabs.getByRole("tab", { name: "Skins", exact: true }).boundingBox();
-  assert.ok(Math.abs(marker.x - activeTab.x) < 2, "Locker marker follows keyboard selection");
-  await shot("locker-tabs");
-  for (const mode of ["off", "ultra", "reduced"]) await noMotion(mode, tabs.locator("i"));
+  await page.getByRole("menuitem", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Locker", exact: true }).click();
+  const categories = page.getByRole("navigation", { name: "Locker categories" });
+  await page.getByRole("heading", {name:"Equipped look"}).waitFor();
+  await categories.getByRole("button", {name:"Capes",exact:true}).click();
+  await page.keyboard.press("Tab"); await page.keyboard.press("Enter");
+  assert.equal(await categories.getByRole("button", {name:"Skins",exact:true}).getAttribute("aria-current"),"page");
+  await page.getByRole("button",{name:"Redeem code"}).click();
+  await page.getByRole("textbox",{name:"Enter cape code"}).waitFor();
+  await page.keyboard.press("Escape");
+  assert.equal(await page.getByRole("textbox",{name:"Enter cape code"}).count(),0);
+  await shot("locker-sidebar");
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.evaluate(() => { document.documentElement.dataset.animations = "on"; document.documentElement.dataset.performance = "normal"; });
 
@@ -216,7 +320,7 @@ try {
   await page.getByRole("button", { name: "Choose a version of Sample Pack" }).click();
   const back = page.getByRole("button", { name: "Back to modpacks", exact: true });
   assert.equal(await back.evaluate(el => el === window.packButton && el === document.activeElement), true);
-  const importPack = page.getByRole("dialog", { name: "Add a Modrinth modpack" }).getByRole("button", { name: "Import", exact: true });
+  const importPack = page.getByRole("region", { name: "Add a Modrinth modpack" }).getByRole("button", { name: "Import", exact: true });
   await importPack.waitFor();
   await settle(); await shot("modpack-versions");
   await back.click();
@@ -224,7 +328,7 @@ try {
   await page.getByRole("button", { name: "Choose a version of Sample Pack" }).click();
   await importPack.click();
   await page.waitForFunction(() => window.toolbarTest.calls.some(c => c.command === "import_modrinth_modpack" && c.args.projectId === "pack-1" && c.args.versionId === "release-1"));
-  assert.equal(await page.locator(".modrinth-pack-layer").count(), 0);
+  assert.equal(await page.getByRole("region", { name: "Add a Modrinth modpack" }).count(), 0);
   assert.deepEqual(errors, []);
   console.log("Passed: instance filtering/search and anchored geometry; comparison selection/filter/removal/escape/native preview; truthful refresh; Locker keyboard/selection; persistent modpack Back/Close and native import; themes, compact layout and motion preferences. Native calls simulated.");
 } catch (error) { await shot("failure"); throw error; }

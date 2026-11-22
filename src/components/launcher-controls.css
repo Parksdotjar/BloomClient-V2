@@ -1,0 +1,302 @@
+/* Surfaces also live on the root because menus may be portaled to body or a dialog. */
+:root {
+  --launcher-menu: var(--panel-strong);
+  --launcher-menu-line: color-mix(in srgb, var(--text) 29%, transparent);
+  --launcher-menu-hover: color-mix(in srgb, var(--text) 10%, transparent);
+  --launcher-mark: var(--accent);
+}
+:root[data-theme="oled"] { --launcher-menu: #191919; --text: #f1f1f1; }
+:root[data-theme="light"] { --launcher-menu: #fbfbfb; }
+.settings-workspace-bar {
+  flex: none; display: grid; gap: 13px; padding: 4px 3px 12px;
+  color: var(--text);
+}
+.settings-workspace-bar h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -.025em; }
+.settings-workspace-bar label, .launcher-instance-picker > label {
+  display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid var(--launcher-menu-line);
+  border-radius: 7px; color: var(--muted); background: transparent;
+}
+.settings-workspace-bar input, .launcher-instance-picker > label input {
+  min-width: 0; width: 100%; height: 35px; color: var(--text); font: inherit; font-size: 14px;
+  box-shadow: none; background: transparent; border: 0; padding: 0; outline: 0;
+}
+.settings-workspace-bar label { width: 100%; }
+.settings-workspace-bar label:focus-within, .launcher-instance-picker label:focus-within { outline: 1px solid var(--muted); }
+.desktop-redesign[data-settings-workspace] .desktop-context { padding-top: 13px; }
+.desktop-redesign[data-settings-workspace] main.content { --settings-gutter: clamp(12px, 1.3vw, 22px); padding: clamp(20px, 3vh, 32px) var(--settings-gutter) 24px; }
+.desktop-redesign .settings-page .settings-layout { padding: 0; display: block; }
+.desktop-redesign .settings-content { --setting-label-width: clamp(120px, 24%, 184px); --setting-gap: 12px; --settings-row-line: color-mix(in srgb, var(--text) var(--row-divider-strength, 7%), transparent); min-width: 0; max-width: none; container-type: inline-size; }
+.desktop-redesign .settings-section[hidden], .desktop-redesign .settings-page:has(.settings-search-results) .settings-layout { display: none; }
+.desktop-redesign .settings-content .settings-section { content-visibility: visible; margin: 0; }
+.settings-section-heading { display: flex; align-items: center; gap: 12px; }
+.settings-section-heading > h2 { flex: 1; }
+.desktop-redesign .settings-content .settings-section > :is(.settings-section-heading, h2) {
+  padding-bottom: 0; border: 0; margin-bottom: 24px;
+}
+.desktop-redesign .settings-content .settings-section h2 { font-size: 25px; font-weight: 650; letter-spacing: -.02em; margin: 0; }
+.settings-section-heading > button:not(.info-tip-trigger), .appearance-extra > summary {
+  display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 13px; background: transparent;
+  border: 0; border-radius: 6px; color: var(--text); padding: 7px 9px; cursor: pointer;
+}
+.settings-section-heading > button:not(.info-tip-trigger):hover, .appearance-extra > summary:hover { background: var(--desktop-selection); }
+.theme-choices { display: flex; align-items: start; gap: clamp(9px, 1.6vw, 28px); }
+.theme-choices > button {
+  display: grid; justify-items: stretch; gap: 7px; font: inherit; font-size: 13px; background: transparent;
+  border: 0; padding: 3px; color: var(--text); min-width: 0; flex: 1 1 0; max-width: 148px;
+}
+.theme-preview {
+  position: relative; aspect-ratio: 1.65; overflow: hidden; border-radius: 6px; outline: 1px solid var(--desktop-line);
+  --preview-bg: #202020; --preview-nav: #303030; --preview-ink: #484848;
+  background: linear-gradient(90deg, var(--preview-nav) 23%,var(--preview-bg) 23%);
+}
+.theme-preview[data-preview="light"] { --preview-bg: #f4f4f4; --preview-nav: #e7e7e7; --preview-ink: #cecece; }
+.theme-preview[data-preview="system"] { --preview-bg: #e6e6e6; --preview-nav: #303030; --preview-ink: #c4c4c4; }
+.theme-preview::before { content: ""; position: absolute; inset: 10% auto auto 6%; width: 10%; height: 13%; background: url("/delight-logo.png") center/contain no-repeat; }
+.theme-preview[data-preview="light"]::before { filter: brightness(0); }
+.theme-preview i { position: absolute; left: 29%; height: 6%; border-radius: 2px; background: var(--preview-ink); }
+.theme-preview i:first-child { top: 34%; width: 34%; }
+.theme-preview i:nth-child(2) { top: 49%; width: 54%; }
+.theme-preview i:nth-child(3) { bottom: 11%; left: auto; right: 7%; width: 20%; height: 10%; background: var(--launcher-mark); }
+.theme-preview i:nth-child(4) { top: 35%; left: 8%; width: 6%; height: 28%; }
+.theme-choices [aria-pressed="true"] .theme-preview { outline: 2px solid var(--launcher-mark); outline-offset: 2px; }
+.theme-preview svg { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 5px; background: var(--launcher-mark); color: var(--theme-on-accent, #121212); padding: 2px; }
+.setting-commit-slider { display: flex; align-items: center; gap: 16px; width: min(100%,420px); }
+.size-track { flex: 1; min-width: 55px; }
+.size-track input { display: block; appearance: none; width: 100%; height: 20px; margin: 0; padding: 0; cursor: pointer; background: transparent; }
+.size-track input::-webkit-slider-runnable-track { height: 5px; border-radius: 5px; background: linear-gradient(to right, var(--launcher-mark) var(--size-fill), var(--launcher-menu-line) var(--size-fill)); }
+.size-track input::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -5px; width: 15px; height: 15px; border-radius: 50%; background: var(--text); }
+.size-track > div { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+.setting-commit-slider .select-wrap { width: 89px; min-width: 0; }
+.desktop-redesign .setting-commit-slider .select-trigger { width: 100%; min-width: 0; }
+.spacing-choices { display: inline-flex; width: fit-content; border: 1px solid var(--launcher-menu-line); border-radius: 7px; padding: 2px; }
+.spacing-choices button { font: inherit; font-size: 13px; padding: 6px 12px; border: 0; background: transparent; border-radius: 5px; color: var(--muted); }
+.spacing-choices [aria-pressed="true"] { background: var(--desktop-selection); color: var(--text); }
+.appearance-extra { padding-top: 8px; }
+.appearance-extra > summary { list-style: none; color: var(--muted); }
+.appearance-extra[open] > summary svg { rotate: 180deg; }
+.settings-search-results button {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 8px; border: 0; border-bottom: 1px solid var(--desktop-line);
+  background: transparent; color: var(--text); font: inherit; text-align: left;
+}
+.settings-search-results button:hover { background: var(--desktop-selection); }
+.settings-search-results small { margin-left: auto; color: var(--muted); }
+:root[data-spacing="compact"] .desktop-redesign .settings-card .setting-row { min-height: 45px; padding-block: 9px; }
+:root[data-spacing="compact"] .desktop-redesign .instance-list-row { min-height: 44px; }
+:root[data-spacing="compact"] .desktop-redesign :is(.instance-nav-name, .desktop-context-links button) { min-height: 29px; }
+:root[data-spacing="compact"] .desktop-redesign :is(.download-task,.story-list article) { padding-block: 7px; }
+
+.desktop-redesign .select-wrap .select-trigger {
+  border: 1px solid var(--launcher-menu-line); border-radius: 7px; background: transparent; box-shadow: none;
+  min-height: 34px; padding: 5px 10px; font-size: 14px; font-weight: 400; color: var(--text);
+}
+.desktop-redesign .select-trigger[aria-expanded="true"] { border-color: var(--muted); }
+:root .select-menu.select-menu-portal, .desktop-redesign .rail-account .profile-popover, .desktop-redesign .desktop-menu-popup {
+  border: 1px solid var(--launcher-menu-line); border-radius: 9px; background: var(--launcher-menu);
+  color: var(--text); box-shadow: 0 5px 18px var(--theme-shadow, #0003); padding: 5px; overflow-y: auto;
+  font: 14px/1.35 var(--interface-font, "Segoe UI"), system-ui, sans-serif;
+}
+:root .select-menu.select-menu-portal > button, .account-menu-actions button, .account-choices button {
+  display: flex; width: 100%; align-items: center; gap: 9px; justify-content: flex-start; padding: 7px 10px;
+  min-height: 34px; text-align: left; border: 0; border-radius: 5px; background: transparent; box-shadow: none;
+  font: inherit; font-size: 14px; font-weight: 400; color: var(--text);
+}
+:root .select-menu.select-menu-portal > button.chosen, :root .select-menu.select-menu-portal > button:is(:hover,:focus-visible),
+.account-menu-actions button:is(:hover,:focus-visible), .account-choices button:is(:hover,:focus-visible) { background: var(--launcher-menu-hover); }
+.select-menu > .chosen > svg:last-child, .picker-choices [aria-pressed="true"] > svg:last-child, .account-choices svg { margin-left: auto; color: var(--launcher-mark); flex: none; }
+.desktop-redesign .instance-workspace .instance-hero-actions .instance-more, .desktop-redesign .instance-workspace .content-row-actions .content-dots {
+  display: grid; place-items: center; min-height: 0; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent !important; box-shadow: none !important; color: var(--text);
+}
+.desktop-redesign .instance-workspace :is(.content-dots,.instance-more):is(:hover,:focus-visible,[aria-expanded="true"]) { background: var(--launcher-menu-hover) !important; }
+.select-menu.instance-folder-menu .instance-menu-label,.select-menu.instance-folder-menu .instance-menu-identity { display: none; }
+.select-menu.instance-folder-menu .instance-menu-action b { font-weight: 400; font-size: 14px; }
+.select-menu-portal .instance-menu-divider { margin: 4px 6px; background: var(--launcher-menu-line); }
+:root .select-menu-portal button:disabled { opacity: .45; }
+
+:root .launcher-instance-picker.select-menu-portal { display: flex; flex-direction: column; gap: 5px; padding: 8px; }
+.launcher-instance-picker label { flex: none; }
+.picker-choices { min-height: 0; overflow: auto; }
+.picker-choices button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 7px; min-height: 48px; text-align: left; background: transparent; border: 0; border-radius: 5px; color: var(--text); }
+.picker-choices :is([aria-pressed="true"],button:hover,button:focus-visible) { background: var(--launcher-menu-hover); }
+.picker-choices img { width: 34px; height: 34px; border-radius: 5px; object-fit: cover; }
+.picker-choices span { display: grid; min-width: 0; }
+.picker-choices b { font-size: 15px; overflow-wrap: anywhere; }
+.picker-choices small,.picker-choices p { color: var(--muted); font-size: 13px; }
+.launcher-instance-picker .picker-create { border-top: 1px solid var(--launcher-menu-line) !important; border-radius: 0; flex: none; }
+.desktop-redesign .rail-account .profile-popover { width: 252px; max-height: calc(100dvh - 75px); padding: 8px; }
+.account-menu-identity { display: flex; align-items: center; gap: 11px; padding: 9px 7px 13px; margin-bottom: 4px; border-bottom: 1px solid var(--launcher-menu-line); }
+.account-menu-identity .avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 6px; background: var(--launcher-menu-hover); }
+.account-menu-identity .avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.account-menu-identity small { display: block; font-size: 13px; color: var(--muted); }
+.account-menu-actions button > svg:last-child:not(:first-child) { margin-left: auto; }
+.account-choices { padding-inline-start: 15px; }
+.account-choices button:disabled { color: var(--muted); }
+.desktop-redesign .rail-account .profile-popover .undo-logout { min-height: 35px; height: auto; box-shadow: none; border: 0; background: transparent; padding: 5px 8px; }
+.desktop-redesign .rail-account .profile-popover .undo-logout:hover { background: var(--launcher-menu-hover); }
+.desktop-redesign .rail-account .undo-logout-icon { background: transparent; box-shadow: none; }
+
+.desktop-redesign .instance-inline-name { max-width: 100%; }
+.desktop-redesign .instance-inline-name form { display: inline-grid; position: relative; max-width: 100%; font: inherit; }
+.instance-name-measure { grid-area: 1 / 1; min-width: 1ch; padding-right: 2px; visibility: hidden; white-space: pre; overflow: hidden; font: inherit; }
+.desktop-redesign .instance-identity .instance-inline-name input, .desktop-redesign .instance-inline-name input:focus-visible {
+  grid-area: 1 / 1; align-self: stretch; width: 100%; min-width: 0; min-height: 0; height: 100%;
+  padding: 0; margin: 0; border: 0; outline: 0; border-radius: 0; box-shadow: none; background: transparent;
+  color: inherit; caret-color: currentColor; font: inherit; line-height: inherit; letter-spacing: inherit;
+}
+.desktop-redesign .instance-name-error { position: absolute; top: 100%; z-index: 1; padding: 3px 6px; background: var(--launcher-menu); }
+.page-navigation { display: flex; align-items: center; justify-content: flex-end; gap: 3px; padding: 8px 0; }
+.page-navigation button { display: grid; place-items: center; min-width: 30px; height: 30px; font: inherit; font-size: 13px; color: var(--muted); border: 0; border-radius: 5px; background: transparent; box-shadow: none; }
+.page-navigation button:is(:hover, [aria-current="page"]) { background: var(--launcher-menu-hover); color: var(--text); }
+.page-navigation button:disabled { opacity: .4; }
+@media (max-width: 850px) {
+  body:has(.desktop-redesign) { min-width: 0; }
+  .app-shell.desktop-redesign { --desktop-context-width: 150px; --desktop-gutter: 14px; }
+}
+
+.settings-workspace-bar input::placeholder { color: var(--muted); }
+.theme-preview i:nth-child(4) { height: 7%; box-shadow: 0 .65em var(--preview-ink), 0 1.3em var(--preview-ink); }
+.desktop-redesign .settings-page .appearance-options > .setting-row { padding-block: 16px; }
+.desktop-redesign .appearance-options .theme-choices { justify-content: space-between; }
+
+.desktop-redesign [aria-label="Settings help"] button { white-space: nowrap; gap: 7px; padding-inline: 6px; }
+@media (max-width: 980px) { [aria-label="Settings help"] .lucide-external-link { display: none; } }
+.desktop-redesign .rail-account .profile-popover[role="menu"] { --account-menu-fill: var(--launcher-menu); }
+:root:not([data-theme="light"]) .desktop-redesign .rail-account .profile-popover[role="menu"] {
+  --launcher-menu: #262626;
+  --launcher-menu-hover: #363636;
+  --launcher-menu-line: #494949;
+}
+.app-shell.desktop-redesign .rail-account .profile-popover > .profile-logout.undo-logout .undo-logout-label { font: 400 14px/1.35 var(--interface-font, "Segoe UI"), system-ui, sans-serif; }
+.app-shell.desktop-redesign .rail-account .profile-popover > .profile-popover-rule { height: 1px; margin: 5px 6px; background: var(--launcher-menu-line); }
+
+:root .appearance-preset-menu .appearance-preset-option.selected { background: var(--launcher-menu-hover); }
+:root .appearance-preset-pick[aria-pressed="true"] > svg { color: var(--launcher-mark); }
+
+/* Storage and account management share the same flat controls as the workspace. */
+.desktop-redesign .settings-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex: none;
+  min-height: 35px; padding: 5px 12px; border: 1px solid var(--launcher-menu-line); border-radius: 7px;
+  background: transparent; box-shadow: none; color: var(--text); font: 400 14px/1.3 var(--interface-font, "Segoe UI"), system-ui, sans-serif;
+}
+.desktop-redesign .settings-action:hover:enabled { background: var(--desktop-selection); }
+.desktop-redesign .settings-action:disabled { opacity: .48; cursor: default; }
+.storage-settings, .settings-section[data-settings-section="My Profile"] { container-type: inline-size; }
+.storage-overview { border-bottom: 1px solid var(--settings-row-line); padding: 20px 0; }
+.storage-label { margin: 0; font-size: 16px; font-weight: 600; }
+.storage-amount { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 14px; }
+.storage-amount span, .storage-overview small, .account-signin p, .settings-inline-status { font-size: 14px; color: var(--muted); }
+.storage-meter { height: 6px; overflow: hidden; border-radius: 6px; background: var(--desktop-selection); margin-bottom: 8px; }
+.storage-meter i { display: block; height: 100%; border-radius: inherit; background: var(--launcher-mark); }
+.desktop-redesign .storage-settings .settings-card { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.storage-settings .setting-commit-slider { width: min(100%, 320px); }
+.storage-settings output { min-width: 60px; font-size: 14px; font-variant-numeric: tabular-nums; text-align: end; }
+.accounts-workspace {
+  --portrait-size: 152px;
+  display: grid; grid-template-columns: calc(var(--portrait-size) + var(--settings-gutter) + 1px) minmax(0, 1fr);
+  align-items: start; gap: var(--settings-gutter); max-width: 940px; padding-block: 18px;
+}
+.accounts-picture { padding-inline-end: var(--settings-gutter); border-inline-end: 1px solid var(--settings-row-line); }
+.accounts-portrait {
+  position: relative; display: grid; place-items: center; width: var(--portrait-size); height: var(--portrait-size); box-sizing: border-box; margin: 0;
+  padding: 0; border-radius: 20px; border: 1px solid var(--desktop-line); background: var(--desktop-selection);
+  color: var(--text); font: 550 56px/1 var(--interface-font, "Segoe UI"), system-ui, sans-serif;
+}
+.accounts-portrait img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.accounts-portrait i { position: absolute; right: 5px; bottom: 5px; display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid var(--launcher-menu-line); border-radius: 50%; background: var(--launcher-menu); }
+.accounts-portrait:is(:hover:enabled,:focus-visible) { border-color: var(--muted); }
+.settings-account-list { list-style: none; padding: 0; margin: 0; }
+.settings-account-list li { display: grid; grid-template-columns: 66px minmax(0, 1fr) auto; align-items: center; gap: 16px; min-height: 86px; padding: 9px 0; border-bottom: 1px solid var(--settings-row-line); }
+.settings-account-list b { font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.settings-account-list li:first-child { padding-top: 0; min-height: 77px; }
+.account-skin-portrait { display: grid; place-items: center; overflow: hidden; width: 66px; height: 66px; border-radius: 9px; background: var(--desktop-selection); color: var(--muted); }
+.account-skin-portrait img, .account-skin-portrait svg:not(.lucide) { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.accounts-add { margin-top: 22px; }
+.account-confirm-actions { flex-wrap: wrap; }
+.account-signin p { line-height: 1.45; margin: 4px 0 0; }
+@container (max-width: 680px) {
+  .accounts-workspace { grid-template-columns: minmax(0, 1fr); gap: var(--settings-gutter); padding-block: 18px; }
+  .accounts-picture { border-inline-end: 0; border-bottom: 1px solid var(--settings-row-line); padding: 0 0 24px; }
+}
+@container (max-width: 390px) {
+  .settings-account-list .account-confirm-actions { grid-column: 2 / -1; }
+  .settings-account-connect { flex-wrap: wrap; }
+}
+.account-current, .account-confirm-actions, .account-device-actions { display: flex; align-items: center; gap: 8px; }
+.account-current { color: var(--muted); font-size: 14px; }
+.settings-account-connect { display: flex; align-items: flex-start; gap: 12px; padding: 18px 0; border-bottom: 1px solid var(--settings-row-line); }
+.account-signin { flex: 1; min-width: 0; }
+.account-device-actions { flex-wrap: wrap; margin-top: 12px; }
+.account-device-actions code { font-size: 15px; user-select: all; letter-spacing: .07em; margin-right: 6px; }
+.settings-inline-status { margin: 10px 0; }
+
+/* Labels, controls and optional help have consistent positions across sections. */
+.desktop-redesign .settings-content .setting-row[data-setting-help] {
+  display: grid; grid-template-columns: var(--setting-label-width) minmax(0, 1fr) 28px;
+  align-items: center; column-gap: var(--setting-gap); min-height: 56px; padding: 10px 2px; border-bottom-color: var(--settings-row-line);
+}
+.desktop-redesign .setting-row > .setting-label {
+  display: flex; align-items: center; text-align: start; gap: 10px; min-width: 0;
+}
+.desktop-redesign .setting-row > .setting-label b {
+  color: var(--text); font: 550 15px/1.35 var(--interface-font, "Segoe UI"), system-ui, sans-serif; overflow-wrap: anywhere;
+}
+.desktop-redesign .settings-content .setting-row[data-setting-help] > :nth-child(2) {
+  justify-self: start; min-width: 0; max-width: 100%; margin-inline: 0;
+}
+.desktop-redesign .appearance-options .setting-row > .theme-choices { width: min(100%, 460px); }
+.desktop-redesign .settings-content .setting-row > .info-tip-trigger { justify-self: end; }
+@container (max-width: 560px) {
+  .desktop-redesign .settings-content .setting-row[data-setting-help] { column-gap: 8px; }
+  .desktop-redesign .settings-content .setting-row .setting-label { gap: 5px; }
+  .desktop-redesign .settings-content .theme-choices { gap: 5px; }
+}
+@container (max-width: 420px) {
+  .desktop-redesign .settings-content .setting-row[data-setting-help] { grid-template-columns: minmax(0, 1fr) 28px; row-gap: 10px; }
+  .desktop-redesign .settings-content .setting-row[data-setting-help] > :nth-child(2) { grid-row: 2; grid-column: 1 / -1; justify-self: start; }
+  .desktop-redesign .settings-content .setting-row > .info-tip-trigger { grid-column: 2; grid-row: 1; }
+}
+
+
+.settings-nav-group { display: grid; gap: 2px; padding-bottom: 12px; }
+.settings-nav-group h2 { margin: 6px 9px 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.desktop-redesign[data-settings-workspace] .settings-page:not(:has([data-settings-section="My Profile"]:not([hidden]))) {
+  width: min(100%, 760px); margin-inline: auto;
+}
+.desktop-redesign .appearance-group-heading {
+  margin: 18px 0 0; padding: 0 2px 9px; border-bottom: 1px solid var(--desktop-line);
+  font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: normal;
+}
+.desktop-redesign .appearance-options .appearance-group-heading:first-child { margin-top: 0; }
+.desktop-redesign .settings-page .appearance-options > .setting-row { padding-block: 10px; }
+.desktop-redesign .appearance-options .setting-row > .theme-choices { width: min(100%, 265px); gap: 9px; }
+.desktop-redesign .settings-nav-group button[aria-current] { background: var(--desktop-selection); }
+.desktop-redesign .appearance-color-chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; height: 33px; border: 1px solid var(--launcher-menu-line);
+  border-radius: 7px; background: transparent; box-shadow: none; color: var(--text); font: inherit; font-size: 13px;
+}
+.appearance-color-chip:hover { background: var(--launcher-menu-hover); }
+.appearance-color-chip span { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--launcher-menu-line); }
+@container (min-width: 530px) {
+  .desktop-redesign .settings-content .appearance-options .setting-row[data-setting-help] > :nth-child(2) { justify-self: end; }
+}
+:root[data-theme][data-custom-canvas], :root[data-theme][data-custom-canvas] .app-shell.desktop-redesign {
+  --page: var(--user-background); --desktop-canvas: var(--user-background);
+}
+:root[data-theme][data-custom-foreground], :root[data-theme][data-custom-foreground] .app-shell.desktop-redesign {
+  --text: var(--user-foreground); --theme-ink: var(--user-foreground);
+}
+
+.desktop-redesign .appearance-options .select-trigger > svg { position: static; }
+.desktop-redesign .appearance-options .select-trigger { gap: 9px; }
+.desktop-redesign .appearance-options .setting-row > .select-wrap { width: min(100%, 144px); }
+
+:root[data-theme][data-custom-sidebar] .app-shell.desktop-redesign { --desktop-frame: var(--user-sidebar); }
+:root[data-theme] .app-shell.desktop-redesign > .desktop-context { background: var(--user-panel, #101010); }
+:root[data-theme="light"] .app-shell.desktop-redesign > .desktop-context { background: var(--user-panel, #dadada); }
+.appearance-accent-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.appearance-accent-controls .select-wrap { min-width: 0; width: max-content; }
+.accent-option { display: inline-flex; align-items: center; gap: 7px; }
+.accent-option i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--launcher-menu-line); }
+.appearance-options .setting-percent-slider { width: min(100%, 290px); grid-template-columns: minmax(40px, 1fr) 54px; }
+.appearance-options .setting-percent-slider output { background: transparent; border-color: var(--launcher-menu-line); border-radius: 6px; font: inherit; font-size: 13px; }

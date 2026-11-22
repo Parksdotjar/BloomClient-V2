@@ -13,7 +13,7 @@
   --account-ceramic-edge: #ffffff30;
   --account-ceramic-shadow: #a0a0a044;
 }
-/* Paint on the moving dock only, including custom backgrounds. Its trigger
+/* Paint on the moving dock only. Its trigger
    must stay transparent so a second surface cannot cover the bevels. */
 .app-shell > .sidebar > .profile > .signed-in {
   border: 0 !important;
@@ -47,10 +47,8 @@
   --account-menu-fill: linear-gradient(160deg, var(--theme-surface, #111314), var(--theme-inset, #0b0d0e));
   padding: 24px 8px 8px;
   border: 0; outline: 0; border-radius: 0 0 14px 14px; box-shadow: none;
-  /* Stay opaque and distinct when wallpaper glass is enabled. */
   background: var(--account-menu-fill) !important;
 }
-.app-shell[data-custom-background="on"] > .sidebar > .profile > .profile-popover:has(> .undo-logout) { background: var(--account-menu-fill) !important; }
 .app-shell .profile-popover:has(> .undo-logout) > .profile-popover-actions { gap: 4px; }
 .app-shell .profile-popover:has(> .undo-logout) .profile-popover-actions > button {
   min-height: 44px; padding: 4px 8px; border: 0; outline: 0; box-shadow: none;

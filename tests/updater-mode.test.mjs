@@ -13,7 +13,7 @@ function action(name, next, development, context) {
 test('development never checks or installs a production update', async () => {
   const fail = () => assert.fail('Production updater was reached in development');
   await action('checkForUpdates', '  useEffect(', true, { check: fail });
-  await action('installUpdate', '  const closeUpdateError', true, { mockUpdateActive: false, availableUpdate: { downloadAndInstall: fail } });
+  await action('installUpdate', '  const closeUpdateDialog', true, { mockUpdateActive: false, availableUpdate: { downloadAndInstall: fail } });
 });
 
 test('release checks and installs through the real updater path', async () => {
@@ -26,11 +26,11 @@ test('release checks and installs through the real updater path', async () => {
   }};
   const noop = () => {};
   await action('checkForUpdates', '  useEffect(', false, {
-    updateChecking:false, setUpdateChecking:noop,
+    updateChecking:false, availableUpdate:null, setUpdateChecking:noop,
     check:async () => { checked++; return update; },
     setAvailableUpdate:callback => assert.equal(callback(null), update),
   });
-  await action('installUpdate', '  const closeUpdateError', false, {
+  await action('installUpdate', '  const closeUpdateDialog', false, {
     mockUpdateActive:false, availableUpdate:update, updatePhase:'ready',
     setUpdatePanelOpen:noop,setUpdatePhase:noop,setUpdateProgress:noop,setUpdateError:noop,
     relaunch:async () => { restarted++; },

@@ -1,0 +1,38 @@
+/* Utilities share the launcher controls. Native tasks own their progress and results. */
+.utility-navigation h2 { margin: 6px 8px 14px; font-size: 19px; }
+.sync-workspace { width: min(100%, 840px); margin-inline: auto; min-width: 0; container-type: inline-size; }
+.sync-heading, .sync-actions, .sync-rule-title { display: flex; align-items: center; gap: 10px; }
+.sync-heading { justify-content: space-between; }
+.sync-heading h1 { margin: 0; font-size: clamp(24px, 2.3vw, 32px); font-weight: 650; }
+.sync-rules { padding: 0; margin: 16px 0; border: 0; min-width: 0; }
+.desktop-redesign .sync-workspace .utility-rule { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(0, 1.6fr); align-items: start; gap: 16px; padding: 16px 0; border: 0; border-bottom: 1px solid var(--desktop-line); overflow: visible; }
+.sync-workspace .utility-rule header { display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 0; border: 0; background: transparent; }
+.sync-workspace .utility-rule header > span { width: 23px; height: 23px; background: transparent; color: var(--muted); }
+.sync-workspace .utility-rule h2 { font-size: 15px; font-weight: 550; }
+.sync-workspace .utility-rule-body { gap: 8px; padding: 0; }
+.sync-workspace .utility-setting-stack { padding: 0; background: transparent; border: 0; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 5px 12px; }
+.sync-workspace .utility-setting-stack label,.sync-workspace .utility-copy-destination { display: flex; align-items: center; gap: 8px; padding: 0; margin: 0; color: var(--muted); background: transparent; border: 0; }
+.sync-workspace .utility-setting-stack label span,.sync-workspace .utility-copy-destination :is(span,b) { font-size: 13px; font-weight: 400; }
+.sync-workspace .utility-copy-destination { grid-column: 1/-1; min-height: 25px; }
+.sync-workspace .select-wrap { min-width: 0; width: 100%; }
+.sync-workspace .utility-targets { display: flex; flex-wrap: wrap; gap: 5px; }
+.sync-workspace .utility-targets-heading { width: 100%; }
+.sync-workspace .utility-targets-heading b,.sync-workspace .utility-targets button b,.sync-workspace .utility-shared-control b { font-size: 13px; font-weight: 500; }
+.sync-workspace .utility-targets button { min-height: 32px; display: inline-flex; gap: 7px; align-items: center; padding: 4px 8px; border-radius: 6px; background: transparent; }
+.sync-workspace .utility-targets button > span { width: 16px; height: 16px; border-radius: 4px; }
+.sync-workspace .utility-shared-control { padding: 0; border: 0; background: transparent; }
+.sync-workspace .utility-open-folder { justify-self: start; }
+.sync-actions { justify-content: flex-end; flex-wrap: wrap; margin-block: 16px; }
+.sync-workspace :is(.sync-actions button,.sync-heading button,.sync-review > button,.utility-open-folder) {
+  display: inline-flex; justify-content: center; align-items: center; justify-self: start; gap: 7px; width: auto; min-height: 35px; padding: 6px 11px;
+  color: var(--text); background: transparent; border: 1px solid var(--launcher-menu-line); box-shadow: none; border-radius: 7px; font: inherit; font-size: 14px; cursor: pointer;
+}
+.sync-workspace .sync-heading button { border-color: transparent; }
+.sync-workspace button:where(:hover:enabled):not(.utility-toggle) { background-color: var(--launcher-menu-hover); }
+.sync-review dl { margin-block: 20px; }
+.sync-review dl > div { display: grid; grid-template-columns: minmax(110px,1fr) minmax(0,2fr); gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--desktop-line); }
+.sync-review dd { margin: 0; overflow-wrap: anywhere; }
+.sync-review dt,.sync-review > p { color: var(--muted); }
+@container (max-width: 520px) {
+  .desktop-redesign .sync-workspace .utility-rule { grid-template-columns: minmax(0,1fr); gap: 6px; }
+}

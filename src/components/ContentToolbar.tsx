@@ -1,15 +1,11 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, CirclePlus, ListFilter, RotateCcw } from "lucide-react";
-import { ToolbarIconSwap, ToolbarSegments } from "./ConnectedToolbar";
+import { ArrowLeft, Plus, SlidersHorizontal } from "lucide-react";
+import { ToolbarIconSwap } from "./ConnectedToolbar";
+import { FilterMenu, FilterReset, FilterSection } from "./FilterMenu";
 import "./content-toolbar.css";
 
 type Props = {
   category: string;
-  total: number;
-  enabled: number;
-  visible: number;
-  ready: boolean;
-  searching: boolean;
   browsing: boolean;
   version: string;
   loader: string;
@@ -19,76 +15,50 @@ type Props = {
   onFilterChange: (value: string) => void;
   onAdd: () => void;
   onBack: () => void;
-  catalogControls?: (owner: string) => ReactNode;
+  catalogControls?: ReactNode;
   catalogFiltered?: boolean;
+  searchField: ReactNode;
 };
 
-export function ContentToolbar({ category, total, enabled, visible, ready, searching, browsing,
-  version, loader, sort, filter, onSortChange, onFilterChange, onAdd, onBack, catalogControls, catalogFiltered = false }: Props) {
+export function ContentToolbar({ category, browsing,
+  version, loader, sort, filter, onSortChange, onFilterChange, onAdd, onBack, catalogControls, catalogFiltered = false, searchField }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const drawerId = useId();
+  const menuId = useId();
   const catalogFilters = browsing && Boolean(catalogControls);
   const expanded = filtersOpen && (!browsing || catalogFilters);
   const filtered = browsing ? catalogFiltered : sort !== "Name" || filter !== "All";
   const mode = browsing ? "catalog" : "installed";
-  const summary = browsing ? `Minecraft ${version} · ${loader}`
-    : !ready ? "Loading installed content…"
-    : searching || filter !== "All" ? `${visible.toLocaleString()} of ${total.toLocaleString()}${filter !== "All" ? ` · ${filter}` : " matching"}`
-    : `${total.toLocaleString()} installed · ${enabled.toLocaleString()} enabled`;
 
   useEffect(() => { setFiltersOpen(false); }, [browsing]);
-  useEffect(() => {
-    if (!expanded) return;
-    const outside = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest(`[data-content-filter-owner="${CSS.escape(drawerId)}"]`)) return;
-      if (event.target instanceof Node && !root.current?.contains(event.target)) setFiltersOpen(false);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (document.querySelector(`[data-content-filter-owner="${CSS.escape(drawerId)}"]`)) return;
-      setFiltersOpen(false);
-      trigger.current?.focus();
-    };
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [expanded, drawerId]);
-
-  return <div ref={root} className="manager-heading content-toolbar" data-mode={mode} data-filters-open={expanded} data-catalog-filters={catalogFilters}>
+  return <div className="manager-heading content-toolbar" data-mode={mode} data-filters-open={expanded} data-catalog-filters={catalogFilters}>
     <div className="content-toolbar-face">
-      <div className="content-toolbar-identity">
-        <h2 key={mode}>{browsing ? `${category} Library` : category}</h2>
-        <div className="content-toolbar-readout"><span key={summary}>{summary}</span></div>
-      </div>
+      {searchField}
       <div className="manager-tools">
         <div className="content-toolbar-filter-slot" inert={browsing && !catalogFilters} aria-hidden={browsing && !catalogFilters}>
           <button ref={trigger} type="button" className="content-filter-trigger"
-            data-filtered={filtered} aria-label={catalogFilters ? "Filter mods" : `Filter content: sorted by ${sort}, showing ${filter.toLowerCase()}`}
-            aria-expanded={expanded} aria-controls={drawerId} title="Sort and filter"
-            onClick={() => setFiltersOpen(value => !value)}><ListFilter size={19} strokeWidth={2.2} /></button>
+            data-filtered={filtered} aria-label={catalogFilters ? `Filter ${category.toLowerCase()}` : `Filter content: sorted by ${sort}, showing ${filter.toLowerCase()}`}
+            aria-haspopup="menu" aria-expanded={expanded} aria-controls={expanded ? menuId : undefined} title="Sort and filter"
+            onClick={() => setFiltersOpen(value => !value)}><SlidersHorizontal size={17} strokeWidth={1.7} /><span>Filter</span></button>
         </div>
         <button type="button" className={`content-toolbar-action ${browsing ? "catalog-close" : "add-content"}`}
           onClick={browsing ? onBack : onAdd}
           aria-label={browsing ? `Back to installed ${category.toLowerCase()}` : `Add ${category}`}>
-          <ToolbarIconSwap active={browsing} resting={<CirclePlus size={17} />} engaged={<ArrowLeft size={17} />} />
-          <span key={mode} className="content-toolbar-action-label">{browsing ? "Back to installed" : `Add ${category}`}</span>
+          <ToolbarIconSwap active={browsing} resting={<Plus size={17} />} engaged={<ArrowLeft size={17} />} />
+          <span key={mode} className="content-toolbar-action-label">{browsing ? "Back to installed" : `Add ${category.toLowerCase()}`}</span>
         </button>
       </div>
     </div>
-    <div id={drawerId} className="content-toolbar-drawer" inert={!expanded} aria-hidden={!expanded}>
-      <div className="content-toolbar-drawer-body">
-        {catalogFilters ? catalogControls?.(drawerId) : <>
-        <ToolbarSegments label="Show" options={["All", "Enabled", "Disabled"]} value={filter} onChange={onFilterChange} />
-        <ToolbarSegments label="Sort by" options={["Name", "Size"]} value={sort} onChange={onSortChange} />
-        <button type="button" className="content-toolbar-reset" disabled={!filtered}
-          onClick={() => { onSortChange("Name"); onFilterChange("All"); }}><RotateCcw size={14} />Reset</button>
+    {expanded && <FilterMenu anchor={trigger} id={menuId} title={browsing ? "Modrinth filters" : "Filter " + category.toLowerCase()} onClose={() => setFiltersOpen(false)}>
+        {catalogFilters ? catalogControls : <>
+        <FilterSection label="Show" options={["All", "Enabled", "Disabled"]} value={filter} onChange={onFilterChange} />
+        <FilterSection label="Sort by" options={["Name", "Size"]} value={sort} onChange={onSortChange} />
+        <FilterReset label="Reset" disabled={!filtered} onReset={() => { onSortChange("Name"); onFilterChange("All"); }} />
         </>}
-      </div>
-    </div>
+    </FilterMenu>}
+    {browsing && <div className="content-toolbar-identity">
+      <h2>{category} Library</h2>
+      <div className="content-toolbar-readout">Minecraft {version} · {loader}</div>
+    </div>}
   </div>;
 }

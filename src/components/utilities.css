@@ -142,8 +142,8 @@
 .utility-shared-control { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px; border: 1px solid var(--border); border-radius: 11px; background: var(--control); }
 .utility-shared-control b { display: block; color: var(--text); font-size: 11px; }
 .utility-toggle { position: relative; width: 43px; height: 24px; flex: 0 0 auto; padding: 3px; border: 0; border-radius: 999px; background: var(--theme-raised, #30383d); transition: background-color 180ms ease; }
-.utility-toggle span { width: 18px; height: 18px; display: block; border-radius: 50%; background: var(--theme-surface, #dce1e4); transform: translateX(0); transition: transform 180ms ease; }
-.utility-toggle.on { background: var(--accent); }.utility-toggle.on span { transform: translateX(19px); background: var(--theme-surface, #fff); }
+.utility-toggle span { width: 18px; height: 18px; display: block; border-radius: 50%; background: var(--bright-control, #e0e0e0); transform: translateX(0); transition: transform 180ms ease; }
+.utility-toggle.on { background: var(--accent); }.utility-toggle.on span { transform: translateX(19px); background: var(--bright-control, #ffffff); }
 .utility-open-folder { width: max-content; min-height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--control); color: var(--text); font-size: 10px; font-weight: 780; transition: color 180ms ease, background-color 180ms ease; }
 .utility-open-folder:hover { color: var(--accent-ink, var(--accent)); background: color-mix(in srgb, var(--accent) 8%, var(--control)); }
 

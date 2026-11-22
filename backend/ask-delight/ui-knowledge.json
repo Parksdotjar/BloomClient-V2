@@ -1,0 +1,813 @@
+{
+  "entries": [
+    {
+      "id": "ui-client-settings-cache-cache-capacity",
+      "aliases": [
+        "cache capacity"
+      ],
+      "steps": "Client settings → Cache → Cache capacity. Maximum space Delight can use for cached files.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-cache-clear-cache",
+      "aliases": [
+        "clear cache"
+      ],
+      "steps": "Client settings → Cache → Clear cache. Remove cached files. Delight will fetch them again as needed.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-cosmetics-delight-cosmetics",
+      "aliases": [
+        "delight cosmetics"
+      ],
+      "steps": "Client settings → Cosmetics → Delight Cosmetics. Install and maintain Delight capes for supported Fabric 1.21.11 instances.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-general-startup-behavior",
+      "aliases": [
+        "startup behavior",
+        "open home",
+        "open settings",
+        "remember last page"
+      ],
+      "steps": "Client settings → General → Startup Behavior. Choose what happens when Delight Client starts. Choices include Open Home, Open Settings, Remember last page.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-general-minimize-to-system-tray",
+      "aliases": [
+        "minimize to system tray"
+      ],
+      "steps": "Client settings → General → Minimize to System Tray. Close button will minimize Delight Client to your system tray.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-general-right-sidebar",
+      "aliases": [
+        "right sidebar"
+      ],
+      "steps": "Client settings → General → Right Sidebar. Choose what to show beside the main workspace.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-color-mode",
+      "aliases": [
+        "color mode"
+      ],
+      "steps": "Client settings → Appearance → Color mode. Choose how the launcher looks.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-accent",
+      "aliases": [
+        "accent",
+        "custom"
+      ],
+      "steps": "Client settings → Appearance → Accent. The highlight color for buttons, selections and active controls. Choices include Custom.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-dividers",
+      "aliases": [
+        "dividers"
+      ],
+      "steps": "Client settings → Appearance → Dividers. Adjust the visibility of lines between sections and rows.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-font",
+      "aliases": [
+        "font"
+      ],
+      "steps": "Client settings → Appearance → Font. Choose the typeface for launcher menus and controls.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-interface-size",
+      "aliases": [
+        "interface size"
+      ],
+      "steps": "Client settings → Appearance → Interface size. Adjust the size of text and controls.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-spacing",
+      "aliases": [
+        "spacing"
+      ],
+      "steps": "Client settings → Appearance → Spacing. Choose how much room the interface uses.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-reduce-motion",
+      "aliases": [
+        "reduce motion"
+      ],
+      "steps": "Client settings → Appearance → Reduce motion. Use fewer animations throughout the launcher.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-button-pop-duration",
+      "aliases": [
+        "button pop duration"
+      ],
+      "steps": "Client settings → Appearance → Button Pop Duration. Choose how quickly buttons press and spring back. Set to 0 for no button pop.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-performance-ultra-performance-mode",
+      "aliases": [
+        "ultra performance mode"
+      ],
+      "steps": "Client settings → Performance → Ultra Performance Mode. Disable motion, glow, blur, and continuous visual rendering for lower-end computers.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-performance-memory-allocation",
+      "aliases": [
+        "memory allocation",
+        "2048 mb",
+        "4096 mb",
+        "6144 mb",
+        "8192 mb"
+      ],
+      "steps": "Client settings → Performance → Memory Allocation. Set how much RAM Minecraft can use. Choices include 2048 MB, 4096 MB, 6144 MB, 8192 MB.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-performance-java-runtime",
+      "aliases": [
+        "java runtime"
+      ],
+      "steps": "Client settings → Performance → Java Runtime. Automatic detects or securely installs the exact Java Minecraft needs.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-performance-delight-managed-java",
+      "aliases": [
+        "delight-managed java"
+      ],
+      "steps": "Client settings → Performance → Delight-managed Java. Delight installs private runtimes automatically when needed. Your system Java and PATH stay the same.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-performance-java-arguments",
+      "aliases": [
+        "java arguments"
+      ],
+      "steps": "Client settings → Performance → Java Arguments. Advanced JVM arguments for Minecraft launches.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-minecraft-default-game-version",
+      "aliases": [
+        "default game version",
+        "latest release"
+      ],
+      "steps": "Client settings → Minecraft → Default Game Version. Used when creating a new instance. Choices include Latest release.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-minecraft-default-mod-loader",
+      "aliases": [
+        "default mod loader",
+        "fabric",
+        "vanilla"
+      ],
+      "steps": "Client settings → Minecraft → Default Mod Loader. The loader selected for new instances. Choices include Fabric, Vanilla.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-launcher-home-layout",
+      "aliases": [
+        "home layout",
+        "dashboard",
+        "spotlight"
+      ],
+      "steps": "Client settings → Launcher → Home Layout. Choose between Delight's full dashboard and a focused traditional launcher. Choices include Dashboard, Spotlight.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-launcher-double-click-to-play",
+      "aliases": [
+        "double click to play"
+      ],
+      "steps": "Client settings → Launcher → Double Click to Play. Quickly double-click an instance to launch it. A single click still opens its page.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-launcher-launch-method",
+      "aliases": [
+        "launch method",
+        "standard window",
+        "fullscreen"
+      ],
+      "steps": "Client settings → Launcher → Launch Method. Choose how Minecraft windows open. Choices include Standard window, Fullscreen.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-launcher-close-launcher-after-launch",
+      "aliases": [
+        "close launcher after launch"
+      ],
+      "steps": "Client settings → Launcher → Close Launcher After Launch. Automatically close Delight Client after Minecraft starts.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-downloads-download-queue",
+      "aliases": [
+        "download queue",
+        "1 simultaneous download",
+        "3 simultaneous downloads",
+        "5 simultaneous downloads"
+      ],
+      "steps": "Client settings → Downloads → Download Queue. Choose how many downloads can run at once. Choices include 1 simultaneous download, 3 simultaneous downloads, 5 simultaneous downloads.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-privacy-usage-analytics",
+      "aliases": [
+        "usage analytics"
+      ],
+      "steps": "Client settings → Privacy → Usage Analytics. Store anonymous feature-use counters locally on this device.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-privacy-crash-reports",
+      "aliases": [
+        "crash reports"
+      ],
+      "steps": "Client settings → Privacy → Crash Reports. Save crash details locally so they can be reviewed in Logs.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-privacy-news-and-recommendations",
+      "aliases": [
+        "news and recommendations",
+        "show recommendations",
+        "hide recommendations"
+      ],
+      "steps": "Client settings → Privacy → News and Recommendations. Show relevant client updates on Home. Choices include Show recommendations, Hide recommendations.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-updates-automatic-checks",
+      "aliases": [
+        "automatic checks"
+      ],
+      "steps": "Client settings → Updates → Automatic Checks. Check GitHub Releases once whenever Delight Client opens.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-updates-current-version",
+      "aliases": [
+        "current version"
+      ],
+      "steps": "Client settings → Updates → Current Version. The version currently installed on this computer.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-advanced-debug-logging",
+      "aliases": [
+        "debug logging"
+      ],
+      "steps": "Client settings → Advanced → Debug Logging. Write more detailed logs for troubleshooting.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-advanced-game-directory",
+      "aliases": [
+        "game directory"
+      ],
+      "steps": "Client settings → Advanced → Game Directory. Choose where Minecraft files and instances are stored.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-advanced-onboarding",
+      "aliases": [
+        "onboarding"
+      ],
+      "steps": "Client settings → Advanced → Onboarding. Run the Microsoft setup again.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-advanced-minecraft-account",
+      "aliases": [
+        "minecraft account"
+      ],
+      "steps": "Client settings → Advanced → Minecraft Account. Remove the saved Microsoft account from this device.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-advanced-reset-preferences",
+      "aliases": [
+        "reset preferences"
+      ],
+      "steps": "Client settings → Advanced → Reset Preferences. Return Delight Client settings to their defaults.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-open-an-instance-instance-name",
+      "aliases": [
+        "instance name"
+      ],
+      "steps": "Open an instance → Instance name. The name shown in your instance list and on Home.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-open-an-instance-minecraft-memory",
+      "aliases": [
+        "minecraft memory"
+      ],
+      "steps": "Open an instance → Minecraft memory. The maximum RAM Minecraft can use for this instance. Larger modpacks may need more. Leave enough RAM for your system and other apps; allocating more does not always improve performance.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-open-an-instance-java-profile",
+      "aliases": [
+        "java profile"
+      ],
+      "steps": "Open an instance → Java profile. Default uses launcher-managed Java settings. Performance uses conservative garbage-collection tuning. Overdrive is experimental and may use more memory or fail with incompatible Java versions. FPS gains are not guaranteed. Custom opens the argument editor.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-open-an-instance-jvm-arguments",
+      "aliases": [
+        "jvm arguments"
+      ],
+      "steps": "Open an instance → JVM arguments. Extra flags passed to Java when this instance launches. Choosing a profile replaces these flags. Invalid or conflicting arguments can prevent launch. Reset to default clears the custom flags. Save changes applies your edits.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-utilities-sync-across-instances-game-settings",
+      "aliases": [
+        "game settings"
+      ],
+      "steps": "Utilities → Sync Across Instances → Game Settings. Copy Minecraft settings, including controls, video, and sound, from the selected instance to every other instance. This replaces their game settings. Choose Off to leave them alone.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "ui-utilities-sync-across-instances-saved-servers",
+      "aliases": [
+        "saved servers"
+      ],
+      "steps": "Utilities → Sync Across Instances → Saved Servers. Copy the selected instance’s multiplayer server list to every other instance. This replaces each destination’s list rather than combining lists.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "ui-utilities-sync-across-instances-voice-chat-settings",
+      "aliases": [
+        "voice chat settings"
+      ],
+      "steps": "Utilities → Sync Across Instances → Voice Chat Settings. Copy Simple Voice Chat client settings from the chosen instance to only the instances you select below. This does not install the voice chat mod.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "ui-utilities-sync-across-instances-shared-resource-packs",
+      "aliases": [
+        "shared resource packs"
+      ],
+      "steps": "Utilities → Sync Across Instances → Shared Resource Packs. Connect every instance to one resource-pack folder. Packs are available everywhere, but each instance still chooses which ones to enable. Changes to the shared files affect all connected instances.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "ui-utilities-sync-across-instances-shared-shader-packs",
+      "aliases": [
+        "shared shader packs"
+      ],
+      "steps": "Utilities → Sync Across Instances → Shared Shader Packs. Connect every instance to one shader-pack folder. Each instance still needs a compatible shader mod and chooses its own active shader. Changes to the shared files affect all connected instances.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "ui-utilities-saving-and-syncing",
+      "aliases": [
+        "saving and syncing"
+      ],
+      "steps": "Utilities → saving and syncing. Save setup remembers your choices without changing game files or the active sync rules. Sync now applies and activates these choices. Changed files are backed up first.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "ui-instance-settings-fabric-loader-version",
+      "aliases": [
+        "fabric loader version"
+      ],
+      "steps": "Instance settings → Fabric Loader version. Choose the loader used on the next launch, then save changes. This changes Fabric Loader, not Minecraft or Fabric API. Your mods may require a particular loader version.",
+      "source": "src/components/FabricLoaderSetting.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-theme-preset",
+      "aliases": [
+        "theme preset"
+      ],
+      "steps": "Client settings → Appearance → Theme preset. Save or apply a group of appearance settings.",
+      "source": "src/components/AppearancePresets.tsx"
+    },
+    {
+      "id": "controls-main-client-settings-cache-0",
+      "aliases": [
+        "change folder",
+        "clear cache"
+      ],
+      "steps": "Client settings → Cache. Controls available in the corresponding view or dialog include Change folder, Clear cache.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-client-settings-appearance-0",
+      "aliases": [
+        "reset appearance"
+      ],
+      "steps": "Client settings → Appearance. Controls available in the corresponding view or dialog include Reset appearance.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-client-settings-about-delight-0",
+      "aliases": [
+        "visit website"
+      ],
+      "steps": "Client settings → About Delight. Controls available in the corresponding view or dialog include Visit website.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-client-settings-updates-0",
+      "aliases": [
+        "view update"
+      ],
+      "steps": "Client settings → Updates. Controls available in the corresponding view or dialog include View update.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-client-settings-my-profile-0",
+      "aliases": [
+        "change picture",
+        "switch",
+        "add minecraft account"
+      ],
+      "steps": "Client settings → My Profile. Controls available in the corresponding view or dialog include Change picture, Switch, Add Minecraft account.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-client-settings-advanced-0",
+      "aliases": [
+        "restart onboarding",
+        "sign out",
+        "reset settings"
+      ],
+      "steps": "Client settings → Advanced. Controls available in the corresponding view or dialog include Restart onboarding, Sign out, Reset settings.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-instances-new-instance-0",
+      "aliases": [
+        "retry versions",
+        "choose game directory",
+        "review"
+      ],
+      "steps": "Instances → New instance. Controls available in the corresponding view or dialog include Retry versions, Choose game directory, Review.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-open-an-instance-0",
+      "aliases": [
+        "change instance icon",
+        "play",
+        "open instance folder",
+        "worlds",
+        "instance settings",
+        "reset to default"
+      ],
+      "steps": "Open an instance. Controls available in the corresponding view or dialog include Change instance icon, Play, Open instance folder, Worlds, Instance settings, Reset to default.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-open-an-instance-6",
+      "aliases": [
+        "clear search",
+        "retry search",
+        "reset view",
+        "browse modrinth",
+        "open folder"
+      ],
+      "steps": "Open an instance. Controls available in the corresponding view or dialog include Clear search, Retry search, Reset view, Browse Modrinth, Open folder.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-logs-0",
+      "aliases": [
+        "share crash details",
+        "copy",
+        "clear filters"
+      ],
+      "steps": "Logs. Controls available in the corresponding view or dialog include Share crash details, Copy, Clear filters.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-downloads-0",
+      "aliases": [
+        "filter",
+        "dismiss missing mods",
+        "cancel task",
+        "remove from history"
+      ],
+      "steps": "Downloads. Controls available in the corresponding view or dialog include Filter, Dismiss missing mods, Cancel task, Remove from history.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-utilitiespage-utilities-0",
+      "aliases": [
+        "refresh global file sync",
+        "sync now",
+        "back to setup",
+        "back to utilities",
+        "copy share code",
+        "copy share link"
+      ],
+      "steps": "Utilities. Controls available in the corresponding view or dialog include Refresh Global File Sync, Sync now, Back to setup, Back to Utilities, Copy share code, Copy share link.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "controls-utilitiespage-utilities-6",
+      "aliases": [
+        "join pack",
+        "join as editor",
+        "copy",
+        "open shared folder"
+      ],
+      "steps": "Utilities. Controls available in the corresponding view or dialog include Join pack, Join as editor, Copy, Open shared folder.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "controls-locker-locker-0",
+      "aliases": [
+        "refresh cloaks",
+        "previous page",
+        "next page",
+        "unequip",
+        "try again"
+      ],
+      "steps": "Locker. Controls available in the corresponding view or dialog include Refresh cloaks, Previous page, Next page, Unequip, Try again.",
+      "source": "src/components/Locker.tsx"
+    },
+    {
+      "id": "controls-minecraftwardrobe-locker-skins-or-capes-0",
+      "aliases": [
+        "reload wardrobe from minecraft",
+        "try again",
+        "previous page",
+        "next page",
+        "unequip"
+      ],
+      "steps": "Locker → Skins or Capes. Controls available in the corresponding view or dialog include Reload wardrobe from Minecraft, Try again, Previous page, Next page, Unequip.",
+      "source": "src/components/MinecraftWardrobe.tsx"
+    },
+    {
+      "id": "controls-cosmeticsshop-locker-shop-0",
+      "aliases": [
+        "refresh shop"
+      ],
+      "steps": "Locker → Shop. Controls available in the corresponding view or dialog include Refresh Shop.",
+      "source": "src/components/CosmeticsShop.tsx"
+    },
+    {
+      "id": "controls-screenshotshelf-screenshots-0",
+      "aliases": [
+        "copy image",
+        "open folder",
+        "close preview",
+        "refresh screenshots",
+        "show more"
+      ],
+      "steps": "Screenshots. Controls available in the corresponding view or dialog include Copy image, Open folder, Close preview, Refresh screenshots, Show more.",
+      "source": "src/components/ScreenshotShelf.tsx"
+    },
+    {
+      "id": "controls-screenshotcomparison-screenshots-compare-0",
+      "aliases": [
+        "close comparison",
+        "try again",
+        "screenshot comparison divider",
+        "swap screenshots",
+        "center divider"
+      ],
+      "steps": "Screenshots → Compare. Controls available in the corresponding view or dialog include Close comparison, Try again, Screenshot comparison divider, Swap screenshots, Center divider.",
+      "source": "src/components/ScreenshotComparison.tsx"
+    },
+    {
+      "id": "controls-socialpage-social-0",
+      "aliases": [
+        "add friend",
+        "copy username",
+        "open direct message",
+        "remove friend",
+        "accept",
+        "decline invite"
+      ],
+      "steps": "Social. Controls available in the corresponding view or dialog include Add friend, Copy username, Open direct message, Remove friend, Accept, Decline invite.",
+      "source": "src/components/SocialPage.tsx"
+    },
+    {
+      "id": "controls-socialpage-social-6",
+      "aliases": [
+        "cancel invite",
+        "close pinned messages",
+        "unpin message",
+        "close encryption details",
+        "the numbers match",
+        "scan qr image"
+      ],
+      "steps": "Social. Controls available in the corresponding view or dialog include Cancel invite, Close pinned messages, Unpin message, Close encryption details, The numbers match, Scan QR image.",
+      "source": "src/components/SocialPage.tsx"
+    },
+    {
+      "id": "controls-socialpage-social-12",
+      "aliases": [
+        "continue without verifying",
+        "reply",
+        "edit message",
+        "pinned messages",
+        "review",
+        "attach encrypted screenshot"
+      ],
+      "steps": "Social. Controls available in the corresponding view or dialog include Continue without verifying, Reply, Edit message, Pinned messages, Review, Attach encrypted screenshot.",
+      "source": "src/components/SocialPage.tsx"
+    },
+    {
+      "id": "controls-socialpage-social-18",
+      "aliases": [
+        "add emoji",
+        "send message",
+        "change group icon",
+        "members",
+        "create group",
+        "remove from group"
+      ],
+      "steps": "Social. Controls available in the corresponding view or dialog include Add emoji, Send message, Change group icon, Members, Create group, Remove from group.",
+      "source": "src/components/SocialPage.tsx"
+    },
+    {
+      "id": "controls-socialpage-social-24",
+      "aliases": [
+        "leave group",
+        "create group chat",
+        "add a friend"
+      ],
+      "steps": "Social. Controls available in the corresponding view or dialog include Leave group, Create group chat, Add a friend.",
+      "source": "src/components/SocialPage.tsx"
+    },
+    {
+      "id": "controls-portalpage-portal-0",
+      "aliases": [
+        "refresh portal",
+        "clear portal search",
+        "filter",
+        "favorites",
+        "dismiss portal notification",
+        "clear filters"
+      ],
+      "steps": "Portal. Controls available in the corresponding view or dialog include Refresh Portal, Clear Portal search, Filter, Favorites, Dismiss Portal notification, Clear filters.",
+      "source": "src/components/PortalPage.tsx"
+    },
+    {
+      "id": "controls-portalpage-portal-6",
+      "aliases": [
+        "create instance",
+        "add a server",
+        "open instance",
+        "remove shortcut",
+        "keep"
+      ],
+      "steps": "Portal. Controls available in the corresponding view or dialog include Create instance, Add a server, Open instance, Remove shortcut, Keep.",
+      "source": "src/components/PortalPage.tsx"
+    },
+    {
+      "id": "controls-alulahistory-alula-chat-history-0",
+      "aliases": [
+        "new chat",
+        "manage",
+        "delete all chats",
+        "clear all history",
+        "delete chat"
+      ],
+      "steps": "Alula → Chat history. Controls available in the corresponding view or dialog include New chat, Manage, Delete all chats, Clear all history, Delete chat.",
+      "source": "src/components/AlulaHistory.tsx"
+    },
+    {
+      "id": "controls-askdelight-alula-0",
+      "aliases": [
+        "open downloads",
+        "type my own answer",
+        "preview pack context",
+        "remove pack context"
+      ],
+      "steps": "Alula. Controls available in the corresponding view or dialog include Open Downloads, Type my own answer, Preview pack context, Remove pack context.",
+      "source": "src/components/AskDelight.tsx"
+    },
+    {
+      "id": "controls-quickswitcher-quick-switcher-0",
+      "aliases": [
+        "close switcher"
+      ],
+      "steps": "Quick switcher. Controls available in the corresponding view or dialog include Close switcher.",
+      "source": "src/components/QuickSwitcher.tsx"
+    },
+    {
+      "id": "controls-instancefolders-instances-0",
+      "aliases": [
+        "save folder name",
+        "cancel rename",
+        "rename",
+        "ungroup",
+        "ungroup folder",
+        "close folder editor"
+      ],
+      "steps": "Instances. Controls available in the corresponding view or dialog include Save folder name, Cancel rename, Rename, Ungroup, Ungroup folder, Close folder editor.",
+      "source": "src/components/InstanceFolders.tsx"
+    },
+    {
+      "id": "controls-moddetaildrawer-instance-mod-details-0",
+      "aliases": [
+        "close mod details",
+        "view on modrinth"
+      ],
+      "steps": "Instance → Mod details. Controls available in the corresponding view or dialog include Close mod details, View on Modrinth.",
+      "source": "src/components/ModDetailDrawer.tsx"
+    },
+    {
+      "id": "controls-contenttoolbar-instance-content-toolbar-0",
+      "aliases": [
+        "sort and filter"
+      ],
+      "steps": "Instance → Content toolbar. Controls available in the corresponding view or dialog include Sort and filter.",
+      "source": "src/components/ContentToolbar.tsx"
+    },
+    {
+      "id": "controls-contenttransfer-instance-copy-to-instance-0",
+      "aliases": [
+        "close copy dialog"
+      ],
+      "steps": "Instance → Copy to instance. Controls available in the corresponding view or dialog include Close copy dialog.",
+      "source": "src/components/ContentTransfer.tsx"
+    },
+    {
+      "id": "controls-catalogfiltercontrols-instance-mods-catalog-filters-0",
+      "aliases": [
+        "retry filter choices"
+      ],
+      "steps": "Instance → Mods → Catalog filters. Controls available in the corresponding view or dialog include Retry filter choices.",
+      "source": "src/components/CatalogFilterControls.tsx"
+    },
+    {
+      "id": "controls-sidebarimagecrop-client-settings-general-adjust-crop-0",
+      "aliases": [
+        "reset"
+      ],
+      "steps": "Client settings → General → Adjust Crop. Controls available in the corresponding view or dialog include Reset.",
+      "source": "src/components/SidebarImageCrop.tsx"
+    },
+    {
+      "id": "controls-appearancepresets-client-settings-appearance-0",
+      "aliases": [
+        "appearance preset",
+        "cancel naming appearance",
+        "cancel removing preset"
+      ],
+      "steps": "Client settings → Appearance. Controls available in the corresponding view or dialog include Appearance preset, Cancel naming appearance, Cancel removing preset.",
+      "source": "src/components/AppearancePresets.tsx"
+    },
+    {
+      "id": "controls-shareinstancedialog-instance-share-instance-0",
+      "aliases": [
+        "try again",
+        "enable managed access",
+        "can view",
+        "can edit",
+        "remove access",
+        "invalidate invitation"
+      ],
+      "steps": "Instance → Share instance. Controls available in the corresponding view or dialog include Try again, Enable managed access, Can view, Can edit, Remove access, Invalidate invitation.",
+      "source": "src/components/ShareInstanceDialog.tsx"
+    },
+    {
+      "id": "controls-onboardingflow-microsoft-setup-0",
+      "aliases": [
+        "minimize delight client",
+        "maximize or restore delight client",
+        "close delight client",
+        "connect microsoft",
+        "continue to launcher",
+        "try again"
+      ],
+      "steps": "Microsoft setup. Controls available in the corresponding view or dialog include Minimize Delight Client, Maximize or restore Delight Client, Close Delight Client, Connect Microsoft, Continue to launcher, Try again.",
+      "source": "src/components/OnboardingFlow.tsx"
+    },
+    {
+      "id": "controls-floatinginstanceplayer-floating-play-controls-0",
+      "aliases": [
+        "put away floating controls"
+      ],
+      "steps": "Floating Play controls. Controls available in the corresponding view or dialog include Put away floating controls.",
+      "source": "src/components/FloatingInstancePlayer.tsx"
+    }
+  ]
+}

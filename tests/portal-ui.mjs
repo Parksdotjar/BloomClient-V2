@@ -55,7 +55,7 @@ await page.addInitScript(() => {
       if (command === 'plugin:event|listen') { listeners.set(args.event, [...(listeners.get(args.event) || []), args.handler]); return next++; }
       if (command === 'plugin:app|version') return '1.1.8';
       if (command === 'plugin:window|is_maximized') return false;
-      if (command === 'get_minecraft_releases') return [{ id: '26.3', type: 'release' }];
+      if (command === 'get_minecraft_releases') return [{ id: '26.3', type: 'release' },{ id:'1.21.4',type:'release' }];
       if (['list_instance_content', 'list_pack_channel_memberships', 'reconcile_cosmetics', 'list_cached_screenshots', 'detect_java_installations', 'list_instance_folders', 'list_managed_java_runtimes'].includes(command)) return [];
       return null;
     }
@@ -65,16 +65,19 @@ await mkdir('logs/portal', { recursive: true });
 const shot = name => page.screenshot({ path: `logs/portal/${name}.png`, fullPage: true });
 const nav = () => page.getByRole('navigation', { name: 'Main navigation' });
 const rows = () => page.locator('.portal-place');
-const openPortal = async () => { await nav().getByRole('button', { name: 'Portal', exact: true }).click(); await page.waitForSelector('.portal-place, .portal-empty'); };
+const openPortal = async () => { await nav().getByRole('button',{name:'Portal',exact:true}).click(); await page.waitForSelector('.portal-place, .portal-empty'); };
 const calls = command => page.evaluate(command => window.portalTest.calls.filter(call => call.command === command), command);
 try {
   await page.goto(url); await openPortal();
-  assert.equal(await nav().getByRole('button', { name: 'Settings', exact: true }).count(), 0);
+  const portalNav = page.getByRole('navigation',{name:'Portal destinations'});
+  assert.deepEqual(await portalNav.getByRole('button').allTextContents(), ['All','Servers','Worlds']);
+  assert.equal(await page.getByRole('button',{name:'Add server',exact:true}).evaluate(el=>getComputedStyle(el).backgroundImage),'none');
+  assert.equal(await nav().getByRole('button', { name: 'Settings', exact: true }).count(), 1);
   assert.equal(await rows().count(), 3); assert.equal(await page.locator('.portal-resume, .portal-place-grid').count(), 0); await shot('dark');
   assert.deepEqual(await page.locator('.portal-group-title').allTextContents(), ['Servers', 'Worlds']);
   await page.waitForFunction(() => { const image = document.querySelector('.portal-server-fallback'); return image?.complete && image.naturalWidth === 128; });
   assert.equal(await page.getByRole('region', { name: 'Servers', exact: true }).locator('.portal-place').count(), 1);
-  assert.equal(await page.getByRole('region', { name: 'Worlds', exact: true }).locator('.portal-place').count(), 2);
+  assert.equal(await page.locator('.portal-kind-group[aria-label="Worlds"]').locator('.portal-place').count(), 2);
   await page.getByRole('button', { name: 'Add server', exact: true }).hover();
   assert.notEqual(await page.getByRole('button', { name: 'Add server', exact: true }).evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
   const rowBounds = await rows().evaluateAll(elements => elements.map(element => { const rect = element.getBoundingClientRect(); return { x: rect.x, top: rect.top, bottom: rect.bottom, width: rect.width }; }));
@@ -83,35 +86,43 @@ try {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   assert.equal(await page.locator('.portal-star svg').first().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.getByRole('button', { name: 'Worlds', exact: true }).click(); assert.equal(await rows().count(), 2);
+  await page.getByRole('navigation',{name:'Portal destinations'}).getByRole('button', { name: 'Worlds', exact: true }).click(); assert.equal(await rows().count(), 2);
   assert.equal(await page.locator('.portal-group-title').count(), 0);
   await page.getByRole('button', { name: 'Servers', exact: true }).click(); assert.equal(await rows().count(), 1);
   await page.getByRole('button', { name: 'All', exact: true }).click();
   await page.getByRole('textbox', { name: 'Search Portal' }).fill('SMP'); assert.equal(await rows().count(), 1);
   await page.getByRole('button', { name: 'Clear Portal search' }).click();
-  await page.getByRole('button', { name: 'Filters', exact: true }).click();
-  await page.getByRole('button', { name: 'Filter by instance', exact: true }).click();
-  await page.locator('.select-menu-portal').getByRole('button', { name: 'SMP · 26.3', exact: true }).click();
+  await page.getByRole('button', { name: 'Filter', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Instance', exact: true }).click();
+  await page.getByRole('menu').getByRole('menuitemradio', { name: 'SMP · 26.3', exact: true }).click();
   assert.equal(await rows().count(), 1);
   assert.match(await rows().first().innerText(), /Friends/);
-  await page.getByRole('button', { name: 'Reset', exact: true }).click();
-  await page.getByRole('button', { name: 'Sort Portal', exact: true }).click();
-  await page.locator('.select-menu-portal').getByRole('button', { name: 'Name', exact: true }).click();
+  await page.getByRole('button',{name:'Filter',exact:true}).click(); await page.getByRole('menuitem', { name: 'Reset', exact: true }).click(); await page.getByRole('button',{name:'Filter',exact:true}).click();
+  await page.getByRole('menuitem', { name: 'Sort by', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Name', exact: true }).click();
+  await page.getByRole('button',{name:'Filter',exact:true}).click();
   assert.equal(await rows().first().getAttribute('data-place-id'), 'server');
-  assert.equal(await page.getByRole('region', { name: 'Worlds', exact: true }).locator('.portal-place').first().getAttribute('data-place-id'), 'future');
-  await page.getByRole('button', { name: 'Sort Portal', exact: true }).click();
-  await page.locator('.select-menu-portal').getByRole('button', { name: 'Recently played', exact: true }).click();
-  assert.equal(await page.getByRole('region', { name: 'Worlds', exact: true }).locator('.portal-place').first().getAttribute('data-place-id'), 'world');
+  assert.equal(await page.locator('.portal-kind-group[aria-label="Worlds"]').locator('.portal-place').first().getAttribute('data-place-id'), 'future');
+  await page.getByRole('menuitem', { name: 'Sort by', exact: true }).click();
+  await page.getByRole('menuitemradio', { name: 'Recently played', exact: true }).click();
+  assert.equal(await page.locator('.portal-kind-group[aria-label="Worlds"]').locator('.portal-place').first().getAttribute('data-place-id'), 'world');
   await page.keyboard.press('Escape');
-  assert.equal(await page.getByRole('button', { name: 'Filters', exact: true }).getAttribute('aria-expanded'), 'false');
+  assert.equal(await page.getByRole('button', { name: 'Filter', exact: true }).getAttribute('aria-expanded'), 'false');
   await rows().filter({ hasText: 'Friends' }).getByRole('button', { name: 'Options for Friends' }).click();
-  await rows().filter({ hasText: 'Friends' }).getByRole('button', { name: 'Copy address', exact: true }).click();
+  const copyAction = page.getByRole('menuitem', { name: 'Copy address', exact: true });
+  const iconGap = await copyAction.evaluate(el => {
+    const label = document.createRange();
+    label.selectNodeContents(el.lastChild);
+    return label.getBoundingClientRect().left - el.querySelector('svg').getBoundingClientRect().right;
+  });
+  assert.ok(iconGap > 0 && iconGap <= 14);
+  await copyAction.click();
   await page.getByRole('status').filter({ hasText: 'Address copied for Friends.' }).waitFor();
   assert.deepEqual((await calls('copy_text_to_clipboard')).at(-1).args, { text: 'play.example.com:25566' });
   await page.getByRole('button', { name: 'Dismiss Portal notification' }).click();
   await page.evaluate(() => window.portalTest.failCopy = true);
   await rows().filter({ hasText: 'Friends' }).getByRole('button', { name: 'Options for Friends' }).click();
-  await rows().filter({ hasText: 'Friends' }).getByRole('button', { name: 'Copy address', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Copy address', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'Clipboard is unavailable.' }).waitFor();
   assert.equal(await page.getByRole('status').filter({ hasText: 'Address copied' }).count(), 0);
   await page.evaluate(() => window.portalTest.failCopy = false);
@@ -139,10 +150,10 @@ try {
   await page.evaluate(() => window.portalTest.failSave = false); await dialog.getByRole('button', { name: 'Save server', exact: true }).click(); await dialog.waitFor({ state: 'hidden' });
   assert.deepEqual((await calls('change_portal')).at(-1).args.change, { action: 'addServer', instanceId: '1', name: 'New place', address: 'friends.example.com' });
   await rows().filter({ hasText: 'New place' }).getByRole('button', { name: 'Options for New place' }).click();
-  await rows().filter({ hasText: 'New place' }).getByRole('button', { name: 'Remove New place shortcut' }).click();
+  await page.getByRole('menuitem', { name: 'Remove New place shortcut' }).click();
   await page.getByRole('group', { name: 'Remove New place shortcut' }).getByRole('button', { name: 'Keep' }).click(); assert.equal(await rows().count(), 4);
   await rows().filter({ hasText: 'New place' }).getByRole('button', { name: 'Options for New place' }).click();
-  await rows().filter({ hasText: 'New place' }).getByRole('button', { name: 'Remove New place shortcut' }).click();
+  await page.getByRole('menuitem', { name: 'Remove New place shortcut' }).click();
   await page.getByRole('group', { name: 'Remove New place shortcut' }).getByRole('button', { name: 'Remove', exact: true }).click(); await page.waitForFunction(() => document.querySelectorAll('.portal-place').length === 3);
   // An older read must not roll back a saved favorite.
   await page.evaluate(() => { window.portalTest.delayRead = true; window.dispatchEvent(new Event('focus')); });
@@ -161,9 +172,9 @@ try {
   assert.equal((await calls('launch_minecraft')).at(-1).args.instanceId, '0');
   await page.reload(); await page.waitForSelector('.portal-place');
   // Account settings remains accessible, including compact and signed-out accounts.
-  await page.locator('.profile-trigger').click(); await page.getByRole('menuitem', { name: 'Client settings', exact: true }).click(); await page.waitForSelector('.settings-layout');
+  await page.locator('.rail-account-trigger').click(); await page.getByRole('menuitem', { name: 'Account settings', exact: true }).click(); await page.waitForSelector('.settings-layout');
   await openPortal(); await rows().filter({ hasText: 'Survival World' }).getByRole('button', { name: 'Options for Survival World' }).click();
-  await rows().filter({ hasText: 'Survival World' }).getByRole('button', { name: 'Open instance', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Open instance', exact: true }).click();
   await page.waitForSelector('.instance-hero-panel'); assert.equal(await page.locator('.instance-hero-panel').getByRole('tab', { name: 'Mods', exact: true }).count(), 1);
   await page.locator('.instance-play').click(); assert.equal('portalTarget' in (await calls('launch_minecraft')).at(-1).args, false);
   await page.evaluate(() => { localStorage.setItem('portal-test-prefs', JSON.stringify({ theme: 'light', animations: false })); localStorage.setItem('bloom-last-page', 'portal'); });
@@ -173,8 +184,8 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.equal(await page.locator('#portal-add-panel').evaluate(element => getComputedStyle(element).transitionDuration), '0s');
   await page.getByRole('button', { name: 'Back to list', exact: true }).click();
-  await page.evaluate(() => localStorage.setItem('portal-test-signed-out', 'true')); await page.reload(); await page.waitForSelector('.signin-button');
-  await page.locator('.signin-button').click(); const signedOutSettings = page.getByRole('menuitem', { name: 'Client settings', exact: true }); await signedOutSettings.click(); await page.waitForSelector('.settings-layout');
+  await page.evaluate(() => localStorage.setItem('portal-test-signed-out', 'true')); await page.reload(); await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Sign in',exact:true}).click(); const signedOutSettings = page.getByRole('menuitem', { name: 'Client settings', exact: true }); await signedOutSettings.click(); await page.waitForSelector('.settings-layout');
   await openPortal(); await page.evaluate(() => window.portalTest.failRead = true); await page.getByRole('button', { name: 'Refresh Portal' }).click(); await page.getByRole('alert').waitFor();
   await page.evaluate(() => window.portalTest.failRead = false); await page.getByRole('button', { name: 'Retry', exact: true }).click(); await page.getByRole('alert').waitFor({ state: 'hidden' });
   await page.evaluate(() => { window.portalTest.entries = []; window.portalTest.emit('portal-changed', null); }); await page.getByRole('heading', { name: 'Nothing here yet' }).waitFor(); await shot('empty');
@@ -187,6 +198,7 @@ try {
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await page.waitForSelector('.portal-place');
   assert.equal(await rows().count(), 3);
+  assert.equal(await page.getByRole('button', { name: 'Local servers', exact: true }).count(), 0);
   assert.deepEqual(errors, []);
-  console.log('Portal UI passed: simple server-list rows, instance filters, sorting, clipboard success/failure, initial-read recovery, navigation, persistence, attached add form, instance picker, save errors, delete confirmation, stale reads, correct direct launch payloads, busy guard, normal Play preservation, signed-out Settings, compact Light layout and empty/retry states.');
+  console.log('Portal UI passed: simple server-list rows, instance filters, sorting, clipboard success/failure, initial-read recovery, navigation, persistence, dedicated add form, instance picker, save errors, delete confirmation, stale reads, correct direct launch payloads, busy guard, normal Play preservation, signed-out Settings, compact Light layout and empty/retry states.');
 } catch (error) { console.log('Browser errors:', errors); await shot('failure'); throw error; } finally { await browser.close(); }

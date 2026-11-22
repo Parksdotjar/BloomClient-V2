@@ -42,7 +42,7 @@ export function FabricLoaderSetting({ instanceId, minecraftVersion, currentVersi
   };
   const options = [...new Set([...(selected ? [selected] : []), ...versions.map(loader => loader.version)])];
   return <div className="instance-preference-row instance-fabric-loader">
-    <div className="instance-preference-label">Fabric Loader<InfoTip label="Fabric Loader version">Choose the loader used on the next launch, then save changes. This changes Fabric Loader, not Minecraft or Fabric API. Your mods may require a particular loader version.</InfoTip></div>
+    <div className="instance-preference-label">Fabric Loader</div>
     <div className="fabric-loader-control">
       <Select ariaLabel="Fabric Loader version" value={selected ? label(selected) : loading ? "Loading versions…" : "Automatic"}
         options={options.map(label)} disabled={disabled || loading || Boolean(error) || !versions.length}
@@ -51,5 +51,6 @@ export function FabricLoaderSetting({ instanceId, minecraftVersion, currentVersi
       {error && <div className="fabric-loader-error" role="alert"><span>{error}</span><button type="button" disabled={disabled} onClick={() => setAttempt(value => value + 1)}>Retry</button></div>}
       {busy && <span className="fabric-loader-note">Available when Minecraft and downloads have stopped.</span>}
     </div>
+    <InfoTip label="Fabric Loader version">Choose the loader used on the next launch, then save changes. This changes Fabric Loader, not Minecraft or Fabric API. Your mods may require a particular loader version.</InfoTip>
   </div>;
 }

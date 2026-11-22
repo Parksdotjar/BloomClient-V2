@@ -19,8 +19,3 @@
     0 28px 38px -24px var(--theme-shadow, #000b);
 }
 .app-shell .instance-workspace .instance-icon-picker { background: var(--depth-surface); }
-.app-shell[data-custom-background="on"] .instance-workspace .instance-hero-main {
-  background: linear-gradient(160deg,
-    color-mix(in srgb, var(--depth-face-top) var(--custom-surface-opacity), transparent) 20%,
-    color-mix(in srgb, var(--depth-face-bottom) var(--custom-surface-opacity), transparent)) !important;
-}
