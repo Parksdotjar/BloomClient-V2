@@ -470,6 +470,7 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
   const [groupDrawer, setGroupDrawer] = useState<"create" | "members" | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   useDismissPopup(accountMenuOpen, ".social-account", () => setAccountMenuOpen(false));
   const [query, setQuery] = useState("");
@@ -534,18 +535,30 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
       if (requestNumber === loadSequence.current) setLoading(false);
       return true;
     } catch (error) {
-      if (!quiet) onNotify(String(error), "error");
+      if (requestNumber !== loadSequence.current || mutationInFlight.current > 0 || versionAtStart !== mutationVersion.current) return false;
+      const message = String(error);
+      if (message === "Your Delight Social sign-in expired. Sign in again.") {
+        setSession(emptySession);
+        setSnapshot(emptySnapshot);
+        setLoading(false);
+        onNotify(message, "error");
+        return true;
+      }
+      if (!quiet) onNotify(message, "error");
       return false;
     }
   };
   const hydrate = async (replace = false) => {
     const hydration = ++hydrationSequence.current;
-    let attempts = 0;
-    while (hydration === hydrationSequence.current) {
-      if (await load(attempts > 0, replace)) return true;
-      attempts += 1;
-      const delay = Math.min(30_000, 2_000 * (2 ** Math.min(attempts - 1, 4)));
-      await new Promise(resolve => window.setTimeout(resolve, delay));
+    setLoadFailed(false);
+    for (let attempt = 0; attempt < 3 && hydration === hydrationSequence.current; attempt += 1) {
+      if (attempt > 0) await new Promise(resolve => window.setTimeout(resolve, 2_000 * attempt));
+      if (hydration !== hydrationSequence.current) return false;
+      if (await load(attempt > 0, replace)) return true;
+    }
+    if (hydration === hydrationSequence.current) {
+      setLoadFailed(true);
+      setLoading(false);
     }
     return false;
   };
@@ -740,6 +753,10 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
     finally { setBusy(false); setLoading(false); }
   };
   if (loading) return <div className="social-loading"><RefreshCw className="spin" size={22} /> Loading Social…</div>;
+  if (loadFailed) return <div className="social-loading">
+    <span>Couldn’t load Social.</span>
+    <button type="button" onClick={() => { setLoading(true); void hydrate(true); }}>Try again</button>
+  </div>;
   if (!session.signedIn) return <SignInView busy={busy} onSignIn={() => void beginSignIn()} />;
   if (session.needsUsername) return <UsernameSetup busy={busy} onSave={username => { setBusy(true); void invoke<SocialUser>("social_set_username", { username }).then(() => { setLoading(true); window.dispatchEvent(new Event(socialDirectoryChanged)); onNotify("Delight account username saved."); return hydrate(true); }).catch(error => { setLoading(false); onNotify(String(error), "error"); }).finally(() => setBusy(false)); }} />;
   if (!session.user) return <SignInView busy={busy} onSignIn={() => void beginSignIn()} />;

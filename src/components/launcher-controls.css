@@ -119,7 +119,7 @@
 .picker-choices { min-height: 0; overflow: auto; }
 .picker-choices button { display: flex; align-items: center; gap: 11px; width: 100%; padding: 7px; min-height: 48px; text-align: left; background: transparent; border: 0; border-radius: 5px; color: var(--text); }
 .picker-choices :is([aria-pressed="true"],button:hover,button:focus-visible) { background: var(--launcher-menu-hover); }
-.picker-choices img { width: 34px; height: 34px; border-radius: 5px; object-fit: cover; }
+.picker-choices img { flex: none; width: 34px; height: 34px; border-radius: 5px; object-fit: cover; }
 .picker-choices span { display: grid; min-width: 0; }
 .picker-choices b { font-size: 15px; overflow-wrap: anywhere; }
 .picker-choices small,.picker-choices p { color: var(--muted); font-size: 13px; }

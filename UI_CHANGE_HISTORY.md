@@ -1,5 +1,18 @@
 ## November 7, 2026 — Optional sound and mechanical toggle feedback
 
+## November 22, 2026 — Launcher wallpaper and frost
+
+Parks requested frost on prominent Add and Filter controls and a compact replacement for the full-size black empty-list panel. Instance lists now show a short message with contextual text actions. Only the compact message area receives a tint when wallpaper is active.
+
+Parks approved the overall frosted look and flagged a darker patch beneath the wing and an exposed corner. The title strip and slim rail now share a single frost layer that follows the workspace curve. Hovering the wing keeps its surface steady.
+
+Parks requested a dedicated Background tab alongside Appearance. It uses the same hex picker, selectors, sliders and help controls. A local image can span the rail, navigation panel and workspace. Tint and blur can be adjusted independently for sidebars and controls. Switching to solid color retains the image, and removing the wallpaper leaves right-sidebar artwork intact.
+
+## November 22, 2026 — Rectangular source images in icon slots
+
+The SMP instance on Home showed a wide strip inside its square button. Parks requested rounded-square artwork wherever the launcher displays these icons. Home and Portal now center-crop the image to fill the slot. Instance picker rows reserve the icon’s full width even with long names.
+
+
 ## Delight branding — November 17, 2026
 
 Parks requested the Delight name and supplied wing logo for the client and every Bloom-named companion project. Use Delight Client, Delight Cosmetics, Delight Benchmark, Delight Admin, Delight Animation Creator, Delight Books and Delight Servers in visible copy and native product metadata. Preserve existing layouts and theme behavior. This approves the name and source artwork, not a redesigned interface.

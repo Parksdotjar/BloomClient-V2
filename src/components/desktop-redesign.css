@@ -2,6 +2,7 @@
 .app-shell.desktop-redesign {
   --desktop-rail-width: 52px;
   --desktop-title-height: 36px;
+  --desktop-inner-radius: 12px;
   --desktop-context-width: clamp(166px, 15vw, 228px);
   --app-sidebar-width: calc(var(--desktop-rail-width) + var(--desktop-context-width));
   --desktop-line: color-mix(in srgb, var(--text) var(--divider-strength, 13%), transparent);
@@ -320,7 +321,9 @@
   height: 100%;
   overscroll-behavior-y: contain;
   max-height: none;
-  mask-image: linear-gradient(to bottom, black calc(100% - var(--list-bottom-fade, 0px)), transparent 100%);
+}
+.desktop-redesign .instance-workspace .content-list[data-fade-bottom] {
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--list-bottom-fade)), transparent 100%);
 }
 .desktop-redesign .content-toolbar .manager-tools { margin-left: auto; }
 .desktop-redesign .instance-content-list-shell .content-icon { width: 42px; height: 42px; border-radius: 7px; }
@@ -525,7 +528,7 @@
 .desktop-redesign > main:is([data-desktop-page="home"], [data-desktop-page="downloads"]) { padding: 6px var(--desktop-gutter) 28px; }
 .desktop-redesign .content-toolbar .content-search,
 .desktop-redesign .content-toolbar .content-search:focus-within {
-  background: color-mix(in srgb, var(--text) 4%, var(--page)) !important;
+  background: var(--wallpaper-control, color-mix(in srgb, var(--text) 4%, var(--page))) !important;
   border-color: var(--desktop-line); color: var(--text); box-shadow: none;
 }
 .desktop-redesign .content-toolbar .content-search:focus-within { outline: 1px solid var(--muted); }
@@ -536,7 +539,7 @@
 .desktop-redesign .content-toolbar .catalog-close {
   border: 1px dashed #d45454 !important;
 }
-.desktop-redesign .content-toolbar .content-toolbar-action {
+.desktop-redesign:where(:not([data-wallpaper])) .content-toolbar .content-toolbar-action {
   background: transparent !important; color: var(--text); box-shadow: none !important;
 }
 .desktop-redesign .instance-manager:not(.settings-manager)::after { content: none; }
@@ -652,7 +655,7 @@
 .desktop-frame-controls { grid-auto-flow: column; }
 .desktop-frame-control { width: 44px; }
 .desktop-frame-control svg { width: 15px; height: 15px; stroke-width: 1.6; }
-.desktop-titlebar button:is(:hover, :focus-visible) { background: var(--desktop-selection); }
+.desktop-titlebar button:where(:not(.desktop-title-brand)):is(:hover, :focus-visible) { background: var(--desktop-selection); }
 .desktop-titlebar button:focus-visible { outline: 1px solid currentColor; outline-offset: -3px; }
 .desktop-titlebar .frame-close:hover { background: var(--theme-danger-ink, #bd303c); color: var(--theme-on-danger, white); }
 .app-shell.desktop-redesign > .desktop-rail {
@@ -724,7 +727,7 @@
 .app-shell.desktop-redesign > .desktop-context,
 .app-shell.desktop-redesign:is([data-wide-workspace], [data-desktop-context-collapsed="true"]) > .content {
   border-left: 1px solid var(--desktop-line);
-  border-top-left-radius: 12px;
+  border-top-left-radius: var(--desktop-inner-radius);
 }
 .app-shell.desktop-redesign > .desktop-context {
   padding: 16px 12px 10px;
@@ -857,8 +860,8 @@
 .catalog-manager .page-navigation { justify-content: flex-end; }
 .desktop-redesign .home-launch { display: grid; place-items: center; min-height: max(365px, 75dvh); margin: 0; max-width: none; }
 .home-launch-stack { display: grid; justify-items: center; gap: 12px; width: min(100%, 640px); padding: 25px 0; text-align: center; }
-.desktop-redesign .home-instance-art { width: clamp(112px, 16vh, 160px); aspect-ratio: 1; display: grid; padding: 0; border: 0; border-radius: 12%; overflow: hidden; background: transparent; box-shadow: none; }
-.home-instance-art img { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
+.desktop-redesign .home-instance-art { position: relative; width: clamp(112px, 16vh, 160px); aspect-ratio: 1; padding: 0; border: 0; border-radius: 12%; overflow: hidden; background: transparent; box-shadow: none; }
+.home-instance-art img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .home-launch-stack h1 { font-size: clamp(29px,3vw,44px); line-height: 1.12; margin: 4px 0 0; overflow-wrap: anywhere; }
 .home-launch-stack p { margin: 0 0 12px; color: var(--muted); font-size: 18px; }
 .desktop-redesign .home-launch-stack .pixel-play { width: min(420px,90%); height: 64px; }

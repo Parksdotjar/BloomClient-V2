@@ -23,8 +23,6 @@
   .library-play,
   .floating-player-play.instance-play,
   .catalog-install:where(:not(.catalog-result-add)),
-  .content-empty-primary,
-  .content-empty button,
   .import-pack-action,
   .modrinth-version-import,
   .mod-detail-footer > button,

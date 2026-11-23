@@ -1,5 +1,7 @@
 # Delight Client Approved Design Patterns
 
+Parks approved the overall wallpaper and frosted-sidebar treatment on November 22, 2026. He requested a separate correction to the wing hover and the junction of the rail and title strip.
+
 ## Account menu and ceramic controls — requested November 18, 2026
 
 Parks rejected the enclosing account-menu outline and requested a distinct borderless menu. The revision uses an opaque shaded panel, diffuse shadow, readable action rows and an inset dark ceramic Log out control, preserving the approved moving-dock/stationary-drawer interaction and current Undo countdown. This new composition has not yet received visual approval.
