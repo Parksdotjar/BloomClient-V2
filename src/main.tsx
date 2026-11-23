@@ -21,7 +21,7 @@ import type { PortalEntry, PortalLibrary, PortalTarget } from "./services/portal
 import { CrashDetails, crashSummary } from "./components/CrashDetails";
 import { destinations as alulaDestinations, type Context as AlulaContext } from "./services/ask-delight";
 import { AskDelight } from "./components/AskDelight";
-import { CustomImageSidebar, DownloadQueueSidebar, FriendsSidebar, SidebarImageSettings, useSidebarImage } from "./components/WorkspaceSidebar";
+import { CustomImageSidebar, DownloadQueueSidebar, FriendsSidebar, SidebarImageSettings, useLauncherImage } from "./components/WorkspaceSidebar";
 import { version as bundledVersion } from "../package.json";
 import { QuickSwitcher, type SwitchTarget } from "./components/QuickSwitcher";
 import { FilterMenu, FilterReset, FilterSection } from "./components/FilterMenu";
@@ -68,7 +68,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CirclePlus,
   Clipboard,
   Keyboard,
   Cpu,
@@ -144,6 +143,8 @@ import "./components/launcher-controls.css";
 import "./components/instance-creation.css";
 import "./components/desktop-surfaces.css";
 import "./components/utility-workspace.css";
+import "./components/wallpaper.css";
+import { backgroundDefaults, readBackground, type BackgroundSettings } from "./services/background-settings";
 
 type Theme = "oled" | "light" | "system";
 
@@ -207,6 +208,7 @@ export type SettingsState = AccentPreferences & {
   launchMethod: "Standard window" | "Fullscreen";
   homeLayout: HomeLayout;
   shortcuts: Bindings;
+  backdrop: BackgroundSettings;
   redesignAppearanceV1?: boolean;
   rightSidebar: SidebarChoice;
   doubleClickToPlay: boolean;
@@ -215,6 +217,7 @@ export type SettingsState = AccentPreferences & {
   gameDirectory: string;
 };
 const defaults: SettingsState = {
+  backdrop: backgroundDefaults,
   customAccent: false, lastCustomAccent: "",
   oledSidebar: "", lightSidebar: "", oledPanel: "", lightPanel: "", dividerStrength: 13,
   theme: "oled",
@@ -264,7 +267,7 @@ function settingsLabel(label: string) {
   return label === "My Profile" ? "Accounts" : label === "Cache" ? "Storage" : label;
 }
 const settingTabs = [
-  [SettingsIcon, "General"], [Palette, "Appearance"], [Cuboid, "Minecraft"], [Download, "Downloads"],
+  [SettingsIcon, "General"], [Palette, "Appearance"], [ImagePlus, "Background"], [Cuboid, "Minecraft"], [Download, "Downloads"],
   [Database, "Cache"], [UserRound, "My Profile"], [Keyboard, "Shortcuts"],
   [SlidersHorizontal, "Performance"], [Shirt, "Cosmetics"], [Rocket, "Launcher"],
   [Shield, "Privacy"], [RefreshCw, "Updates"], [TerminalSquare, "Advanced"],
@@ -272,7 +275,7 @@ const settingTabs = [
 
 const settingsGroups = [
   { title: "Profile", sections: ["My Profile"] },
-  { title: "Launcher", sections: ["General", "Appearance", "Shortcuts"] },
+  { title: "Launcher", sections: ["General", "Appearance", "Background", "Shortcuts"] },
   { title: "Game", sections: ["Minecraft", "Launcher", "Performance", "Cosmetics"] },
   { title: "System", sections: ["Downloads", "Cache", "Privacy", "Updates", "Advanced"] },
 ] satisfies { title: string; sections: (typeof settingTabs[number][1])[] }[];
@@ -306,11 +309,11 @@ export function Toggle({
 function FillCheckbox({ value, onChange, label }: { value: boolean; onChange: (value: boolean) => void; label: string }) {
   return <button className={`fill-checkbox ${value ? "checked" : ""}`} onClick={() => onChange(!value)} aria-pressed={value} aria-label={label}><span /></button>;
 }
-function PercentSlider({ value, onChange, label, min = 0, max = 100, step = 1, unit = "%" }: { value: number; onChange: (value: number) => void; label: string; min?: number; max?: number; step?: number; unit?: string }) {
+function PercentSlider({ value, onChange, label, min = 0, max = 100, step = 1, unit = "%", disabled = false }: { value: number; onChange: (value: number) => void; label: string; min?: number; max?: number; step?: number; unit?: string; disabled?: boolean }) {
   const safeValue = Math.max(min, Math.min(max, value));
   const fill = max === min ? 100 : ((safeValue - min) / (max - min)) * 100;
   return <div className="setting-percent-slider" style={{ "--setting-range-fill": `${fill}%` } as CSSProperties}>
-    <input type="range" min={min} max={max} step={step} value={safeValue} aria-label={label} aria-valuetext={`${safeValue}${unit}`} onChange={event => onChange(Number(event.target.value))} />
+    <input type="range" min={min} max={max} step={step} disabled={disabled} value={safeValue} aria-label={label} aria-valuetext={`${safeValue}${unit}`} onChange={event => onChange(Number(event.target.value))} />
     <output>{safeValue}{unit}</output>
   </div>;
 }
@@ -797,6 +800,7 @@ function SettingsPage({
   profileIcon,
   onProfileIconChange,
   sidebarImage,
+  wallpaper,
   initialTab,
   query,
   onNavigate,
@@ -820,7 +824,8 @@ function SettingsPage({
   profile: MinecraftProfile | null;
   profileIcon: string | null;
   onProfileIconChange: (icon: string) => void;
-  sidebarImage: ReturnType<typeof useSidebarImage>;
+  sidebarImage: ReturnType<typeof useLauncherImage>;
+  wallpaper: ReturnType<typeof useLauncherImage>;
   initialTab?: string;
   query: string;
   onNavigate: (section: string) => void;
@@ -841,6 +846,13 @@ function SettingsPage({
     key: K,
     value: SettingsState[K],
   ) => setSettings({ ...settings, [key]: value });
+  const backdrop = settings.backdrop;
+  const changeBackdrop = (patch: Partial<BackgroundSettings>) =>
+    setSettings(current => ({ ...current, backdrop: { ...current.backdrop, ...patch } }));
+  const saveWallpaper = async (file: File | null) => {
+    if (await wallpaper.save(file)) changeBackdrop({ source: file ? "Image" : "Solid color" });
+  };
+  const canvasKey = paletteKey(resolvedTheme, "Background");
   const selectedAccent = settings.customAccent ? "Custom" : accentPresets.find(preset => preset.color === settings.accent)?.name ?? "Custom";
   const activeTab = initialTab || "Appearance";
   const [aboutMessage, setAboutMessage] = useState("");
@@ -1023,6 +1035,56 @@ function SettingsPage({
                 </div>
               </SettingsRow>
               </details>
+            </div>
+          </div>
+          <div className="settings-section" {...section("Background")}>
+            <SettingsHeading title="Background" description="Choose a local wallpaper and adjust how much shows through the launcher." />
+            <div className="settings-card appearance-options">
+              <h3 className="appearance-group-heading">Workspace</h3>
+              <SettingsRow title="Background source" description="Switch to a solid color or use a saved image. Switching to solid keeps your image for later.">
+                <Select ariaLabel="Background source" value={backdrop.source} options={["Solid color", "Image"]} disabled={!!wallpaper.operation}
+                  onChange={value => changeBackdrop({ source: value as BackgroundSettings["source"] })} />
+              </SettingsRow>
+              <SettingsRow title="Canvas color" description="The workspace color in this theme. It also tints the wallpaper.">
+                <CustomAccentPicker label="Canvas color" value={settings[canvasKey] || defaultColors[resolvedTheme].Background} onApply={value => update(canvasKey, value)} />
+              </SettingsRow>
+              <SettingsRow title="Wallpaper" description="Choose a local PNG, JPEG, or WebP up to 32 MB. Delight saves a copy on this device.">
+                <div className="wallpaper-file-actions">
+                  <input ref={wallpaper.input} type="file" accept="image/png,image/jpeg,image/webp" hidden aria-label="Wallpaper file"
+                    onChange={event => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = "";
+                      if (file) void saveWallpaper(file);
+                    }} />
+                  {wallpaper.source && <img src={wallpaper.source} alt="Current wallpaper" />}
+                  <button className="settings-action" disabled={wallpaper.image === undefined || !!wallpaper.operation} onClick={wallpaper.choose}>
+                    {wallpaper.operation === "saving" ? "Saving…" : wallpaper.image ? "Change image" : "Choose image"}
+                  </button>
+                  {wallpaper.image && <button className="settings-action" disabled={!!wallpaper.operation} onClick={() => void saveWallpaper(null)}>Remove</button>}
+                </div>
+              </SettingsRow>
+              {wallpaper.error && <p role="alert">{wallpaper.error}</p>}
+              {backdrop.source === "Image" && wallpaper.image && <>
+                <SettingsRow title="Image fit" description="Fill crops the edges. Fit shows the entire image against the canvas color.">
+                  <Select ariaLabel="Image fit" value={backdrop.fit} options={["Fill", "Fit"]} onChange={value => changeBackdrop({ fit: value as BackgroundSettings["fit"] })} />
+                </SettingsRow>
+                <SettingsRow title="Image opacity" description="Adjust how strongly the photograph shows through the canvas color.">
+                  <PercentSlider label="Image opacity" value={backdrop.opacity} onChange={opacity => changeBackdrop({ opacity })} />
+                </SettingsRow>
+                <h3 className="appearance-group-heading">Surfaces</h3>
+                <SettingsRow title="Sidebar opacity" description="Adjust the tint on the icon rail, title bar and navigation panels.">
+                  <PercentSlider label="Sidebar opacity" value={backdrop.sidebar} onChange={sidebar => changeBackdrop({ sidebar })} />
+                </SettingsRow>
+                <SettingsRow title="Element opacity" description="Adjust the fill on fields, list rows and neutral controls.">
+                  <PercentSlider label="Element opacity" value={backdrop.elements} onChange={elements => changeBackdrop({ elements })} />
+                </SettingsRow>
+                <SettingsRow title="Sidebar blur" description="Frost both navigation rails and the title bar. Set to zero for clear glass. Ultra Performance disables blur.">
+                  <PercentSlider label="Sidebar blur" disabled={settings.ultraPerformance} max={40} unit=" px" value={backdrop.blur} onChange={blur => changeBackdrop({ blur })} />
+                </SettingsRow>
+                <SettingsRow title="Element blur" description="Frost fields and neutral controls independently of the sidebar. Ultra Performance disables blur.">
+                  <PercentSlider label="Element blur" disabled={settings.ultraPerformance} max={40} unit=" px" value={backdrop.elementBlur} onChange={elementBlur => changeBackdrop({ elementBlur })} />
+                </SettingsRow>
+              </>}
             </div>
           </div>
           <div className="settings-section" data-ask-target="memory" {...section("Performance")}>
@@ -1787,11 +1849,9 @@ function InstanceContentActions({
   </>;
 }
 
-function ContentEmptyState({ title, description, actions }: { title: string; description: string; actions?: ReactNode }) {
-  return <div className="content-empty" role="status">
-    <PackageOpen className="content-empty-icon" size={40} strokeWidth={1.5} aria-hidden="true" />
-    <h3>{title}</h3>
-    <p>{description}</p>
+function ContentEmptyState({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
+  return <div className="content-empty">
+    <div role="status"><p>{title}</p>{description && <p>{description}</p>}</div>
     {actions && <div className="content-empty-actions">{actions}</div>}
   </div>;
 }
@@ -1814,9 +1874,9 @@ function InstanceWorlds({ instanceId, busy, onPlay }: {
   }, [instanceId, attempt]);
 
   if (failure) return <ContentEmptyState title="Could not load worlds" description={failure}
-    actions={<button className="content-empty-secondary" onClick={() => setAttempt(value => value + 1)}>Retry</button>} />;
+    actions={<button onClick={() => setAttempt(value => value + 1)}>Try again</button>} />;
   if (!worlds) return <CatalogLoadingState label="Loading worlds" />;
-  if (!worlds.length) return <ContentEmptyState title="No saved worlds" description="Create a world in Minecraft and it will appear here." />;
+  if (!worlds.length) return <ContentEmptyState title="No saved worlds yet." />;
   return <ul className="desktop-worlds" aria-label="Saved worlds">
     {worlds.map(world => <li className="instance-list-row" key={world.id}>
       <span className="content-icon"><CatalogArtwork source={world.icon} fallback={<Cuboid size={22} />} /></span>
@@ -1832,6 +1892,7 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
   const [worldsOpen, setWorldsOpen] = useState(false);
   const [items, setItems] = useState<InstanceContentItem[]>(() => initialTab === "settings" ? [] : instanceContentMemoryCache.get(instanceContentCacheKey(instance.id, initialTab)) || []);
   const [contentReady, setContentReady] = useState(() => initialTab === "settings" || instanceContentMemoryCache.has(instanceContentCacheKey(instance.id, initialTab)));
+  const [contentError, setContentError] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("Name");
   const [filter, setFilter] = useState("All");
@@ -1893,6 +1954,7 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
     const category = tab;
     const key = instanceContentCacheKey(instance.id, category);
     const cached = instanceContentMemoryCache.get(key);
+    setContentError("");
     if (cached) {
       setItems(cached);
       setContentReady(true);
@@ -1904,7 +1966,15 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
       const next = await invoke<InstanceContentItem[]>("list_instance_content", { instanceId: instance.id, category });
       instanceContentMemoryCache.set(key, next);
       if (request === contentLoadSequence.current) { setItems(next); setContentReady(true); }
-    } catch (error) { if (request === contentLoadSequence.current) { setContentReady(true); onMessage(String(error), "error"); } }
+    } catch (error) {
+      if (request !== contentLoadSequence.current) return;
+      setContentReady(true);
+      if (cached?.length) onMessage(String(error), "error");
+      else {
+        setItems([]);
+        setContentError(String(error));
+      }
+    }
   };
   useEffect(() => { void loadContent(); const focus = () => { if (!document.hidden) void loadContent(); }; window.addEventListener("focus", focus); return () => window.removeEventListener("focus", focus); }, [tab, instance.id]);
   useEffect(() => {
@@ -2056,6 +2126,7 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
   const catalogPages = Math.max(1, Math.ceil(catalog.total / Math.max(1, catalog.limit)));
   const updateListFade = (node: HTMLDivElement) => {
     const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+    node.toggleAttribute("data-fade-bottom", remaining > 1);
     node.style.setProperty("--list-bottom-fade", (remaining <= 1 ? 0 : Math.min(28, remaining)) + "px");
   };
   const revealMoreContent = (node: HTMLDivElement) => {
@@ -2098,6 +2169,11 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
     setSearch(""); setContentPage(1); setBrowsingCatalog(true);
   };
   const closeCatalog = () => { setBrowsingCatalog(false); setSearch(""); setContentPage(1);  void loadContent(); };
+  const resetCatalogFilters = () => {
+    setCatalogFilters(defaultCatalogFilters());
+    setCatalogVersion(instance.version);
+    setContentPage(1);
+  };
   const updateContentSearch = (value: string) => {
     setSearch(value);
     setContentPage(1);
@@ -2199,7 +2275,7 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
           catalogFiltered={catalogFiltered}
           catalogControls={tab === "mods" ? <CatalogFilterControls value={catalogFilters} version={catalogVersion} instanceVersion={instance.version} changed={catalogFiltered}
             onChange={value => { setCatalogFilters(value); setContentPage(1); }} onVersion={value => { setCatalogVersion(value); setContentPage(1); }}
-            onReset={() => { setCatalogFilters(defaultCatalogFilters()); setCatalogVersion(instance.version); setContentPage(1); }} /> : undefined}
+            onReset={resetCatalogFilters} /> : undefined}
           searchField={<div
             className={`content-search ${search ? "has-query" : ""}`}
             role="search"
@@ -2220,17 +2296,22 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
         <div className="instance-content-list-shell">
           <div ref={contentListRef} className="content-list" onScroll={event => revealMoreContent(event.currentTarget)}>
           {browsingCatalog ? (
-            catalogLoading ? <CatalogLoadingState label={search ? "Searching Modrinth" : `Loading featured ${categoryLabel.toLowerCase()}`} /> : catalogError ? <ContentEmptyState title="Could not load results" description={catalogError} actions={<button className="content-empty-primary" onClick={() => setCatalogRetry(value => value + 1)}>Retry search</button>} /> : catalog.items.length ? renderedCatalogItems.map(item => {
+            catalogLoading ? <CatalogLoadingState label={search ? "Searching Modrinth" : `Loading featured ${categoryLabel.toLowerCase()}`} /> : catalogError ? <ContentEmptyState title="Couldn’t load Modrinth results." description={catalogError} actions={<button onClick={() => setCatalogRetry(value => value + 1)}>Try again</button>} /> : catalog.items.length ? renderedCatalogItems.map(item => {
               const installed = catalogItemInstalled(item);
               const pending = pendingCatalogItems.has(catalogKey(item));
               const restriction = tab === "mods" ? catalogInstallRestriction(item, instance) : undefined;
               return <CatalogFeedRow key={item.projectId} title={item.title} icon={item.iconUrl} fallback={tab === "mods" ? <Puzzle size={22}/> : tab === "resourcepacks" ? <PackageOpen size={22}/> : <Cuboid size={22}/>} subtitle={`${item.versionNumber} • by ${item.author}`} loader={item.loader} detail={formatBytes(item.fileSize)} installed={installed} pending={pending} restriction={restriction} detailLabel={tab === "mods" ? undefined : `View ${item.title} on Modrinth`} openDetails={() => tab === "mods" ? showCatalogModDetails(item) : openCatalogProject(item)} openProject={() => openCatalogProject(item)} install={() => void queueCatalogInstall(item)}/>;
             }) : <ContentEmptyState
-              title={search ? `No matching ${categoryLabel.toLowerCase()}` : `No compatible ${categoryLabel.toLowerCase()} found`}
-              description={tab === "mods" && catalogFiltered ? "No results match these filters. Try another category, environment, loader or Minecraft version." : search ? `Nothing matching “${search}” supports Minecraft ${instance.version}.` : `Modrinth has no compatible results for Minecraft ${instance.version}.`}
-              actions={search ? <button className="content-empty-primary" onClick={() => updateContentSearch("")}><CloseIcon size={16} />Clear search</button> : undefined}
+              title={search ? `No ${categoryLabel.toLowerCase()} match “${search}”.` : activeCatalogFilters ? "No mods match these filters." : `No ${categoryLabel.toLowerCase()} for Minecraft ${catalogGameVersion}.`}
+              actions={(search || activeCatalogFilters) && <>
+                {search && <button onClick={() => updateContentSearch("")}>Clear search</button>}
+                {activeCatalogFilters && <button onClick={resetCatalogFilters}>Reset filters</button>}
+              </>}
             />
-          ) : !contentReady ? <CatalogLoadingState label={`Opening cached ${categoryLabel.toLowerCase()}`} /> : visibleItems.length ? renderedInstalledItems.map(item => <div className="content-item installed-content-item instance-list-row" key={item.id}>
+          ) : !contentReady ? <CatalogLoadingState label={`Loading ${categoryLabel.toLowerCase()}`} /> : contentError ? <ContentEmptyState
+            title={`Couldn’t load ${categoryLabel.toLowerCase()}.`} description={contentError}
+            actions={<button onClick={() => void loadContent()}>Try again</button>}
+          /> : visibleItems.length ? renderedInstalledItems.map(item => <div className="content-item installed-content-item instance-list-row" key={item.id}>
             <button type="button" className="content-detail-hitarea" draggable={false} onDragStart={event => event.preventDefault()} onPointerDown={event => contentTransfer.start(event, { ...item, sourceId: instance.id, category: tab })} onClick={() => { if (tab === "mods") showInstalledModDetails(item); }} aria-label={tab === "mods" ? `Open details for ${item.name}` : `${item.name}; drag to another instance to copy`}>
             <span className="content-icon"><CatalogArtwork source={packArtwork[item.fileName]} embedded={item.icon}
               fallback={tab === "mods" ? <Puzzle size={22} /> : tab === "shaderpacks" ? <Cuboid size={22} /> : <PackageOpen size={22} />} /></span>
@@ -2250,15 +2331,17 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
               <InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} onCopy={() => contentTransfer.choose({ ...item, sourceId: instance.id, category: tab })} />
             </div>
           </div>) : items.length ? <ContentEmptyState
-            title={`No matching ${categoryLabel.toLowerCase()}`}
-            description="Nothing in this instance matches the current search or filter."
-            actions={<button className="content-empty-primary" onClick={() => { setSearch(""); setFilter("All"); setSort("Name"); setContentPage(1); }}><RotateCw size={16} />Reset view</button>}
-          /> : <ContentEmptyState
-            title={`No ${categoryLabel.toLowerCase()} installed`}
-            description="Drop files here, browse Modrinth, or open the instance folder."
+            title={search ? `No ${categoryLabel.toLowerCase()} match “${search}”.` : `No ${filter.toLowerCase()} ${categoryLabel.toLowerCase()}.`}
             actions={<>
-              <button className="content-empty-primary" onClick={openCatalog}><CirclePlus size={16} />Browse Modrinth</button>
-              <button className="content-empty-secondary" onClick={() => void invoke("open_instance_folder", { instanceId: instance.id, category: tab })}><FolderOpen size={16} />Open folder</button>
+              {search && <button onClick={() => updateContentSearch("")}>Clear search</button>}
+              {filter !== "All" && <button onClick={() => { setFilter("All"); setContentPage(1); }}>Reset filters</button>}
+            </>}
+          /> : <ContentEmptyState
+            title={`No ${categoryLabel.toLowerCase()} yet.`}
+            description={tab !== "mods" ? "Drop a ZIP file here to add it." : instance.loader.toLowerCase() === "fabric" ? "Drop a mod JAR here to add it." : undefined}
+            actions={<>
+              {(tab !== "mods" || instance.loader.toLowerCase().includes("fabric")) && <button onClick={openCatalog}><Search size={15} />Browse Modrinth</button>}
+              <button onClick={() => void invoke("open_instance_folder", { instanceId: instance.id, category: tab }).catch(error => onMessage(String(error), "error"))}><FolderOpen size={15} />Open folder</button>
             </>}
           />}
           </div>
@@ -2734,6 +2817,7 @@ export function App() {
         localStorage.setItem(spotlightDefaultMigrationKey, "complete");
       }
       loaded = { ...loaded, theme: loaded.theme === "light" || loaded.theme === "system" ? loaded.theme : "oled" };
+      loaded.backdrop = readBackground(stored.backdrop);
       loaded.dividerStrength = Number.isFinite(loaded.dividerStrength) ? Math.max(0, Math.min(100, loaded.dividerStrength)) : defaults.dividerStrength;
       loaded.interfaceSize = Math.max(90, Math.min(125, Number(loaded.interfaceSize) || defaults.interfaceSize));
       loaded.spacing = loaded.spacing === "comfortable" ? "comfortable" : defaults.spacing;
@@ -2760,7 +2844,10 @@ export function App() {
   useEffect(() => {
     void getCurrentWebview().setZoom(settings.interfaceSize / 100).catch(() => {});
   }, [settings.interfaceSize]);
-  const sidebarImage = useSidebarImage(settings.rightSidebar === "Custom Image");
+  const sidebarImage = useLauncherImage(settings.rightSidebar === "Custom Image", "selected");
+  const editingWallpaper = page === "settings" && settingsTarget === "Background";
+  const wallpaper = useLauncherImage(settings.backdrop.source === "Image" || editingWallpaper, "wallpaper");
+  const showWallpaper = settings.backdrop.source === "Image" && !!wallpaper.source;
   const contentDownloads = useContentDownloads({
     ultraPerformance: settings.ultraPerformance,
     onInstalled: tasks => {
@@ -3385,7 +3472,7 @@ export function App() {
   const switchTargets: SwitchTarget[] = [
     ...instances.map(instance => ({ id: `instance:${instance.id}`, label: instance.name, detail: `${instance.version} · ${instance.loader}`, kind: "instance" as const, run: () => openInstancePage(instance) })),
     ...([ ["Home", "home"], ["Instances", "instances"], ["Locker", "locker"], ["Social", "social"], ["Alula", "alula"], ["Screenshots", "screenshots"], ["Utilities", "utilities"], ["Portal", "portal"], ["Downloads", "downloads"], ["Logs", "logs"], ["New instance", "new-instance"] ] as const).map(([label, destination]) => ({ id: `page:${destination}`, label, detail: "Page", kind: "page" as const, run: () => setPage(destination) })),
-    ...settingTabs.map(([, label]) => ({ id: `setting:${label}`, label: settingsLabel(label), detail: "Settings", keywords: ({ Appearance: "theme accent color animations", General: "right sidebar download queue image friends hide", Performance: "memory ram java arguments", Minecraft: "version loader", "My Profile": "account login avatar", Cache: "storage disk" } as Record<string, string>)[label], kind: "setting" as const, run: () => openSettings(label) })),
+    ...settingTabs.map(([, label]) => ({ id: `setting:${label}`, label: settingsLabel(label), detail: "Settings", keywords: ({ Appearance: "theme accent color animations", Background: "wallpaper image blur frosted tint opacity", General: "right sidebar download queue image friends hide", Performance: "memory ram java arguments", Minecraft: "version loader", "My Profile": "account login avatar", Cache: "storage disk" } as Record<string, string>)[label], kind: "setting" as const, run: () => openSettings(label) })),
   ];
   useEffect(() => { if (page !== "social") setSocialDestination(undefined); }, [page]);
   const activeNavPage = page === "instance" || page === "new-instance" ? "instances" : page;
@@ -3483,6 +3570,16 @@ export function App() {
     <ShortcutContext.Provider value={settings.shortcuts}><ContentTransferContext.Provider value={contentTransfer.controls}>
     <div
       className="app-shell desktop-redesign"
+      data-wallpaper={showWallpaper || undefined}
+      style={showWallpaper ? {
+        "--wallpaper-image": `url("${wallpaper.source}")`,
+        "--wallpaper-fit": settings.backdrop.fit === "Fit" ? "contain" : "cover",
+        "--wallpaper-opacity": (100 - settings.backdrop.opacity) + "%",
+        "--wallpaper-sidebar": settings.backdrop.sidebar + "%",
+        "--wallpaper-elements": settings.backdrop.elements + "%",
+        "--wallpaper-element-blur": settings.ultraPerformance || !settings.backdrop.elementBlur ? "none" : `blur(${settings.backdrop.elementBlur}px)`,
+        "--wallpaper-blur": settings.ultraPerformance || !settings.backdrop.blur ? "none" : `blur(${settings.backdrop.blur}px)`,
+      } as CSSProperties : undefined}
       data-settings-workspace={page === "settings" || undefined}
       data-wide-workspace={wideWorkspace || undefined}
       data-desktop-context-collapsed={contextCollapsed ? "true" : "false"}
@@ -3646,7 +3743,7 @@ export function App() {
         ) : page === "locker" ? (
           <Locker section={lockerSection} onSection={setLockerSection} profile={profile} motion={settings.animations && !settings.ultraPerformance} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />
         ) : page === "settings" ? (
-          <SettingsPage resolvedTheme={resolvedTheme} settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} sidebarImage={sidebarImage} initialTab={settingsTarget} query={settingsQuery} onNavigate={openSettings} addAccount={addAccount} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={displayedUpdateVersion || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => setUpdatePanelOpen(true)} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} />
+          <SettingsPage resolvedTheme={resolvedTheme} settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} sidebarImage={sidebarImage} wallpaper={wallpaper} initialTab={settingsTarget} query={settingsQuery} onNavigate={openSettings} addAccount={addAccount} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={displayedUpdateVersion || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => setUpdatePanelOpen(true)} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} />
         ) : page === "new-instance" ? (
           <NewInstancePage key={creationEntry.revision} initialStep={creationEntry.step}
             defaults={settings}

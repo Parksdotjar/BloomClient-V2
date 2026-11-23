@@ -12,8 +12,8 @@ const url = process.env.BLOOM_TEST_URL || "http://127.0.0.1:1420";
 await page.route("**/*", route => route.request().url().startsWith(url) ? route.continue() : route.abort());
 await page.addInitScript(() => {
   localStorage.setItem("bloom-onboarding-complete-v1", "complete");
-  const mark = (color) => "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><rect width="60" height="60" rx="8" fill="' + color + '"/></svg>');
-  const instances = ["Meadow", "Creative"].map((name, i) => ({ name, id: String(i), version: "1.21.1", loader: "Fabric", directory: name, icon: mark(i ? "green" : "gold"), java: "Automatic", memory: 4096, jvmArguments: "" }));
+  const mark = (color, width = 60, height = 60) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${color}"/></svg>`);
+  const instances = ["Meadow", "Creative"].map((name, i) => ({ name, id: String(i), version: "1.21.1", loader: "Fabric", directory: name, icon: i ? mark("green", 60, 150) : mark("gold", 150, 60), java: "Automatic", memory: 4096, jvmArguments: "" }));
   const accounts = ["Parks", "Alex"].map(name => ({ name, id: name }));
   let active = accounts[0], next = 1;
   let cache = { directory: "C:/Fixture/Cache", usedBytes: 268435456, capacityBytes: 2147483648, itemCount: 450 };
@@ -89,6 +89,17 @@ async function fits(locator) {
   const box = await locator.boundingBox();
   const { width, height } = page.viewportSize();
   assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= width + 1 && box.y + box.height <= height + 1, JSON.stringify(box));
+}
+async function checkSquareIcon(locator) {
+  const { width, height, fit, radius } = await locator.evaluate(async image => {
+    await image.decode();
+    const { width, height } = image.getBoundingClientRect();
+    const style = getComputedStyle(image);
+    return { width, height, fit: style.objectFit, radius: parseFloat(style.borderTopLeftRadius) };
+  });
+  assert.ok(width > 0 && Math.abs(width - height) < 1, `Expected a square icon, got ${width} × ${height}`);
+  assert.equal(fit, "cover");
+  assert.ok(radius > 0);
 }
 async function checkInstanceCreation() {
   const start = async () => { await open("Instances"); await button("New instance").click(); };
@@ -243,7 +254,8 @@ try {
   await button("Reset appearance").click();
   const sections = page.getByRole("navigation", { name: "Settings sections" });
   const selectSection = name => button(name, sections).click();
-  assert.equal(await button("Background", sections).count(), 0);
+  await selectSection("Background");
+  assert.match(await button("Background source").innerText(), /Solid color/);
   assert.equal(await page.evaluate(() => "customBackground" in JSON.parse(localStorage.getItem("bloom-settings"))), false);
   assert.equal(await button("Sidebar", sections).count(), 0);
   await selectSection("Shortcuts");
@@ -482,8 +494,10 @@ try {
   await news.getByRole("button",{name:"Minecraft",exact:true}).click();
   await page.setViewportSize({width:1280,height:800}); await page.locator("main.content").evaluate(el => el.scrollTop=0);
   await photo("home-launch-news");
+  await checkSquareIcon(page.locator(".home-instance-art img"));
   await choose().click(); const picker = page.getByRole("dialog", { name: "Choose instance" });
   await fits(picker);
+  for (const image of await picker.locator("img").all()) await checkSquareIcon(image);
   const pickerBounds = await picker.boundingBox(), barBounds = await choose().boundingBox();
   assert.ok(pickerBounds.y + pickerBounds.height <= barBounds.y || pickerBounds.y >= barBounds.y + barBounds.height);
   await photo("instance-picker");
@@ -491,6 +505,7 @@ try {
   assert.equal(await picker.getByRole("button",{name:"New instance"}).count(),0);
   await picker.getByRole("button",{name:"Creative",exact:true}).click();
   assert.match(await choose().getAttribute("aria-label"), /Creative/);
+  await checkSquareIcon(page.locator(".home-instance-art img"));
   await open("Instances"); await button("New instance").click();
   await checkInstanceCreation();
   await checkWorkspaceTools();
@@ -502,6 +517,18 @@ try {
   await page.getByRole("group",{name:"Microsoft sign-in"}).waitFor();
   await open("Instances"); await page.locator(".desktop-instance-link").getByRole("button", {name:"Meadow", exact:true}).click();
   assert.equal(await page.getByText("Ready to play", {exact:true}).count(),0);
+  const installedSearch = page.getByRole("textbox", {name: "Search installed mods"});
+  await installedSearch.fill("missing test mod");
+  const emptyMods = page.locator(".content-empty");
+  await emptyMods.getByText("No mods match “missing test mod”.", {exact: true}).waitFor();
+  const emptyStyle = await emptyMods.evaluate(el => {
+    const style = getComputedStyle(el);
+    return [style.backgroundColor, style.backgroundImage, style.boxShadow];
+  });
+  assert.deepEqual(emptyStyle, ["rgba(0, 0, 0, 0)", "none", "none"]);
+  assert.ok((await emptyMods.boundingBox()).height < (await page.locator(".content-list").boundingBox()).height / 2);
+  await button("Clear search", emptyMods).click();
+  assert.equal(await installedSearch.inputValue(), "");
   const tabs = page.getByRole("tablist"); assert.ok((await tabs.getByRole("tab").allTextContents()).every(label => !/\d/.test(label)));
   const previous = page.locator(".installed-content-item b").first(); await previous.waitFor(); const old = await previous.innerText();
   await button("Page 2").click(); assert.notEqual(await previous.innerText(), old); await button("Previous page").click(); assert.equal(await previous.innerText(), old);

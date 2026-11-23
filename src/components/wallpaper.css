@@ -1,0 +1,66 @@
+/* A single image spans the window. Scrollable pages and the rails reveal that same image. */
+:root[data-theme] .app-shell.desktop-redesign[data-wallpaper] {
+  --wallpaper-wash: color-mix(in srgb, var(--desktop-canvas) var(--wallpaper-opacity), transparent);
+  --wallpaper-control: color-mix(in srgb, var(--control) var(--wallpaper-elements), transparent);
+  background-color: var(--desktop-canvas);
+  background-image: linear-gradient(var(--wallpaper-wash), var(--wallpaper-wash)), var(--wallpaper-image);
+  background-position: center;
+  background-size: 100% 100%, var(--wallpaper-fit);
+  background-repeat: no-repeat;
+}
+
+:root[data-theme] .app-shell.desktop-redesign[data-wallpaper] > main.content { background: transparent; }
+
+/* Frost the title strip, icon rail and outside of the workspace curve in one pass. */
+.app-shell.desktop-redesign[data-wallpaper]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--desktop-frame) var(--wallpaper-sidebar), transparent);
+  backdrop-filter: var(--wallpaper-blur);
+  mask:
+    linear-gradient(black, black) top left / 100% var(--desktop-title-height) no-repeat,
+    linear-gradient(black, black) top left / var(--desktop-rail-width) 100% no-repeat,
+    radial-gradient(circle at right bottom, transparent calc(var(--desktop-inner-radius) - .5px), black calc(var(--desktop-inner-radius) + .5px))
+      var(--desktop-rail-width) var(--desktop-title-height) / var(--desktop-inner-radius) var(--desktop-inner-radius) no-repeat;
+}
+:root[data-theme] .app-shell.desktop-redesign[data-wallpaper] > :is(.desktop-rail,.desktop-titlebar) {
+  background: transparent;
+}
+:root[data-theme] .app-shell.desktop-redesign[data-wallpaper] > :is(.desktop-context,.workspace-rail) {
+  background: color-mix(in srgb, var(--rail-tint) var(--wallpaper-sidebar), transparent);
+  backdrop-filter: var(--wallpaper-blur);
+}
+:root[data-theme] .app-shell.desktop-redesign[data-wallpaper] > .desktop-context { --rail-tint: var(--user-panel,var(--panel)); }
+:root[data-theme] .app-shell.desktop-redesign[data-wallpaper] > .workspace-rail { --rail-tint: var(--sidebar-surface); }
+.app-shell[data-wallpaper] .desktop-rail { z-index: 22; }
+.app-shell[data-wallpaper] .desktop-context { z-index: 21; }
+
+.desktop-redesign[data-wallpaper] :is(.select-trigger,.settings-action,.appearance-color-chip,.content-search,.settings-workspace-bar label,.spotlight-select-trigger,.setting-percent-slider output) {
+  background-color: var(--wallpaper-control);
+  backdrop-filter: var(--wallpaper-element-blur);
+}
+.desktop-redesign[data-wallpaper] .instance-workspace {
+  --instance-row-fill: var(--wallpaper-control);
+  --instance-row-hover: color-mix(in srgb, var(--wallpaper-control) 88%, var(--text));
+}
+.desktop-redesign[data-wallpaper] :is(.content-toolbar-action, .content-filter-trigger, .catalog-result-add, .download-filter-trigger, .portal-add-toggle, .portal-filter-trigger) {
+  background-color: var(--wallpaper-control);
+  backdrop-filter: var(--wallpaper-element-blur);
+
+  &:is(:enabled:hover, :focus-visible, [aria-expanded="true"], [data-filtered="true"]) {
+    background-color: color-mix(in srgb, var(--wallpaper-control) 90%, var(--text));
+  }
+}
+.desktop-redesign[data-wallpaper] .content-empty {
+  padding: 12px 15px;
+  border-radius: 8px;
+  background: var(--wallpaper-control);
+  backdrop-filter: var(--wallpaper-element-blur);
+}
+.desktop-redesign[data-wallpaper] .content-toolbar .content-search {
+  backdrop-filter: var(--wallpaper-element-blur);
+}
+.wallpaper-file-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.wallpaper-file-actions img { width: 46px; height: 32px; object-fit: cover; border-radius: 5px; }

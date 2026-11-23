@@ -52,7 +52,7 @@ function sidebarCropStyle({ x, y, zoom }: SidebarCrop): CSSProperties {
   return { objectPosition: position, transformOrigin: position, scale: zoom };
 }
 
-export function useSidebarImage(active: boolean) {
+export function useLauncherImage(active: boolean, slot: "selected" | "wallpaper") {
   const input = useRef<HTMLInputElement>(null);
   const rail = useRef<HTMLElement>(null);
   const [image, setImage] = useState<SavedSidebarImage | null>();
@@ -64,13 +64,13 @@ export function useSidebarImage(active: boolean) {
   useEffect(() => {
     if (!active || image !== undefined) return;
     let current = true;
-    void sidebarImageStorage<Blob | SavedSidebarImage | undefined>("readonly", store => store.get("selected"))
+    void sidebarImageStorage<Blob | SavedSidebarImage | undefined>("readonly", store => store.get(slot))
       .then(saved => {
         if (current) setImage(saved instanceof Blob ? { file: saved, crop: defaultSidebarCrop } : saved ?? null);
       })
       .catch(() => { if (current) { setImage(null); setError("Couldn’t load the saved image."); } });
     return () => { current = false; };
-  }, [active, image]);
+  }, [active, image, slot]);
 
   useEffect(() => {
     if (!active || !file) { setSource(undefined); return; }
@@ -95,12 +95,13 @@ export function useSidebarImage(active: boolean) {
           await preview.decode();
         } finally { URL.revokeObjectURL(url); }
         const next = { file, crop: defaultSidebarCrop };
-        await sidebarImageStorage("readwrite", store => store.put(next, "selected"));
+        await sidebarImageStorage("readwrite", store => store.put(next, slot));
         setImage(next);
       } else {
-        await sidebarImageStorage("readwrite", store => store.delete("selected"));
+        await sidebarImageStorage("readwrite", store => store.delete(slot));
         setImage(null);
       }
+      return true;
     } catch {
       setError(file ? "Couldn’t save that image. Try another file." : "Couldn’t remove the image. Try again.");
     } finally { setOperation(null); }
@@ -112,7 +113,7 @@ export function useSidebarImage(active: boolean) {
     setOperation("cropping");
     try {
       const next = { ...image, crop };
-      await sidebarImageStorage("readwrite", store => store.put(next, "selected"));
+      await sidebarImageStorage("readwrite", store => store.put(next, slot));
       setImage(next);
       return true;
     } catch {
@@ -124,7 +125,7 @@ export function useSidebarImage(active: boolean) {
   return { image, source, rail, error, operation, input, choose: () => input.current?.click(), save, saveCrop, clearError: () => setError("") };
 }
 
-export function SidebarImageSettings({ image, source, rail, input, choose, save, saveCrop, clearError, error, operation }: ReturnType<typeof useSidebarImage>) {
+export function SidebarImageSettings({ image, source, rail, input, choose, save, saveCrop, clearError, error, operation }: ReturnType<typeof useLauncherImage>) {
   const artwork = useRef<HTMLImageElement>(null);
   const cropButton = useRef<HTMLButtonElement>(null);
   const [editor, setEditor] = useState<{ rail: HTMLElement; natural: { width: number; height: number } }>();
@@ -178,7 +179,7 @@ export function SidebarImageSettings({ image, source, rail, input, choose, save,
   </div>;
 }
 
-export function CustomImageSidebar({ image, source, rail }: Pick<ReturnType<typeof useSidebarImage>, "image" | "source" | "rail">) {
+export function CustomImageSidebar({ image, source, rail }: Pick<ReturnType<typeof useLauncherImage>, "image" | "source" | "rail">) {
   return <aside ref={rail} className="workspace-rail workspace-rail-image" aria-label="Custom Image">
     {image && source
       ? <img src={source} alt="Custom sidebar image" draggable={false} style={sidebarCropStyle(image.crop)} />
