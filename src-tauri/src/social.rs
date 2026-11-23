@@ -615,8 +615,11 @@ fn refresh_tokens(tokens: &SavedTokens) -> Result<SavedTokens, String> {
     if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return Err("Whoa, slow down! Too many attempts. Please try again later.".into());
     }
-    if !response.status().is_success() {
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         return Err("Your Delight Social sign-in expired. Sign in again.".into());
+    }
+    if !response.status().is_success() {
+        return Err(format!("Delight Social could not refresh your sign-in (HTTP {}). Try again.", response.status()));
     }
     let bundle: TokenBundle = response.json().map_err(|error| error.to_string())?;
     save_tokens(&bundle)?;
