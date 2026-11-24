@@ -6,10 +6,13 @@ export default defineConfig({
     react(),
     {
       name: 'delight-local-wings',
+      apply: 'serve',
       async configureServer(server) {
         if (process.env.DELIGHT_WINGS_LOCAL_PREVIEW === '0') return;
         try {
-          const { startLocalWings } = await import('./scripts/dev-wings.mjs');
+          // Keep the development SQLite service out of Vite's bundled build config.
+          const localService = new URL('./scripts/dev-wings.mjs', import.meta.url);
+          const { startLocalWings } = await import(localService.href);
           await startLocalWings(server.config.root, server.httpServer);
         } catch (error) {
           server.config.logger.warn(`Local Wings preview: ${String(error)}`);
