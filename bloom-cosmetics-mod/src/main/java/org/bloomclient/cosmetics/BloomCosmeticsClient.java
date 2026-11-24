@@ -7,6 +7,9 @@ public final class BloomCosmeticsClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         BloomCapeService.get().start();
+        DelightWings.get().start();
+        DelightWingLayer.register();
+        DelightWingPreview.register();
         BloomPresence.start();
         org.bloomclient.cosmetics.emote.BloomEmotes.init();
     }

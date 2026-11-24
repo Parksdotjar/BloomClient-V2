@@ -35,7 +35,7 @@ await page.addInitScript(() => {
   };
 });
 await mkdir("logs/pixel-play", { recursive: true });
-const button = page.getByRole("button", { name: "Play", exact: true });
+const button = page.locator(".spotlight-play");
 const fill = page.locator(".pixel-play-fill");
 const clip = () => fill.evaluate(element => element.style.clipPath);
 const coverage = () => fill.evaluate(element => {

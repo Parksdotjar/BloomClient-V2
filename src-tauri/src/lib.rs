@@ -4283,7 +4283,6 @@ async fn launch_minecraft(
                 args.insert(main_index, argument.to_string());
             }
             let mut process = command_without_console(command.executable);
-            cosmetics::attach_session(&mut process, &session, &cosmetic_token);
             process
                 .args(args)
                 .current_dir(command.working_dir)
@@ -4291,6 +4290,7 @@ async fn launch_minecraft(
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped());
+            cosmetics::attach_session(&mut process, &config, &session, &cosmetic_token);
             emit_game_log(&app, &instance_id, "launcher", format!("Launch timing: Java selection and command {} ms", java_started.elapsed().as_millis()));
             let mut child = process
                 .spawn()

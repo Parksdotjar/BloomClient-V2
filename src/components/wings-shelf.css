@@ -1,0 +1,25 @@
+.wings-layout { grid-template-columns: minmax(0,1fr); }
+.wings-layout.has-selection { grid-template-columns: minmax(0,1fr) minmax(285px,350px); align-items: start; }
+.wing-card-preview { width: 100%; height: 100%; pointer-events: none; }
+.wing-detail { min-width: 0; display: grid; gap: 13px; align-content: start; padding: 14px; }
+.wing-preview { position: relative; overflow: hidden; }
+.wing-preview canvas, .wing-preview img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wing-preview canvas { cursor: grab; }
+.wing-preview canvas:active { cursor: grabbing; }
+.wing-preview img { object-fit: contain; }
+.wing-preview small { position: absolute; inset: auto 0 8px; color: var(--muted); text-align: center; }
+.wing-colors { min-width: 0; margin: 0; padding: 7px 0; border: 0; display: grid; gap: 6px; }
+.wing-colors legend { color: var(--muted); font-size: 12px; }
+.wing-color { min-height: 39px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line); }
+.wing-color > span { font-weight: 600; }
+.wing-reset { justify-self: start; padding: 4px 0; background: none; border: 0; color: var(--muted); font: inherit; }
+.wing-reset:hover { color: var(--text); }
+.wing-actions, .shop-cosmetic-categories { display: flex; gap: 7px; flex-wrap: wrap; }
+.shop-cosmetic-categories { margin-bottom: 13px; }
+.shop-cosmetic-categories button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--control); color: var(--muted); }
+.shop-cosmetic-categories button[aria-pressed="true"] { color: var(--text); background: var(--panel-strong); }
+@media (max-width: 900px) { .wings-layout.has-selection { grid-template-columns: minmax(0,1fr); } }
+@media (prefers-reduced-motion: reduce) { .wing-card .locker-art::before { transition: none; } }
+:root[data-animations="off"] .wing-card .locker-art::before,
+:root[data-performance="ultra"] .wing-card .locker-art::before { transition: none; }
+.desktop-locker .locker-detail > .wing-preview { flex: none; width: 100%; }

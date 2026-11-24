@@ -4,11 +4,13 @@ import { dirname, delimiter, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { readCatalog } from "./emotes.mjs";
+import { check as checkWings } from "./delight-wings.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const wrapper = resolve(root, "benchmark-mod", process.platform === "win32" ? "gradlew.bat" : "gradlew");
 const project = resolve(root, "bloom-cosmetics-mod");
 const emotes = readCatalog();
+console.log("Validated", checkWings(), "wing revisions.");
 console.log(`Preparing Delight Cosmetics for 1.21.11, 26.1, 26.2 and 26.3. Emotes: ${emotes.length}${emotes.length ? ` (${emotes.map(({entry})=>entry.name).join(', ')})` : ' (empty library)'}.`);
 // Validate the compiler before invoking the wrapper so a missing JDK has one
 // actionable error, rather than a cascade of Windows batch errors.

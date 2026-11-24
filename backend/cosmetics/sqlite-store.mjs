@@ -3,6 +3,7 @@ import { mkdirSync, chmodSync } from 'node:fs';
 import { resolve, isAbsolute } from 'node:path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { ApiError } from './assets.mjs';
+import { WingStorage } from './wings.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 const objectPath = /^[a-f0-9-]{36}\/[a-f0-9-]{36}\/(cape|elytra|atlas)\.png$/;
@@ -36,6 +37,7 @@ export class SqliteCosmeticsStore {
       CREATE TABLE IF NOT EXISTS cape_shop(cape_id TEXT PRIMARY KEY REFERENCES capes(id),listed INTEGER NOT NULL DEFAULT 1);
       CREATE TABLE IF NOT EXISTS cape_shop_settings(id INTEGER PRIMARY KEY CHECK(id=1),featured_id TEXT REFERENCES capes(id));
       CREATE TABLE IF NOT EXISTS cape_migrations(id TEXT PRIMARY KEY);`);
+    this.wings = new WingStorage(this.db, work => this.transaction(work));
     this.transaction(() => {
       if(this.db.prepare('SELECT 1 FROM cape_migrations WHERE id=?').get('owned-locker-v1'))return;
       // Preserve legitimately equipped public capes; never grant an unclaimed code-only cape.
@@ -56,10 +58,10 @@ export class SqliteCosmeticsStore {
   }
   async catalog(player = null) {
     return this.db.prepare(`SELECT c.* FROM capes c LEFT JOIN cape_access a ON a.cape_id=c.id LEFT JOIN cape_shop s ON s.cape_id=c.id
-      WHERE c.published=1 AND ((COALESCE(a.requires_code,0)=0 AND COALESCE(s.listed,1)=1) OR EXISTS(SELECT 1 FROM cape_claims WHERE cape_id=c.id AND player_uuid=?)) ORDER BY c.name`).all(player);
+      WHERE c.published=1 AND ((COALESCE(a.requires_code,0)=0 AND COALESCE(s.listed,1)=1) OR EXISTS(SELECT 1 FROM cape_claims o WHERE o.cape_id=c.id AND o.player_uuid=? AND (COALESCE(a.requires_code,0)=0 OR EXISTS(SELECT 1 FROM cape_codes k WHERE k.cape_id=c.id AND k.claimed_by=o.player_uuid AND k.revoked_at IS NULL)))) ORDER BY c.name`).all(player);
   }
   async locker(player) {
-    return this.db.prepare(`SELECT c.* FROM capes c JOIN cape_claims o ON o.cape_id=c.id WHERE c.published=1 AND o.player_uuid=? ORDER BY c.name`).all(player);
+    return this.db.prepare(`SELECT c.* FROM capes c JOIN cape_claims o ON o.cape_id=c.id LEFT JOIN cape_access a ON a.cape_id=c.id WHERE c.published=1 AND o.player_uuid=? AND (COALESCE(a.requires_code,0)=0 OR EXISTS(SELECT 1 FROM cape_codes k WHERE k.cape_id=c.id AND k.claimed_by=o.player_uuid AND k.revoked_at IS NULL)) ORDER BY c.name`).all(player);
   }
   async shop(player=null) {
     return this.db.prepare(`SELECT c.*,EXISTS(SELECT 1 FROM cape_claims WHERE cape_id=c.id AND player_uuid=?) AS owned
@@ -75,16 +77,17 @@ export class SqliteCosmeticsStore {
     return this.transaction(()=>{
       const cape=this.db.prepare('SELECT * FROM capes WHERE id=?').get(id);
       if(!cape?.published)throw new ApiError(404,'cape_unavailable');
-      if(this.db.prepare('SELECT 1 FROM cape_claims WHERE player_uuid=? AND cape_id=?').get(player,id))return {id,name:cape.name,alreadyClaimed:true};
+      if(this.db.prepare('SELECT 1 FROM cape_claims WHERE player_uuid=? AND cape_id=?').get(player,id) && this.canUseCape(player,id))return {id,name:cape.name,alreadyClaimed:true};
       if(this.requiresCode(id)||!this.shopSettings(id).shopListed)throw new ApiError(404,'cape_unavailable');
       this.db.prepare('INSERT INTO cape_claims VALUES(?,?,?)').run(player,id,this.now());
       return {id,name:cape.name,alreadyClaimed:false};
     });
   }
   requiresCode(id) { return !!this.db.prepare('SELECT requires_code FROM cape_access WHERE cape_id=?').get(id)?.requires_code; }
+  // Public collection history is not a grant for a code-only cape.
   canUseCape(player, id) {
     return !!this.db.prepare(`SELECT 1 FROM capes c LEFT JOIN cape_access a ON a.cape_id=c.id LEFT JOIN cape_shop s ON s.cape_id=c.id WHERE c.id=? AND c.published=1
-      AND ((COALESCE(a.requires_code,0)=0 AND COALESCE(s.listed,1)=1) OR EXISTS(SELECT 1 FROM cape_claims WHERE cape_id=c.id AND player_uuid=?))`).get(id,player);
+      AND ((COALESCE(a.requires_code,0)=0 AND COALESCE(s.listed,1)=1) OR EXISTS(SELECT 1 FROM cape_claims o WHERE o.cape_id=c.id AND o.player_uuid=? AND (COALESCE(a.requires_code,0)=0 OR EXISTS(SELECT 1 FROM cape_codes k WHERE k.cape_id=c.id AND k.claimed_by=o.player_uuid AND k.revoked_at IS NULL))))`).get(id,player);
   }
   codes(id) {
     return this.db.prepare(`SELECT id,suffix,created_at AS createdAt,claimed_at AS claimedAt,revoked_at AS revokedAt FROM cape_codes WHERE cape_id=? ORDER BY (claimed_at IS NOT NULL OR revoked_at IS NOT NULL),created_at DESC,id LIMIT 200`).all(id);
@@ -116,12 +119,15 @@ export class SqliteCosmeticsStore {
       const row=this.db.prepare(`SELECT k.*,c.name,c.published FROM cape_codes k JOIN capes c ON c.id=k.cape_id WHERE k.code_hash=?`).get(digest(code));
       if(!row || row.revoked_at || !row.published || !this.requiresCode(row.cape_id))throw new ApiError(400,'code_unavailable');
       // Retrying after a lost response succeeds for the original claimant only.
-      if(row.claimed_by===player)return {id:row.cape_id,name:row.name,alreadyClaimed:true};
+      if(row.claimed_by===player){
+        if(!this.canUseCape(player,row.cape_id))throw new ApiError(400,'code_unavailable');
+        return {id:row.cape_id,name:row.name,alreadyClaimed:true};
+      }
       if(row.claimed_by)throw new ApiError(409,'code_already_used');
-      if(this.db.prepare('SELECT 1 FROM cape_claims WHERE player_uuid=? AND cape_id=?').get(player,row.cape_id))throw new ApiError(409,'cape_already_claimed');
+      if(this.db.prepare('SELECT 1 FROM cape_claims WHERE player_uuid=? AND cape_id=?').get(player,row.cape_id) && this.canUseCape(player,row.cape_id))throw new ApiError(409,'cape_already_claimed');
       const time=this.now();
       this.db.prepare('UPDATE cape_codes SET claimed_by=?,claimed_at=? WHERE id=?').run(player,time,row.id);
-      this.db.prepare('INSERT INTO cape_claims VALUES(?,?,?)').run(player,row.cape_id,time);
+      this.db.prepare('INSERT INTO cape_claims VALUES(?,?,?) ON CONFLICT(player_uuid,cape_id) DO UPDATE SET claimed_at=excluded.claimed_at').run(player,row.cape_id,time);
       return {id:row.cape_id,name:row.name,alreadyClaimed:false};
     });
   }
@@ -142,9 +148,10 @@ export class SqliteCosmeticsStore {
       const row = this.db.prepare('SELECT record FROM revisions WHERE id=? AND cape_id=?').get(revision,id);
       const record = row && JSON.parse(row.record);
       if (!record || record.owner_uuid !== owner) throw new ApiError(404,'revision_not_found');
+      // Any publication changes invalidate earlier bearer asset links permanently.
+      this.revokeCapeLeases(id);
       this.db.prepare('INSERT INTO capes VALUES(?,?,?,1) ON CONFLICT(id) DO UPDATE SET name=excluded.name,current_revision=excluded.current_revision,published=1').run(id,record.name,revision);
       if(typeof requiresCode==='boolean') {
-        if(this.requiresCode(id)!==requiresCode)this.db.prepare('DELETE FROM leases WHERE path IN (SELECT o.path FROM objects o JOIN revisions r ON r.id=o.revision WHERE r.cape_id=?)').run(id);
         this.db.prepare('INSERT INTO cape_access VALUES(?,?) ON CONFLICT(cape_id) DO UPDATE SET requires_code=excluded.requires_code').run(id,requiresCode?1:0);
       }
       if(typeof shopOptions.shopListed==='boolean')this.db.prepare('INSERT INTO cape_shop VALUES(?,?) ON CONFLICT(cape_id) DO UPDATE SET listed=excluded.listed').run(id,shopOptions.shopListed?1:0);
@@ -152,7 +159,8 @@ export class SqliteCosmeticsStore {
       else if(shopOptions.featured===false || this.requiresCode(id) || !this.shopSettings(id).shopListed)this.db.prepare('UPDATE cape_shop_settings SET featured_id=NULL WHERE featured_id=?').run(id);
     });
   }
-  async unpublish(id) { this.db.prepare('UPDATE capes SET published=0 WHERE id=?').run(id); }
+  revokeCapeLeases(id) { this.db.prepare('DELETE FROM leases WHERE path IN (SELECT o.path FROM objects o JOIN revisions r ON r.id=o.revision WHERE r.cape_id=?)').run(id); }
+  async unpublish(id) { this.transaction(() => { this.revokeCapeLeases(id); this.db.prepare('UPDATE capes SET published=0 WHERE id=?').run(id); }); }
   async equip(player, cape) {
     this.transaction(() => {
       if (cape && !this.canUseCape(player,cape)) throw new ApiError(404,'cape_unavailable');

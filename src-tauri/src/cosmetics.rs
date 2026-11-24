@@ -5,6 +5,12 @@ use std::{fs, io::Read, path::Path, sync::Mutex};
 include!(concat!(env!("OUT_DIR"), "/cosmetics_bundle.rs"));
 const MANIFEST: &str = ".bloom-cosmetics.json";
 const VERSIONS: &[&str] = &["1.21.11", "26.1", "26.2", "26.3"];
+const WINGS_GAME_PREVIEW: &str = "DELIGHT_WINGS_GAME_PREVIEW";
+
+fn local_wings_preview() -> bool {
+    cfg!(debug_assertions) && std::env::var("DELIGHT_WINGS_LOCAL_PREVIEW").as_deref() != Ok("0")
+}
+
 fn legacy_file() -> String {
     "bloom-cosmetics-1.21.11.jar".into()
 }
@@ -354,13 +360,33 @@ pub async fn cosmetics_request(
         (method.as_str(), path.as_str()),
         ("GET", "/v1/cosmetics/me")
             | ("GET", "/v1/capes/locker")
+            | ("GET", "/v1/wings/locker")
+            | ("POST", "/v1/wings/claim")
+            | ("PUT", "/v1/wings/equipped")
             | ("POST", "/v1/capes/redeem")
             | ("POST", "/v1/capes/claim")
             | ("PUT", "/v1/capes/equipped")
             | ("PUT", "/v1/cosmetics/badge")
-    ) || (method == "GET" && path == "/v1/capes/shop" && account_id.is_some());
-    if !authorized && !(method == "GET" && matches!(path.as_str(), "/v1/capes" | "/v1/capes/shop")) {
-        return Err("Unsupported cape operation".into());
+    ) || (method == "GET" && matches!(path.as_str(), "/v1/capes/shop" | "/v1/wings/shop") && account_id.is_some());
+    if !authorized && !(method == "GET" && matches!(path.as_str(), "/v1/capes" | "/v1/capes/shop" | "/v1/wings/shop")) {
+        return Err("Unsupported cosmetics operation".into());
+    }
+    #[cfg(debug_assertions)]
+    if path.starts_with("/v1/wings/") && local_wings_preview() {
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .map_err(|_| "Local Wings connection unavailable.")?;
+        let verb = reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| "Unsupported Wings operation.")?;
+        let mut request = client.request(verb, format!("http://127.0.0.1:19192{path}"));
+        if authorized { request = request.bearer_auth("local-preview-player"); }
+        if let Some(body) = body { request = request.json(&body); }
+        let response = request.send().await.map_err(|_| "Start the local Wings preview service first.")?;
+        if !response.status().is_success() { return Err("The local Wings service rejected this action.".into()); }
+        let mut value: serde_json::Value = response.json().await.map_err(|_| "Invalid local Wings response.")?;
+        value["localPreview"] = true.into();
+        return Ok(value);
     }
     if !live() {
         return Err(
@@ -421,6 +447,15 @@ pub async fn cosmetics_request(
             }
         }
         if !response.status().is_success() {
+            if path.starts_with("/v1/wings/") {
+                return Err(match response.status().as_u16() {
+                    401 => "Sign in to Minecraft again to manage your wings.",
+                    403 => "Add these wings to your Locker before equipping them.",
+                    404 => "This wing revision is unavailable.",
+                    429 => "Too many requests. Wait a minute and try again.",
+                    _ => "The Wings service could not complete this action.",
+                }.into());
+            }
             if path == "/v1/capes/claim" {
                 return Err(match response.status().as_u16() {
                     404 => "This cape is no longer available in Shop.",
@@ -499,9 +534,19 @@ pub fn prepare_session(config: &InstanceConfig, session: &MinecraftSession) -> O
     Some(token)
 }
 
-pub fn attach_session(process: &mut std::process::Command, session: &MinecraftSession, token: &Option<String>) {
+pub fn attach_session(
+    process: &mut std::process::Command,
+    config: &InstanceConfig,
+    session: &MinecraftSession,
+    token: &Option<String>,
+) {
     if let Some(token) = token {
         process.env("BLOOM_COSMETICS_SESSION", token).env("BLOOM_COSMETICS_UUID", &session.uuid);
+    }
+    if local_wings_preview() && live() && supported(config) {
+        process.env(WINGS_GAME_PREVIEW, "1");
+    } else {
+        process.env_remove(WINGS_GAME_PREVIEW);
     }
 }
 

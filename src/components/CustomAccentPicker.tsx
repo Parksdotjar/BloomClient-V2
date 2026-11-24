@@ -42,11 +42,12 @@ function hexToHsv(input: string): HsvColor {
 type PickerProps = {
   value: string;
   onApply: (color: string) => void;
+  onPreview?: (color: string | undefined) => void;
   label?: string;
 
 };
 
-export function CustomAccentPicker({ value, onApply, label = "Custom accent color" }: PickerProps) {
+export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom accent color" }: PickerProps) {
   const [open, setOpen] = useState(false);
   const [color, setColor] = useState<HsvColor>(() => hexToHsv(value));
   const [hexDraft, setHexDraft] = useState(value.toUpperCase());
@@ -55,6 +56,10 @@ export function CustomAccentPicker({ value, onApply, label = "Custom accent colo
   const pickerRef = useRef<HTMLDivElement>(null);
   const currentHex = /^#[0-9a-f]{6}$/i.test(hexDraft) ? hexDraft.toLowerCase() : hsvToHex(color);
   const hexValid = /^#[0-9a-f]{6}$/i.test(hexDraft);
+  const preview = useRef(onPreview);
+  preview.current = onPreview;
+  useEffect(() => { preview.current?.(open && hexValid ? currentHex : undefined); }, [open, hexValid, currentHex]);
+  useEffect(() => () => preview.current?.(undefined), []);
 
   const setHsv = (next: HsvColor) => {
     const normalized = {
