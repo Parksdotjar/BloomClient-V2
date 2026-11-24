@@ -38,6 +38,7 @@ await page.addInitScript(() => {
     async invoke(command, args) {
       control.calls.push({ command, args });
       if (command === "cosmetics_request") {
+        if (args.path === "/v1/wings/locker") return { items: [], equipped: null };
         if (args.path === "/v1/capes/shop") return { items: structuredClone(cloaks).map(cape => ({...cape, owned:cape.id !== "cloak-2" || control.claimed})), featuredId:cloaks[0]?.id };
         if (args.path === "/v1/capes/claim") {control.claimed=true;return null;}
         if (args.path === "/v1/capes/redeem") { await gate("redeem"); if (args.body.code === "expired-fixture") throw new Error("This code expired."); cloaks.push({id: "claimed", name: "Claimed fixture", textureUrl: capeTexture, textureRevision: "1"}); return {id: "claimed", name: "Claimed fixture", alreadyClaimed: false}; }
@@ -156,7 +157,8 @@ try {
   assert.equal(await skinWrites(), writesBefore + 1);
   assert.equal(await first.isEnabled(), true);
   assert.equal(await tile("Current skin").getAttribute("aria-description"),"Equipped");
-  await release("equip"); await settle();
+  await release("equip");
+  await page.waitForFunction(() => document.querySelector('button[aria-label="Wear Saved skin 0"]')?.getAttribute("aria-description") === "Equipped");
   assert.equal(await first.getAttribute("aria-description"),"Equipped");
   assert.equal(await tile("Current skin").count(),0);
   assert.equal(await page.locator(".locker-detail-copy,.locker-detail .locker-equip").count(),0);

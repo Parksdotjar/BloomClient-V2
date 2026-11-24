@@ -3,4 +3,6 @@ build/
 run/
 versions/*/build/
 versions/*/run-BloomTest*/
+versions/*/run-wing-preview/
 emotes/.creator-*/
+emotes/.delight-stage-*/

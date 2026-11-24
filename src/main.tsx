@@ -2452,9 +2452,14 @@ const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFix
 
 type InstanceLibraryDestination = "view" | "add-mods" | InstanceTab;
 
-function LaunchFill({ activity, instanceId }: { activity: DownloadViewState; instanceId: string }) {
+function instanceLaunchProgress(activity: DownloadViewState, instanceId: string) {
   if (!activity.launch || !activity.active || activity.instanceId !== instanceId || !["installing", "launching"].includes(activity.state)) return null;
-  const progress = Math.min(100, Math.max(0, Math.round(activity.progress) || 0));
+  return Math.min(100, Math.max(0, Math.round(activity.progress) || 0));
+}
+
+function LaunchFill({ activity, instanceId }: { activity: DownloadViewState; instanceId: string }) {
+  const progress = instanceLaunchProgress(activity, instanceId);
+  if (progress === null) return null;
   return <span className="instance-launch-fill" role="progressbar" aria-label="Launching Minecraft" aria-valuenow={progress}
     style={{ clipPath: `inset(0 0 0 ${progress}%)` }} />;
 }
@@ -2471,16 +2476,21 @@ function InstanceSidebar({ instances, selectedId, activity, onCancelLaunch, tran
   const [loader, setLoader] = useState("All");
   const filtered = instances.filter(item => (loader === "All" || item.loader === loader) && item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const grouped = organizing && !transferring;
-  const row = (item: InstanceDraft, organize?: () => void) => (
-    <div key={item.id} className="desktop-instance-link" data-content-drop-id={item.id} data-content-drop-name={item.name}>
+  const row = (item: InstanceDraft, organize?: () => void) => {
+    const progress = instanceLaunchProgress(activity, item.id);
+    return <div key={item.id} className="desktop-instance-link" data-launching={progress !== null || undefined} data-content-drop-id={item.id} data-content-drop-name={item.name}>
       <button className="instance-nav-name" data-folder-drag-handle={grouped || undefined} title={item.name} aria-current={selectedId === item.id ? "page" : undefined}
         onClick={() => onOpen(item)}>
         {item.icon ? <img src={item.icon} alt="" draggable={false} /> : <Cuboid size={17} />}<span>{item.name}</span>
       </button>
-      <LaunchFill activity={activity} instanceId={item.id} />
-      {activity.launch && activity.active && activity.instanceId === item.id && ["installing", "launching"].includes(activity.state) ? <button className="instance-row-action launch-cancel" aria-label={`Cancel launch of ${item.name}`} onClick={onCancelLaunch}><CloseIcon size={15} /></button> : organize ? <button className="instance-row-action" aria-label={`Move ${item.name} to folder`} title="Move to folder" onClick={organize}><FolderInput size={15} /></button> : null}
-    </div>
-  );
+      {progress !== null ? <>
+        <button className="instance-row-action launch-cancel" aria-label={`Cancel launch of ${item.name}`} title="Cancel launch" onClick={onCancelLaunch}><CloseIcon size={15} /></button>
+        <span className="instance-launch-progress" role="progressbar" aria-label="Launching Minecraft" aria-valuenow={progress}>
+          <i style={{ width: `${progress}%` }} />
+        </span>
+      </> : organize ? <button className="instance-row-action" aria-label={`Move ${item.name} to folder`} title="Move to folder" onClick={organize}><FolderInput size={15} /></button> : null}
+    </div>;
+  };
   return <section className="instance-navigation" aria-label="Instance library" data-ask-target="instances">
     <button className="desktop-create" onClick={onCreate}><Plus size={17} />New instance</button>
     <div className="instance-nav-heading">
@@ -2605,7 +2615,7 @@ function SpotlightInstanceSelect({ instances, selected, onSelect, activity }: {
 }
 
 function SpotlightHome({
-  activity, instances,
+  activity, instances, running,
   selectedId,
   busy,
   onSelect,
@@ -2614,6 +2624,7 @@ function SpotlightHome({
   onMods,
 }: {
   activity: DownloadViewState;
+  running: boolean;
   instances: InstanceDraft[];
   selectedId: string | null;
   busy: boolean;
@@ -2631,7 +2642,9 @@ function SpotlightHome({
           <img src={selected.icon || "/delight-logo.png"} alt="" />
         </button>
         <h1>{selected.name}</h1><p>{selected.version} · {selected.loader}</p>
-        <PixelPlayButton disabled={busy} onClick={() => onPlay(selected)}/>
+        <PixelPlayButton disabled={busy} onClick={() => onPlay(selected)}
+          running={running && activity.instanceId === selected.id}
+          progress={activity.active && activity.launch && activity.instanceId === selected.id && ["installing", "launching"].includes(activity.state) ? activity.progress : undefined}/>
         <SpotlightInstanceSelect activity={activity} instances={instances} selected={selected} onSelect={onSelect}/>
       </div> : <button className="home-create-instance" onClick={onCreate}><Plus size={18}/>Create an instance</button>}
     </section>
@@ -3754,7 +3767,7 @@ export function App() {
             }}
           />
         ) : settings.homeLayout === "Spotlight" ? (
-          <SpotlightHome activity={gameDownload}
+          <SpotlightHome activity={gameDownload} running={gameRunning}
             instances={instances}
             selectedId={spotlightInstanceId}
             onMods={openInstancePage}
@@ -3770,7 +3783,7 @@ export function App() {
               <button onClick={event => handleInstanceClick(event, item)} onDoubleClick={event => handleInstanceDoubleClick(event, item)}>
                 {item.icon ? <img src={item.icon} alt="" /> : <Cuboid size={20} />}<span><strong>{item.name}</strong><small>{item.version} · {item.loader}</small></span>
               </button>
-              <button disabled={download.active || gameRunning} aria-label={`Play ${item.name}`} onClick={() => void launch(item)}><Play size={16} />Play</button>
+              <button disabled={download.active || gameRunning} aria-label={`Play ${item.name}`} onClick={() => void launch(item)}><LaunchFill activity={gameDownload} instanceId={item.id}/><Play size={16} />{instanceLaunchProgress(gameDownload, item.id) !== null ? "Launching…" : gameRunning && gameDownload.instanceId === item.id ? "Running…" : "Play"}</button>
             </div>)}
             {instances.length > 4 && <button onClick={() => setPage("instances")}>View all instances<ChevronRight size={15} /></button>}
             <h2>Launcher tools</h2>

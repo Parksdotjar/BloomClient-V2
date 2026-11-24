@@ -48,6 +48,19 @@ if (project.hasProperty('emoteTestPlayer')) {
         vmArg "-Dbloom.emotes.testSession=bcs_${(name.endsWith('A') ? 'a' : 'b') * 43}"
     }
 }
+if (project.hasProperty('delightLocalWings')) {
+    def name = 'DelightWingCheck'
+    def uuid = UUID.nameUUIDFromBytes("OfflinePlayer:${name}".getBytes('UTF-8'))
+    loom.runs.client {
+        runDir 'run-wing-preview'
+        programArgs '--username', name, '--uuid', uuid.toString()
+        environmentVariable 'DELIGHT_WINGS_GAME_PREVIEW', '1'
+        if (project.hasProperty('delightWingCapture')) {
+            programArgs '--quickPlaySingleplayer', project.property('delightWingCapture').toString()
+            vmArg '-Ddelight.wings.capture=true'
+        }
+    }
+}
 
 def emoteResources = rootProject.layout.buildDirectory.dir('generated/emotes')
 if (rootProject.tasks.findByName('generateEmotes') == null) {
@@ -64,6 +77,10 @@ sourceSets.main.resources.srcDir(emoteResources)
 sourceSets.test.resources.srcDir(rootProject.file('../tests/fixtures/emote-playback'))
 processResources {
     dependsOn(rootProject.tasks.named('generateEmotes'))
+    from(rootProject.file('../public/delight-wings')) {
+        into('assets/bloom_cosmetics/delight-wings')
+        include('catalog.json', '*.zip')
+    }
     inputs.property "version", project.version
     inputs.property 'minecraft', minecraftVersion
     inputs.property 'java', modern ? 25 : 21

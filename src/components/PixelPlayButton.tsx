@@ -6,7 +6,7 @@ const CELL = 10;
 const EMPTY = "inset(50%)";
 
 /** Only Home's primary launch action uses the pointer-origin pixel reveal. */
-export function PixelPlayButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+export function PixelPlayButton({ disabled, onClick, progress, running = false }: { disabled: boolean; onClick: () => void; progress?: number; running?: boolean }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const fillRef = useRef<HTMLSpanElement>(null);
 
@@ -147,10 +147,16 @@ export function PixelPlayButton({ disabled, onClick }: { disabled: boolean; onCl
     };
   }, []);
 
-  return <button ref={buttonRef} className="spotlight-play pixel-play" disabled={disabled} onClick={onClick}>
-    <span className="pixel-play-content"><Play size={24} fill="currentColor" aria-hidden="true" /><b>Play</b></span>
+  // The Java process starts before Minecraft finishes loading. Keep showing
+  // native launch progress until the launch phase ends, even with a live process.
+  const launching = progress !== undefined;
+  const percent = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress!)) : 0;
+  const label = launching ? "Launching…" : running ? "Running…" : "Play";
+  return <button ref={buttonRef} className={"spotlight-play pixel-play" + (launching || running ? " has-launch-state" : "")} disabled={disabled} onClick={onClick}>
+    <span className="pixel-play-content"><Play size={24} fill="currentColor" aria-hidden="true" /><b>{label}</b></span>
+    {launching && <span className="home-launch-progress" role="progressbar" aria-label="Instance launch progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} style={{ width: percent + "%" }}/>}
     <span ref={fillRef} className="pixel-play-fill" aria-hidden="true">
-      <span className="pixel-play-content"><Play size={24} fill="currentColor" /><b>Play</b></span>
+      <span className="pixel-play-content"><Play size={24} fill="currentColor" /><b>{label}</b></span>
     </span>
   </button>;
 }

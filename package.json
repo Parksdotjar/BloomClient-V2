@@ -31,13 +31,16 @@
     "@zxing/browser": "^0.2.1",
     "animate.css": "^4.1.1",
     "animejs": "^4.5.0",
+    "fflate": "0.8.2",
     "lucide-react": "^1.24.0",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "skinview3d": "^3.4.2"
+    "skinview-utils": "0.7.1",
+    "skinview3d": "^3.4.2",
+    "three": "0.156.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.5.0",

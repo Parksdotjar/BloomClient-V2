@@ -26,6 +26,10 @@ Keep account/keyring names, storage paths, mod IDs, Java namespaces, emote forma
 - Toggle sound is tied to a deliberately requested state change, while native-operation confirmations only follow success. Visual compression respects motion settings independently of audio. No new runtime package, website/backend change or release is involved. See `INTERACTION_FEEDBACK.md` for implementation and test boundaries.
 - Verification passed: 25 focused audio/cadence tests and the real-browser interaction suite (native calls stubbed), including fast/slow scrolling, failed/pending saves, sound previews/mutes, persistence, themes and motion modes. Fixed passive-wheel position timing, OLED slider-thumb token fallback and reduced-motion selector specificity found during these checks. Exact sound quality remains for listening review.
 
+## November 2026 — Wings in Locker
+
+Parks requested that wing cards match the existing Locker cards, with wing and sigil artwork, quick highlight fades, and the signed-in player's skin in the right preview. The new Wings category reuses the equipped highlight and the shared color picker. Color edits update the preview live and save to the account through Equip or Save colors. The updated treatment is ready for review.
+
 ## October 2026 — Free Shop and owned Locker
 
 - Parks requested one main Shop / Locker switch, a large featured cape above a scrolling free catalog, and collecting capes before equipping them from Locker. The suggested inner category sidebar was optional; implementation uses compact Cloaks / Capes / Skins controls inside the collection heading to avoid two main top bars. Existing sidebar and flat action buttons remain unchanged.
@@ -1305,3 +1309,24 @@ Parks then requested red versions of Home Play's ceramic finish for Settings Sig
 Parks expanded the finish to every accent action, naming New folder, New instance, Add Mods/Back, comparison Cancel and Settings Enabled, then identified missed Clear cache/Change and photo buttons. Audited accent-background rules and neutral action rows and consolidated their finish in `ceramic-actions.css`, preserving component behavior and geometry. This supersedes earlier named-controls-only scope; navigation selections, artwork and off toggles retain their own treatment.
 
 Parks rejected the bright, tight bevel on the small options control, requesting darker, duller material, softer corners and a slight hover lift below the rejected brightness. The first softening blurred the inset highlight broadly; he then reported it looked like a rim around the entire button. The revised finish uses a faint upper-left highlight with negative spread, removes the enclosing inner shade and fades compact controls' hover/focus brightness in and out over 200ms, respecting motion preferences. These are corrections and requested implementations, not visual approval.
+
+## November 22, 2026 — sidebar launch row
+
+Parks flagged the floating X and the surrounding overlay in the launching instance row, then rejected the proposed progress bar beneath it. The shared rounded row background now fills left to right with its normal selected color as native progress advances. The name, artwork and trailing Cancel button stay fully visible above the fill. The revised row awaits visual review.
+
+## November 23, 2026 — wing catalog cards
+
+Parks rejected the editor screenshot and equipped check mark on wing cards. Wing cards now use the cape card treatment with a transparent render of only the cosmetic. The detail pane retains the account skin and color controls. This implementation awaits visual review.
+
+Wing card artwork uses a straight-on camera centered on the cosmetic bounds, with equal horizontal margins. Character preview rotation belongs to the detail pane.
+
+Home Play uses a dimmed surface during launch with a left-to-right fill driven by native launch percentage for the selected instance. It reads Running… while that instance is running. The Locker Wings category uses the flight bird icon. This implementation awaits visual review.
+
+Equipped look includes the Wings slot and renders the equipped wing revision with its saved colors and animation. Visible wings take precedence over capes in the character preview, matching the game.
+
+Equipped look passes its loaded skin texture and arm variant directly into the wing preview and starts facing the player, so the wings cannot obscure the skin from the initial rear view. Dragging still rotates the full preview.
+Equipped look wing preview must reserve its explicit preview height. Its absolutely positioned canvas cannot size a flex child with a zero flex basis. The wing preview uses flex none within the detail pane.
+
+## November 23, 2026 — Home Play launch fill correction
+
+Parks reported that Home Play still did not become a loading bar. The desktop accent background was overriding the dim loading surface, making the fill indistinguishable. The native process-start flag also hid the bar during renderer and resource loading. Home Play now keeps native launch percentage visible until the loading phase ends, then shows Running… for its running instance. A browser regression exercises process start before game ready, native percentage widths, cancellation, completion and disabled motion settings. This correction awaits user visual review.

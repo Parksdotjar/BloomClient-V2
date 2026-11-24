@@ -883,7 +883,7 @@
 .launcher-instance-picker .picker-choices button { min-height: 36px; padding: 5px 8px; }
 .launcher-instance-picker .picker-choices img { width: 24px; height: 24px; }
 
-.desktop-instance-link, .dashboard-instance, .home-launch-stack .spotlight-instance-picker { position: relative; }
+.dashboard-instance, .home-launch-stack .spotlight-instance-picker { position: relative; }
 .instance-launch-fill {
   position: absolute;
   inset: 0;
@@ -891,8 +891,42 @@
   pointer-events: none;
   background: color-mix(in srgb, var(--page) 58%, transparent);
 }
-.desktop-instance-link .launch-cancel { position: relative; }
-.desktop-instance-link:not(:hover, :focus-within) .instance-row-action.launch-cancel { opacity: 1; }
+.desktop-instance-link[data-launching] { position: relative; isolation: isolate; }
+.desktop-redesign .desktop-instance-link[data-launching] .instance-nav-name {
+  z-index: 1;
+  background: transparent;
+}
+.desktop-redesign .desktop-instance-link .launch-cancel {
+  align-self: center;
+  height: 27px;
+  width: 24px;
+  color: var(--text);
+}
+.desktop-redesign .desktop-instance-link .launch-cancel:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.desktop-instance-link .instance-launch-progress {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.instance-launch-progress > i {
+  flex: none;
+  background: var(--desktop-selection);
+  transition: width 180ms ease;
+}
+.instance-launch-progress::after {
+  content: "";
+  flex: 1;
+  background: color-mix(in srgb, var(--desktop-selection) 45%, transparent);
+}
+:root[data-animations="off"] .instance-launch-progress > i { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .instance-launch-progress > i { transition: none; }
+}
 .desktop-redesign .downloads-page .cancel-download {
   display: grid;
   place-items: center;
@@ -904,3 +938,4 @@
   color: var(--muted);
 }
 .desktop-redesign .downloads-page .cancel-download:hover:enabled { color: var(--text); background: var(--desktop-selection); }
+.dashboard-instance > button:last-child { position: relative; overflow: hidden; }

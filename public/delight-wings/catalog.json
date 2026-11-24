@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "entries": [
+    {
+      "id": "eclipse-angel-wings",
+      "name": "Eclipse Angel Wings",
+      "defaults": {
+        "left": "#40434b",
+        "right": "#f8f5ed",
+        "trim": "#dfc68d"
+      },
+      "revision": "ae3f5ac43d3026425121a0f5b370c6fbbc0c6d80aef519b0f38009615b38a3b1",
+      "previewRevision": "0b5c0fc90700de1a349a99f724572127e0d1abc3a4a072d978863ccc76920bf0"
+    }
+  ]
+}

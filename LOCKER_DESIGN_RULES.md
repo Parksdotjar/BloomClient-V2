@@ -30,6 +30,10 @@ These rules are specific to Bloom Client's Locker and must be read before changi
 - Reuse existing Bloom controls and interaction behavior; avoid adding non-functional visual objects.
 - Code redemption uses one attached input area under the main platform, with equal visible vertical margins around the field. No introductory tagline above the input. Keep sign-in guidance in the disabled input placeholder and preserve accessible labels. Successful redemption opens the claimed cloak in Locker; reuse the existing bottom notification.
 
+## Wings in Locker and Shop
+
+Wings adds a collection category and a Shop filter using the current Locker layout. Reuse the existing card geometry and equipped highlight. Use the isolated wing and sigil for card art, and keep the hover fade short. The selected wing gets one live preview of the current account's Minecraft skin with Classic or Slim arms, plus separate left, right, and trim controls using the shared color picker. Preview changes are immediate. Equip and Save colors reflect server confirmation.
+
 ## Loading and refresh stability
 
 - Hidden card actions stay fully hidden until hover or keyboard focus, including while disabled for account loading or saving. Disabled opacity must never override the resting reveal state and paint Equip/Unequip over the item name.
@@ -41,3 +45,9 @@ These rules are specific to Bloom Client's Locker and must be read before changi
 ## Rejected treatment
 
 The October 2026 experiment that added a hanger/title lockup, a rail behind cape cards, a circular preview halo, and a fake floor shadow was rejected and fully reverted. Do not recreate or reinterpret that treatment.
+
+- Cosmetic catalog cards across categories use the cape card surface, dimensions, name placement and equipped background. Render only the cosmetic against the shared card background. Keep character previews in the detail pane and omit check-mark badges.
+
+Wing card artwork uses a straight-on camera centered on the cosmetic bounds, with equal horizontal margins. Character preview rotation belongs to the detail pane.
+
+Equipped look includes the Wings slot and renders the equipped wing revision with its saved colors and animation. Visible wings take precedence over capes in the character preview, matching the game.

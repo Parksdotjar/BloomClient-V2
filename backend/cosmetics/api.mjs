@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from
 import { ApiError, requireValue, uuid, validateCape } from './assets.mjs';
 import { SupabaseCosmeticsStore } from './store.mjs';
 import { SqliteCosmeticsStore } from './sqlite-store.mjs';
+import { wingRequest } from './wings.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const assetId = value => { requireValue(typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value), 'invalid_id'); return value; };
@@ -15,7 +16,10 @@ async function readBody(request, limit = 16384) {
   if (Number(request.headers['content-length']) > limit) throw new ApiError(413,'request_too_large');
   const parts = []; let size = 0;
   for await (const part of request) { size += part.length; if (size > limit) throw new ApiError(413,'request_too_large'); parts.push(part); }
-  try { return JSON.parse(Buffer.concat(parts).toString('utf8')); } catch { throw new ApiError(400,'invalid_json'); }
+  let body;
+  try { body=JSON.parse(Buffer.concat(parts).toString('utf8')); } catch { throw new ApiError(400,'invalid_json'); }
+  requireValue(body && typeof body==='object' && !Array.isArray(body),'json_object_required');
+  return body;
 }
 export async function verifyMinecraft(token) {
   const response = await fetch('https://api.minecraftservices.com/minecraft/profile', {
@@ -60,6 +64,10 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
     }
     const player = await identity(request); if (!ownerSet.has(player)) throw new ApiError(403,'owner_required'); limit(`publish:${player}`,12); return player;
   };
+  const wingOwner = async request => {
+    if (!studioOwner || !/^bst_[\w-]{43}$/.test(bearer(request))) throw new ApiError(403,'studio_owner_required');
+    if (await owner(request) !== studioOwner) throw new ApiError(403,'studio_owner_required');
+  };
   const describe = async cape => {
     const r = await store.revision(cape.current_revision);
     if (!r) throw new ApiError(503,'revision_unavailable');
@@ -80,7 +88,7 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
       return { uuid:session.uuid, expiresAt, sessionKey };
     },
     async checkReadiness() { if (enabled) await store.checkReadiness(); }, async handle(request,response,pathname,url) {
-    if (!/^\/v1\/(capes(?:\/|$)|cosmetics(?:\/|$)|admin\/(?:capes|studio)(?:\/|$))/.test(pathname)) return false;
+    if (!/^\/v1\/(capes(?:\/|$)|wings(?:\/|$)|cosmetics(?:\/|$)|admin\/(?:capes|studio)(?:\/|$))/.test(pathname)) return false;
     try {
       if (!enabled) throw new ApiError(503,'cosmetics_not_configured');
       // Do not trust forwarded headers without a deployment-specific proxy allowlist.
@@ -97,6 +105,12 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
         json(response,201,{token,ownerUuid:studioOwner,expiresAt:new Date(until).toISOString()});
       } else if (pathname === '/v1/admin/studio/session' && method === 'GET') {
         const player = await owner(request); json(response,200,{ownerUuid:player,valid:true});
+      } else if (pathname === '/v1/admin/studio/session' && method === 'DELETE') {
+        const token = bearer(request);
+        if (!/^bst_[\w-]{43}$/.test(token)) throw new ApiError(401,'studio_session_required');
+        studioSessions.delete(hash(token)); json(response,200,{ok:true});
+      } else if (pathname.startsWith('/v1/wings/') || pathname.startsWith('/v1/admin/studio/wings')) {
+        await wingRequest(pathname,method,{store,request,url,json,response,owner:wingOwner,identity,readBody,limit});
       } else if (/^\/v1\/capes\/assets\/[^/]+$/.test(pathname) && method === 'GET' && store.leasedAsset) {
         const bytes = await store.leasedAsset(pathname.split('/')[4]);
         response.writeHead(200,{'content-type':'image/png','content-length':bytes.length,'cache-control':'private, no-store','x-content-type-options':'nosniff','access-control-allow-origin':'*','referrer-policy':'no-referrer'});
@@ -149,7 +163,7 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
         await store.equip(player,id); json(response,200,{uuid:player,capeId:id});
       } else if (pathname === '/v1/cosmetics/me' && method === 'GET') {
         const player = await identity(request), p = (await store.players([player]))[0];
-        json(response,200,{uuid:player,capeId:p?.cape_id || null,badgeVisible:p?.badge_visible !== false,canPublish:ownerSet.has(player)});
+        json(response,200,{uuid:player,capeId:p?.cape_id && (!store.canUseCape || await store.canUseCape(player,p.cape_id)) ? p.cape_id : null,badgeVisible:p?.badge_visible !== false,canPublish:ownerSet.has(player)});
       } else if (pathname === '/v1/cosmetics/badge' && method === 'PUT') {
         const player = await identity(request), body = await readBody(request);
         requireValue(typeof body.visible === 'boolean'); await store.badge(player,body.visible);
@@ -162,7 +176,8 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
       } else if (pathname === '/v1/cosmetics/sessions/current' && ['PUT','DELETE'].includes(method)) {
         const token = bearer(request); if (!/^bcs_[\w-]{43}$/.test(token)) throw new ApiError(401,'invalid_game_session');
         const tokenHash = hash(token), session = await store.session(tokenHash);
-        if (!session || Date.parse(session.expires_at) <= now()) throw new ApiError(401,'game_session_expired');
+        const expiresAt=Date.parse(session?.expires_at);
+        if (!session || !Number.isFinite(expiresAt) || expiresAt <= now()) throw new ApiError(401,'game_session_expired');
         limit(`heartbeat:${tokenHash}`,6);
         if (method === 'DELETE') await store.revoke(tokenHash); else await store.heartbeat(tokenHash,new Date(now()).toISOString());
         json(response,200,{ok:true});
