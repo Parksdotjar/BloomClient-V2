@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Locale;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
@@ -21,7 +20,6 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
@@ -30,6 +28,8 @@ import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
 
 public final class BloomBenchmarkClient implements ClientModInitializer {
+    private static BloomBenchmarkClient instance;
+
     private static final String WORLD_FOLDER = "Bloom AutoTune Benchmark";
     private static final long WORLD_SEED = -6202809933377939275L;
     private static final long WARMUP_NANOS = 15_000_000_000L;
@@ -58,11 +58,8 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        instance = this;
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
-        HudElementRegistry.addLast(
-            Identifier.fromNamespaceAndPath("bloom_autotune", "frame_sampler"),
-            (graphics, deltaTracker) -> sampleFrame()
-        );
         ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
             if (screen instanceof TitleScreen && !active) {
                 Screens.getWidgets(screen).add(
@@ -148,6 +145,10 @@ public final class BloomBenchmarkClient implements ClientModInitializer {
                 minecraft.player.sendSystemMessage(Component.translatable("bloom_autotune.message.started"));
             }
         }
+    }
+
+    public static void onFrame() {
+        if (instance != null) instance.sampleFrame();
     }
 
     private void sampleFrame() {
