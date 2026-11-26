@@ -16,7 +16,7 @@ pub(crate) mod drafts;
 pub(crate) mod restore;
 
 const TERMS_VERSION: &str = "1";
-const PRODUCTION: &str = "https://api.north.bloomclient.org/minecraft";
+pub(super) const PRODUCTION: &str = "https://api.north.bloomclient.org/minecraft";
 
 pub(crate) fn sharing_base() -> Result<String, String> {
     Ok(Service::configured()?.base)
