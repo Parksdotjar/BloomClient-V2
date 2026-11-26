@@ -89,7 +89,12 @@ pub fn supported(config: &InstanceConfig) -> bool {
         && VERSIONS.contains(&config.version.as_str())
 }
 pub fn reconcile(config: &InstanceConfig) -> Result<(), String> {
-    if !live() || !supported(config) {
+    // A real-library developer test can keep the installed cosmetics bundle.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("BLOOM_DEV_KEEP_COSMETICS").is_some_and(|value| value == "1") {
+        return Ok(());
+    }
+    if !live() || !supported(config) || workspace_install::uses_published_files(config) {
         return Ok(());
     }
     reconcile_with_preference(config, preferences()?.enabled)
@@ -556,6 +561,33 @@ pub fn is_managed_file(file: &str) -> bool {
     })
 }
 
+pub(super) fn published_bundle(version: &str, file_name: &str) -> Option<&'static [u8]> {
+    if !live() { return None; }
+    let name = file_name.strip_suffix(".disabled").unwrap_or(file_name);
+    let (_, _, bytes, _) = BUNDLES.iter().find(|b| b.0 == version && b.1 == name)?;
+    (!bytes.is_empty()).then_some(*bytes)
+}
+
+pub(super) fn current_bundle_fingerprint(
+    config: &InstanceConfig,
+    file_name: &str,
+    path: &Path,
+    size: u64,
+) -> Option<String> {
+    if !live() || !supported(config) {
+        return None;
+    }
+    let name = file_name.strip_suffix(".disabled").unwrap_or(file_name);
+    let (_, _, bytes, expected) = BUNDLES.iter().find(|(version, file, _, _)| {
+        *version == config.version && *file == name
+    })?;
+    if size != bytes.len() as u64 {
+        return None;
+    }
+    let contents = fs::read(path).ok()?;
+    (digest(&contents) == *expected).then(|| format!("{:x}", sha2::Sha512::digest(&contents)))
+}
+
 pub fn set_file_enabled(
     config: &InstanceConfig,
     file: &str,
@@ -580,6 +612,9 @@ pub fn set_file_enabled(
         return Err("The cape ownership record does not match this file.".into());
     }
     let source = folder.join(file);
+    if enabled && file.ends_with(".disabled") {
+        crate::mod_duplicates::verify_enable(&folder, &source)?;
+    }
     let target = folder.join(if enabled {
         record.file.clone()
     } else {

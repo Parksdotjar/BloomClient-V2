@@ -24,6 +24,7 @@ pub enum FolderChange {
     Create { name: String, instance_ids: Vec<String> },
     Rename { folder_id: String, name: String },
     Move { instance_id: String, folder_id: Option<String> },
+    Reorder { folder_id: String, target_id: String, after: bool },
     Dissolve { folder_id: String },
 }
 
@@ -98,6 +99,16 @@ fn apply(store: &mut Store, change: FolderChange, valid: &HashSet<String>) -> Re
             for folder in &mut store.folders { folder.instance_ids.retain(|id| id != &instance_id); }
             if let Some(id) = folder_id { store.folders.iter_mut().find(|f| f.id == id).unwrap().instance_ids.push(instance_id); }
         }
+        FolderChange::Reorder { folder_id, target_id, after } => {
+            let folders = &mut store.folders;
+            let source = folders.iter().position(|f| f.id == folder_id).ok_or("That folder no longer exists.")?;
+            let target = folders.iter().position(|f| f.id == target_id).ok_or("The destination folder no longer exists.")?;
+            if source != target {
+                let folder = folders.remove(source);
+                let destination = target - usize::from(source < target) + usize::from(after);
+                folders.insert(destination, folder);
+            }
+        }
         FolderChange::Dissolve { folder_id } => {
             if !store.folders.iter().any(|f| f.id == folder_id) { return Err("That folder no longer exists.".into()); }
             store.folders.retain(|f| f.id != folder_id);
@@ -147,6 +158,23 @@ mod tests {
         assert!(s.folders[1].instance_ids.is_empty());
         apply(&mut s, FolderChange::Dissolve { folder_id: a }, &valid()).unwrap();
         assert_eq!(s.folders.len(), 1); assert_eq!(valid().len(), 3);
+    }
+    #[test]
+    fn reorder_moves_intact_groups_in_both_directions_and_rejects_missing_targets() {
+        let mut store = Store::default();
+        let a = create(&mut store, "A", &["two", "one"]);
+        let b = create(&mut store, "B", &[]);
+        let c = create(&mut store, "C", &["three"]);
+        let original = store.folders.clone();
+        let reorder = |id: &str, target: &str, after| FolderChange::Reorder {
+            folder_id: id.into(), target_id: target.into(), after,
+        };
+        apply(&mut store, reorder(&a, &c, true), &valid()).unwrap();
+        assert_eq!(store.folders[2], original[0]);
+        apply(&mut store, reorder(&a, &b, false), &valid()).unwrap();
+        assert_eq!(store.folders, original);
+        assert!(apply(&mut store, reorder(&a, "missing", false), &valid()).is_err());
+        assert_eq!(store.folders, original);
     }
     #[test]
     fn invalid_requests_do_not_remove_membership() {

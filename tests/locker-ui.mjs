@@ -41,7 +41,16 @@ await page.addInitScript(() => {
         if (args.path === "/v1/wings/locker") return { items: [], equipped: null };
         if (args.path === "/v1/capes/shop") return { items: structuredClone(cloaks).map(cape => ({...cape, owned:cape.id !== "cloak-2" || control.claimed})), featuredId:cloaks[0]?.id };
         if (args.path === "/v1/capes/claim") {control.claimed=true;return null;}
-        if (args.path === "/v1/capes/redeem") { await gate("redeem"); if (args.body.code === "expired-fixture") throw new Error("This code expired."); cloaks.push({id: "claimed", name: "Claimed fixture", textureUrl: capeTexture, textureRevision: "1"}); return {id: "claimed", name: "Claimed fixture", alreadyClaimed: false}; }
+        if (args.path === "/v1/capes/redeem") {
+          await gate("redeem");
+          if (args.body.code === "expired-fixture") throw new Error("This code expired.");
+          if (args.body.code === "already-fixture") return { id: "cloak-0", name: "Beta Cape", alreadyClaimed: true };
+          const claimed = args.body.code === "reduced-fixture"
+            ? { id: "reduced", name: "Reduced motion cape" }
+            : { id: "claimed", name: "Claimed fixture" };
+          cloaks.push({ ...claimed, textureUrl: capeTexture, textureRevision: "1" });
+          return { ...claimed, alreadyClaimed: false };
+        }
         if (["/v1/capes", "/v1/capes/locker"].includes(args.path)) { await gate("catalog"); return { items: structuredClone(cloaks) }; }
         if (args.path === "/v1/cosmetics/me") { await gate("me"); return { ...control.me }; }
         if (args.path === "/v1/capes/equipped") { await gate("equip"); control.me.capeId = args.body.capeId; return null; }
@@ -70,7 +79,8 @@ const output = process.env.LOCKER_SCREENSHOTS;
 if (output) await mkdir(output, { recursive: true });
 const shot = async name => { if (output) await page.locator(".locker-workspace").screenshot({ path: `${output}/${name}.png` }); };
 const nav = async name => { await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name, exact: true }).click(); };
-const tab = name => page.getByRole("navigation",{name:"Locker categories"}).getByRole("button", { name, exact: true }).click();
+const lockerTab = name => page.getByRole("navigation",{name:"Locker categories"}).getByRole("button", { name, exact: true });
+const tab = name => lockerTab(name).click();
 const hold = kind => page.evaluate(kind => { window.lockerTest.holds[kind] = true; }, kind);
 const waiting = kind => page.waitForFunction(kind => window.lockerTest.pending[kind]?.length, kind);
 const release = kind => page.evaluate(kind => window.lockerTest.release(kind), kind);
@@ -202,6 +212,11 @@ try {
     await tab(category); await settle();
     assert.ok(await page.locator(".locker-workspace").evaluate(el => el.scrollWidth <= el.clientWidth), `${category} fits the compact viewport`);
   }
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.evaluate(() => {
+    document.documentElement.dataset.animations = "on";
+    document.documentElement.dataset.performance = "normal";
+  });
   await tab("Cloaks"); await settle();
   // Claiming during an equip refresh must settle, reveal its page, and retain confirmed equipment.
   await page.evaluate(() => { for (let i=3;i<12;i++) window.lockerTest.cloaks.push({...window.lockerTest.cloaks[0],id:`extra-${i}`,name:`Extra ${i}`}); });
@@ -221,15 +236,66 @@ try {
   await page.getByRole("textbox",{name:"Enter cape code"}).fill("expired-fixture");
   await page.keyboard.press("Enter");
   await page.getByText("Code expired",{exact:true}).waitFor();
-  await redeem.click();
-  await page.getByRole("textbox", {name:"Enter cape code"}).fill("fixture");
-  await page.getByRole("button", {name:"Claim cape",exact:true}).click();
-  await page.getByText("Redeemed",{exact:true}).waitFor();
+  const celebration = page.locator('.desktop-notification-center[data-face="cosmetic"]');
+  const confetti = page.locator(".desktop-island-confetti");
+  const claim = async code => {
+    await redeem.click();
+    await page.getByRole("textbox", { name: "Enter cape code" }).fill(code);
+    await page.getByRole("button", { name: "Claim cape", exact: true }).click();
+  };
+  assert.equal(await celebration.count(), 0, "An expired code never celebrates");
+  await claim("already-fixture");
+  await shell.getByText("Already claimed", { exact: true }).waitFor();
+  assert.equal(await celebration.count(), 0, "An already-owned cape never celebrates again");
+
+  await tab("Shop");
+  const titleBarBounds = await page.locator(".desktop-titlebar").boundingBox();
+  const workspaceBounds = await page.locator(".app-shell > main").boundingBox();
+  const wearWrites = () => page.evaluate(() => window.lockerTest.calls.filter(call => call.args?.path === "/v1/capes/equipped").length);
+  const beforeEquip = await wearWrites();
+  await claim("fixture");
+  await shell.getByText("Redeemed", { exact: true }).waitFor();
+  await celebration.waitFor();
+  await celebration.getByText("Cosmetic unlocked", { exact: true }).waitFor();
+  assert.equal(await lockerTab("Shop").getAttribute("aria-current"), "page", "Redemption leaves the current Locker section open");
+  assert.deepEqual(await page.locator(".desktop-titlebar").boundingBox(), titleBarBounds);
+  assert.deepEqual(await page.locator(".app-shell > main").boundingBox(), workspaceBounds);
+  await confetti.waitFor({ state: "attached" });
+  assert.equal(await confetti.count(), 1, "A newly claimed cosmetic plays one burst");
+  assert.equal(await confetti.getAttribute("aria-hidden"), "true");
+  assert.equal(await confetti.evaluate(element => getComputedStyle(element).pointerEvents), "none");
+  assert.ok(await confetti.evaluate(element => element.getAnimations({ subtree: true }).some(animation => {
+    const frames = animation.effect.getKeyframes();
+    const first = frames[0];
+    const last = frames.at(-1);
+    return Number(last.opacity) === 0 &&
+      frames.some(frame => Number(frame.opacity) > 0) &&
+      new DOMMatrixReadOnly(last.transform).m42 > new DOMMatrixReadOnly(first.transform).m42;
+  })), "The particles fall and fade with motion enabled");
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('[data-face="cosmetic"] .cape-display canvas');
+    return canvas?.getContext("2d").getImageData(5, 5, 1, 1).data[3] > 0;
+  });
+  await confetti.waitFor({ state: "detached", timeout: 3500 });
+  const equip = celebration.getByRole("button", { name: "Equip Claimed fixture", exact: true });
+  assert.equal(await equip.isVisible(), true, "The Equip shortcut remains available after the burst");
+  assert.equal(await page.getByText("Cape claimed: “Claimed fixture”", { exact: true }).count(), 0, "The island owns the fresh success feedback");
+  await equip.click();
   await page.getByRole("button", {name:"Wear Claimed fixture",exact:true}).waitFor();
+  assert.equal(await lockerTab("Cloaks").getAttribute("aria-current"), "page");
+  assert.equal(await wearWrites(), beforeEquip, "The island opens the cape without equipping it");
   assert.equal(await page.locator(".locker-pagination span").textContent(),"2 / 2");
   await release("equip");
   await settle();
   assert.equal(await page.locator(".locker-detail-copy h2").textContent(),"Claimed fixture");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await tab("Shop");
+  await claim("reduced-fixture");
+  await celebration.waitFor();
+  assert.equal(await confetti.count(), 0, "Reduced motion keeps the face and skips confetti");
+  await celebration.waitFor({ state: "detached", timeout: 8500 });
+  assert.equal(await lockerTab("Shop").getAttribute("aria-current"), "page", "The brief face expires without changing the current section");
+  await tab("Cloaks"); await settle();
   await page.evaluate(()=>{window.lockerTest.cloaks.length=3;});
   await page.getByRole("button", { name: "Refresh cloaks" }).click(); await settle();
   await page.evaluate(() => { window.lockerTest.cloaks[0].name = "Published cape update"; window.dispatchEvent(new Event("focus")); });
@@ -240,6 +306,6 @@ try {
   await page.clock.runFor(15100);
   await page.getByRole("button", { name: "Wear Polling cape update", exact: true }).waitFor();
   assert.deepEqual(errors, []);
-  console.log("Passed Locker interactions: immediate skin, cape and cloak selection, coalesced saves, unequip, skin model changes, imports, redemption and compact layouts. Native calls simulated.");
+  console.log("Passed Locker interactions: immediate equipment selection, coalesced saves, imports, redemption, Cosmetic unlocked confetti and Locker handoff, reduced motion, and compact layouts. Native calls simulated.");
 } catch (error) { await shot("failure"); throw error; }
 finally { await browser.close(); }

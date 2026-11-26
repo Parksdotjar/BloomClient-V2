@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fitFloatingMenu } from "../services/menu-position";
 import { createPortal } from "react-dom";
 import { invoke } from "../services/invoke";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { connectDelightAccount, socialDirectoryChanged } from "../services/connect-delight-account";
 import QRCode from "qrcode";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import {
@@ -457,7 +457,7 @@ function GroupDrawer({ group, friends, me, busy, onClose, onCreate, onAdd, onRem
 }
 
 export type SocialDestination = { friendId?: string; section?: SocialSection };
-export const socialDirectoryChanged = "delight-social-directory-changed";
+export { socialDirectoryChanged };
 
 export function SocialPage({ onNotify, onInstanceImported, destination, sidebarHost }: { sidebarHost: HTMLDivElement | null; onNotify: (message: string, kind?: "error" | "notification") => void; onInstanceImported: (result: ModpackShareImport) => void; destination?: SocialDestination }) {
   const [session, setSession] = useState<SessionState>(emptySession);
@@ -703,28 +703,17 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
   const beginSignIn = async () => {
     setBusy(true);
     try {
-      const start = await invoke<{ authorizationUrl: string }>("social_prepare_sign_in");
-      await openUrl(start.authorizationUrl);
-      const deadline = Date.now() + 5 * 60_000;
-      while (Date.now() < deadline) {
-        await new Promise(resolve => window.setTimeout(resolve, 650));
-        const result = await invoke<SessionState | null>("social_poll_sign_in");
-        if (result) {
-          window.dispatchEvent(new Event(socialDirectoryChanged));
-          setLoading(true);
-          setSnapshot(emptySnapshot);
-          setSelectedFriendId(null);
-          setSelectedGroupId(null);
-          setGroupDrawer(null);
-          setEncryptionOpen(false);
-          setEncryptionDetails(null);
-          lastSyncWarning.current = null;
-          onNotify("Delight account connected.");
-          await hydrate(true);
-          return;
-        }
-      }
-      throw new Error("Sign-in timed out. Try again when you are ready.");
+      await connectDelightAccount();
+      setLoading(true);
+      setSnapshot(emptySnapshot);
+      setSelectedFriendId(null);
+      setSelectedGroupId(null);
+      setGroupDrawer(null);
+      setEncryptionOpen(false);
+      setEncryptionDetails(null);
+      lastSyncWarning.current = null;
+      onNotify("Delight account connected.");
+      await hydrate(true);
     } catch (error) { onNotify(String(error), "error"); }
     finally { setBusy(false); }
   };

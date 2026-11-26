@@ -106,6 +106,12 @@ pub fn read_json<T: DeserializeOwned>(
     serde_json::from_slice(&fs::read(path).ok()?).ok()
 }
 
+pub(super) fn forget_json(namespace: &str, key: &str) {
+    if let Ok(path) = cache_file(namespace, key) {
+        let _ = fs::remove_file(path);
+    }
+}
+
 pub fn write_json<T: Serialize>(namespace: &str, key: &str, value: &T) -> Result<(), String> {
     let path = cache_file(namespace, key)?;
     if let Some(parent) = path.parent() {

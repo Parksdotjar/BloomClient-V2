@@ -3,9 +3,12 @@ import { Ticket } from "lucide-react";
 import { invoke } from "../services/invoke";
 import { LockerInlineAction } from "./LockerInlineAction";
 
-export function CapeRedemption({ accountId, onClaim, onNotify }: {
+export type CosmeticUnlock = { accountId: string; id: string; name: string; textureUrl?: string };
+
+export function CapeRedemption({ accountId, onClaim, onCosmeticUnlock, onNotify }: {
   accountId?: string;
   onClaim: (id: string) => void;
+  onCosmeticUnlock?: (item: CosmeticUnlock) => void;
   onNotify: (message: string, kind?: "success" | "error") => void;
 }) {
   const alive = useRef(true);
@@ -16,7 +19,9 @@ export function CapeRedemption({ accountId, onClaim, onNotify }: {
       const result = await invoke<{id: string; name: string; alreadyClaimed: boolean}>("cosmetics_request", {
         method: "POST", path: "/v1/capes/redeem", body: { code }, accountId,
       });
-      if (alive.current) {
+      if (!result.alreadyClaimed && accountId && onCosmeticUnlock) {
+        onCosmeticUnlock({ accountId, id: result.id, name: result.name });
+      } else if (alive.current) {
         onClaim(result.id);
         onNotify(result.alreadyClaimed ? `“${result.name}” is already in your locker.` : `Cape claimed: “${result.name}”`, "success");
       }

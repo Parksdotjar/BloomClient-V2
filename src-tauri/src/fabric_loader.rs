@@ -3,8 +3,8 @@ use std::io::Read;
 
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub(crate) struct LoaderVersion {
-    version: String,
-    stable: bool,
+    pub(super) version: String,
+    pub(super) stable: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -52,7 +52,7 @@ pub(crate) async fn list_instance_fabric_loaders(instance_id: String) -> Result<
     if !config.loader.eq_ignore_ascii_case("fabric") {
         return Err("This instance does not use Fabric.".into());
     }
-    let current_version = configured(&config).map(str::to_owned).or_else(|| installed(&config));
+    let current_version = current_version(&config);
     let versions = available(&config.version).await?;
     Ok(LoaderOptions { current_version, versions })
 }
@@ -95,6 +95,10 @@ fn configured(config: &InstanceConfig) -> Option<&str> {
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
+}
+
+pub(super) fn current_version(config: &InstanceConfig) -> Option<String> {
+    configured(config).map(str::to_owned).or_else(|| installed(config))
 }
 
 fn logged_version(log: &str, minecraft_version: &str) -> Option<String> {

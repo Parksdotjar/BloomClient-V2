@@ -1,5 +1,51 @@
 # Delight Client Approved Design Patterns
 
+## November 25, 2026 — Updates settings
+
+Parks approved the revised Updates page on November 25, 2026, calling it “INFINITLY BETTER.” Use this page as the reference for grouping each settings action with its status and for left-aligned, actionable instance results.
+
+## November 25, 2026 — Notification Center feed
+
+Parks approved the compact history and the mark-read action beside the bell, with a correction to left-align title and detail text next to the type icon. Preserve the compact timestamp, fine separators and small unread dot in that feed.
+
+## Cosmetic unlock celebration — November 25, 2026
+
+Parks approved the dedicated after-redemption face with the cape artwork and Equip opening the matching item in Locker. He asked for confetti that falls from the island and fades cleanly. The local animation and final spacing await hands-on review.
+
+## Inline launcher update transition — November 25, 2026
+
+Parks approved the transition from **Update available** and inline confirmation into the launch-style progress bar on November 25, 2026. The confirmation and progress use the same centered title-bar row.
+
+## Notification Center and launch pill — November 25, 2026
+
+Parks approved the implemented top-bar bell, compact dropdown, left-expanding fill, fixed percentage, brief **Launched** state and return to the bell. Approved November 25, 2026. He then requested the same fixed anchor for **Update available**, with the text sliding in and the bell swapping to a download arrow. This earlier updater direction preceded the centered inline launcher update.
+
+For the centered island, Parks requested a different geometry. The entire pill grows equally on both sides of the window center. The launch face showed only a track and percentage, with an earlier attached hover extension for **Cancel launch**. Parks subsequently requested that it grow horizontally inside the title bar to fade in a right-side X that turns red on hover. Parks approved the horizontal launch layout on November 25, 2026. This direction supersedes the earlier left-expanding launch layout. Parks rejected the first centered details layout when it pushed the workspace down. The corrected layout kept the bar at its normal height and eased the outlined detail surfaces downward over the workspace. Parks approved that expanded island on November 25, 2026. Its outline enclosed the compact control and remained visible above the bell’s hover and pressed highlights. His later dark pill direction supersedes that perimeter treatment. The stationary workspace rule continues to apply. Parks later requested horizontal-only confirmation and progress for launcher updates.
+
+## Action button treatment — November 25, 2026
+
+Parks asked for **Updating…** on the Mods action as the sole routine progress state. The action now lives behind the instance header’s three-dot menu. The approval applies to the progress treatment. He rejected the separate progress line and standalone dependency action. Verified dependency work flows through **Update all**.
+
+Parks explicitly rejected black-gradient button faces across the whole client, with the two Settings update checks as examples. The current rule is a flat neutral face for secondary actions and colored ceramic for actions such as **Play**. This supersedes the older dark ceramic button directions below. He requested dependency fixes inside the page. The Mods toolbar placement was superseded on November 25 by the direct update action in the instance overflow and the orange issues trigger beside **Add mods**. The new renders await his visual review.
+
+## Draft author layout — November 25, 2026
+
+Parks approved the original large avatar beside the draft title and **By [name]** line after comparing the inline layout. Use the 34 px leading avatar in both the draft row and open review.
+
+## Shared pack preview — November 24, 2026
+
+In the Meadow player-link preview, Parks was happy to keep the instance identity, release facts, creator’s note and installed-file row styling. He requested changes to file navigation, progress placement and the explanatory sentence. The revised interactions await his hands-on review.
+
+## Pack Workspace Overview direction — November 24, 2026
+
+Parks preferred the revised Delight instance layout with its identity header, stable header action and flat tabs. For installed files he explicitly asked to use the ordinary instance row component. He requested plain, count-free section names and subsequently specified Name and Status columns and a ceramic enabled dot. Those last details await visual review. [Current reference gallery](design-references/current-client/index.html)
+
+Parks explicitly chose the existing ceramic workspace action and header placement as the reference for **Create link** on Access. He approved the revised Access dropdown with centered plain labels and the standard chevron.
+
+## Pack Workspace instance switcher — November 24, 2026
+
+Parks approved the inset dropdown after trying it. Each edge sits halfway between the trigger and the wide sidebar edge. The menu overlays the workspace tabs, and a row highlight identifies the selection without a checkmark. Approval covers this switcher.
+
 Parks approved the overall wallpaper and frosted-sidebar treatment on November 22, 2026. He requested a separate correction to the wing hover and the junction of the rail and title strip.
 
 ## Account menu and ceramic controls — requested November 18, 2026

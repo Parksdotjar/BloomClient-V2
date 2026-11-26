@@ -326,7 +326,13 @@
   mask-image: linear-gradient(to bottom, black calc(100% - var(--list-bottom-fade)), transparent 100%);
 }
 .desktop-redesign .content-toolbar .manager-tools { margin-left: auto; }
-.desktop-redesign .instance-content-list-shell .content-icon { width: 42px; height: 42px; border-radius: 7px; }
+.desktop-redesign .instance-workspace {
+  --content-row-art-size: 42px;
+  --content-row-art-gap: 14px;
+  --content-row-start: 5px;
+  --content-row-end: 9px;
+}
+.desktop-redesign .instance-content-list-shell .content-icon { width: var(--content-row-art-size); height: var(--content-row-art-size); border-radius: 7px; }
 .desktop-redesign .desktop-context-links button[aria-current],
 .desktop-redesign .rail-destinations > button[aria-current] {
   background: var(--desktop-selection);
@@ -434,7 +440,7 @@
 .desktop-redesign .content-toolbar-readout > span,
 .desktop-redesign .content-toolbar-action-label { animation: none; font-weight: 400; }
 .desktop-redesign .content-toolbar .content-toolbar-readout { font-size: 14px; }
-.desktop-redesign .instance-content-list-shell .content-detail-hitarea { gap: 14px; padding-block: 5px; }
+.desktop-redesign .instance-content-list-shell .content-detail-hitarea { gap: var(--content-row-art-gap); padding-block: 5px; }
 .desktop-redesign .instance-list-row .content-name b { font-size: 15px; font-weight: 650; }
 .desktop-redesign .instance-list-row .content-name small { color: var(--muted); font-size: 13px; }
 .desktop-redesign .instance-content-list-shell .content-icon { background: var(--desktop-selection); color: var(--muted); }
@@ -463,7 +469,7 @@
 .desktop-redesign .content-toolbar .content-search input::placeholder { font-weight: 400; }
 .desktop-redesign .instance-workspace .instance-list-row {
   min-height: 60px;
-  padding: 3px 9px 3px 5px;
+  padding: 3px var(--content-row-end) 3px var(--content-row-start);
 }
 .desktop-redesign .instance-content-list-shell .content-row-actions {
   gap: 12px;
@@ -502,26 +508,6 @@
 }
 .desktop-redesign .rail-account .profile-popover:not(.open) { display: none; }
 .desktop-redesign .rail-account .profile-popover.open { visibility: visible; pointer-events: auto; }
-.desktop-redesign .rail-update-trigger {
-  display: grid; place-items: center; width: 36px; height: 36px; margin: 0 auto 6px; padding: 0;
-  color: #fff; background: var(--accent); border: 0; border-radius: 8px; cursor: pointer;
-}
-.desktop-redesign .rail-update-trigger:hover { background: color-mix(in srgb, var(--accent) 92%, black); }
-.launcher-update-dialog {
-  position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(410px, calc(100% - 32px));
-  max-height: calc(100% - 32px); overflow: auto; padding: 24px; color: var(--text);
-  background: var(--panel-strong); border: 1px solid var(--desktop-line); border-radius: 12px;
-}
-.launcher-update-dialog::backdrop { background: rgb(0 0 0 / 48%); backdrop-filter: blur(6px); }
-.launcher-update-dialog h2 { margin: 0; font-size: 21px; }
-.launcher-update-dialog p { margin: 12px 0 0; overflow-wrap: anywhere; }
-.launcher-update-dialog .update-versions { margin-top: 5px; color: var(--muted); }
-.launcher-update-dialog .update-notes { margin-top: 20px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 34vh; overflow: auto; }
-.launcher-update-dialog progress { width: 100%; height: 8px; margin-top: 12px; accent-color: var(--accent); }
-.launcher-update-dialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
-.launcher-update-dialog footer button { border: 1px solid var(--desktop-line); background: transparent; color: var(--text); border-radius: 7px; padding: 8px 13px; font: inherit; cursor: pointer; }
-.launcher-update-dialog footer button:last-child { background: var(--accent); color: var(--accent-contrast, #101010); }
-.launcher-update-dialog footer button:hover { border-color: var(--text); }
 
 .app-shell.desktop-redesign:is([data-wide-workspace], [data-desktop-context-collapsed="true"]) { --desktop-context-width: 0px; }
 .app-shell.desktop-redesign:is([data-wide-workspace], [data-desktop-context-collapsed="true"]) > .desktop-context { display: none; }
@@ -629,12 +615,21 @@
   position: fixed;
   z-index: 500;
   inset: 0 0 auto;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   height: var(--desktop-title-height);
   background: var(--desktop-frame);
   color: var(--text);
   user-select: none;
 }
+.desktop-titlebar > :is(.desktop-title-start, .desktop-title-drag, .desktop-title-end) {
+  grid-area: 1 / 1;
+  align-self: start;
+  display: flex;
+  height: var(--desktop-title-height);
+}
+.desktop-title-start { justify-self: start; }
+.desktop-title-end { justify-self: end; }
 .desktop-titlebar button, .desktop-frame-controls {
   display: grid;
   place-items: center;
@@ -647,10 +642,10 @@
   color: inherit;
   background: transparent;
 }
-.desktop-titlebar > .desktop-title-brand { width: var(--desktop-rail-width); }
+.desktop-title-start > .desktop-title-brand { width: var(--desktop-rail-width); }
 .desktop-title-brand img { width: 26px; height: 26px; object-fit: contain; }
 :root[data-theme="light"] .desktop-title-brand img { filter: brightness(0); }
-.desktop-title-drag { flex: 1; display: flex; align-items: center; padding-left: 4px; }
+.desktop-title-drag { margin-inline: var(--desktop-title-start-width, 0px) var(--desktop-title-end-width, 0px); }
 
 .desktop-frame-controls { grid-auto-flow: column; }
 .desktop-frame-control { width: 44px; }
@@ -745,12 +740,15 @@
 .instance-nav-list { display: grid; gap: 2px; }
 .desktop-instance-link { border-radius: 9px; }
 .desktop-instance-link:has(.instance-row-action) { grid-template-columns: minmax(0, 1fr) 28px; }
-.desktop-redesign .instance-nav-name, .desktop-redesign .instance-folder-create {
+.desktop-redesign .instance-nav-name {
   display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 35px;
   padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text);
   text-align: left; font: inherit; font-size: 14px;
 }
-.desktop-redesign .instance-nav-name:is(:hover, :focus-visible, [aria-current="page"]) { background: var(--desktop-selection); }
+.desktop-instance-link:not([data-launching]):is(:hover, :focus-within, :has([aria-current="page"])),
+.folder-section-heading:is(:hover, :focus-within) {
+  background: var(--desktop-selection);
+}
 .desktop-redesign .instance-nav-name { grid-area: 1 / 1; appearance: none; border-radius: inherit; padding-inline-start: 4px; gap: 6px; }
 .desktop-instance-link .instance-row-action { grid-area: 1 / 2; align-self: stretch; height: auto; z-index: 1; }
 .instance-nav-name :is(svg, img), .shot-navigation .shot-instance > :is(svg, img) { flex: none; width: 29px; height: 29px; }
@@ -763,25 +761,8 @@
 .instance-nav-filters label:focus-within { outline: 1px solid var(--muted); }
 .instance-nav-filters input::placeholder { color: var(--muted); }
 .instance-nav-list p { margin: 9px; color: var(--muted); font-size: 13px; }
-.desktop-redesign .instance-nav-heading button:is(:hover, [aria-expanded="true"], [aria-pressed="true"]),
-.desktop-redesign .instance-folder-create:hover { color: var(--text); background: var(--desktop-selection); }
+.desktop-redesign .instance-nav-heading button:is(:hover, [aria-expanded="true"], [aria-pressed="true"]) { color: var(--text); background: var(--desktop-selection); }
 .desktop-redesign .instance-row-action:hover { color: var(--text); }
-.desktop-context .instance-folders-grid, .desktop-context .instance-folder-members {
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; height: auto; padding: 0; overflow: visible;
-}
-.desktop-context .instance-folder-entry { border: 0; border-radius: 5px; background: transparent; }
-.desktop-context .instance-folder-cover { min-height: 38px; flex-flow: row; align-items: center; gap: 7px; padding: 4px 7px; }
-.desktop-context .instance-folder-cover .instance-folder-stack { width: 17px; height: 17px; }
-.desktop-context .instance-folder-stack svg { width: 17px; height: 17px; }
-.desktop-context .instance-folder-title { gap: 0; flex: 1; }
-.desktop-context .instance-folder-title strong { font-size: 13px; font-weight: 600; }
-.desktop-context .instance-folder-title small { font-size: 11px; }
-.desktop-context .instance-folder-chevron { position: static; width: 14px; }
-.desktop-context .instance-folder-tray { border-left: 1px solid var(--desktop-line); margin-left: 9px; padding: 4px 0 7px 5px; }
-.desktop-context .instance-folder-tools { gap: 3px; padding-bottom: 4px; }
-.desktop-context .instance-folder-tools button { font-size: 11px; padding: 4px; }
-.desktop-context .instance-folder-tools > span { display: none; }
-.desktop-context .instance-folder-members .instance-nav-name { padding-inline: 3px; }
 .instance-nav-name[data-folder-drag-handle] { touch-action: none; user-select: none; }
 .library-load-state p { color: var(--muted); }
 .desktop-dashboard { margin: 22px auto; max-width: 1050px; }
@@ -807,7 +788,7 @@
   background: var(--desktop-selection); color: var(--text);
 }
 .desktop-menu-popup {
-  position: absolute; z-index: 1; top: 100%; left: 0; width: max-content; min-width: 168px;
+  position: absolute; z-index: 3; top: 100%; left: 0; width: max-content; min-width: 168px;
   max-height: calc(100vh - var(--desktop-title-height) - 12px); overflow-y: auto; padding: 4px;
   border: 1px solid var(--desktop-line); border-radius: 7px; background: var(--desktop-frame);
   box-shadow: 0 6px 18px var(--theme-shadow);

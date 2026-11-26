@@ -35,6 +35,7 @@
   --theme-overlay: rgb(50 50 50 / .25);
   --theme-success-ink: #17643e;
   --theme-success-surface: #e4f3e9;
+  --theme-success-action: #75cc91;
   --theme-danger-ink: #a3293a;
   --theme-danger-surface: #fbe9ec;
   --theme-on-danger: #ffffff;

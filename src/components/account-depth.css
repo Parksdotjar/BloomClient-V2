@@ -1,31 +1,23 @@
-/* The identity card shares the sidebar's ceramic finish; undo-logout.css applies its darker footer variant. */
+/* The dock uses a flat neutral face. The trigger remains transparent during menu movement. */
 .app-shell > .sidebar > .profile {
   --account-face-top: color-mix(in srgb, var(--panel-strong) 90%, #fff);
-  --account-face-bottom: color-mix(in srgb, var(--panel-strong) 75%, var(--page));
   --account-face-focus: color-mix(in srgb, var(--panel-strong) 82%, #fff);
-  --account-ceramic-edge: var(--theme-highlight, #ffffff0c);
   --account-ceramic-shadow: var(--theme-shadow, #0009);
 }
 :root[data-theme="light"] .app-shell > .sidebar > .profile {
   --account-face-top: #e9e9e9;
-  --account-face-bottom: #d4d4d4;
   --account-face-focus: #f4f4f4;
-  --account-ceramic-edge: #ffffff30;
   --account-ceramic-shadow: #a0a0a044;
 }
 /* Paint on the moving dock only. Its trigger
    must stay transparent so a second surface cannot cover the bevels. */
 .app-shell > .sidebar > .profile > .signed-in {
   border: 0 !important;
-  background: linear-gradient(160deg, var(--account-face-top) 20%, var(--account-face-bottom)) !important;
-  box-shadow: inset 1px 2px 2px var(--account-ceramic-edge),
-    inset -1px -2px 3px var(--theme-shadow-soft, #0003),
-    0 6px 10px var(--account-ceramic-shadow) !important;
+  background: var(--account-face-top) !important;
+  box-shadow: 0 6px 10px var(--account-ceramic-shadow) !important;
 }
 .app-shell > .sidebar > .profile > .signed-in.menu-open {
-  box-shadow: inset 1px 2px 2px var(--account-ceramic-edge),
-    inset -1px -2px 3px var(--theme-shadow-soft, #0003),
-    0 10px 13px -8px var(--theme-shadow, #000f),
+  box-shadow: 0 10px 13px -8px var(--theme-shadow, #000f),
     0 23px 30px -17px var(--theme-shadow, #000d) !important;
 }
 .app-shell > .sidebar > .profile > .signed-in > .profile-trigger {

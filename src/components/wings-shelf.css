@@ -14,6 +14,22 @@
 .wing-color > span { font-weight: 600; }
 .wing-reset { justify-self: start; padding: 4px 0; background: none; border: 0; color: var(--muted); font: inherit; }
 .wing-reset:hover { color: var(--text); }
+.wing-open-locker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 34px;
+}
+.wing-open-locker > svg {
+  position: absolute;
+  inset-inline-end: 12px;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  color: var(--muted);
+  pointer-events: none;
+}
+.wing-open-locker:is(:hover, :focus-visible) > svg { color: var(--text); }
 .wing-actions, .shop-cosmetic-categories { display: flex; gap: 7px; flex-wrap: wrap; }
 .shop-cosmetic-categories { margin-bottom: 13px; }
 .shop-cosmetic-categories button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--control); color: var(--muted); }

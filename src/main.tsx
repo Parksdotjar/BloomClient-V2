@@ -1,4 +1,4 @@
-import { captureAppearance } from "./services/appearance-presets";
+import { captureAppearance, normalizeIslandColor } from "./services/appearance-presets";
 import { KeyboardShortcuts } from "./components/KeyboardShortcuts";
 import { ShortcutContext, binding, shortcuts, chord, recording, shortcutMatches, type Bindings } from "./services/shortcuts";
 import { fitFloatingMenu, type FloatingMenuPosition } from "./services/menu-position";
@@ -13,7 +13,24 @@ import { userError } from "./services/user-error";
 import { AppearancePresets } from "./components/AppearancePresets";
 import { ContentTransferContext, useContentTransfer, useContentTransferController } from "./components/ContentTransfer";
 import { DesktopTitleBar, type DesktopMenu } from "./components/DesktopTitleBar";
+import { useClientNotice } from "./services/client-notice";
+import { PackWorkspaceSidebar, type WorkspacePage } from "./components/PackWorkspace";
+import { useWorkspaceSharing } from "./services/workspace-sharing";
+import { SharedPackOverview } from "./components/SharedPackOverview";
+import { PlayerLinkPage } from "./components/PlayerLinkPage";
+import { PlayerInstallBar } from "./components/PlayerInstallBar";
+import { isWorkspaceInvite, WorkspaceInvitation } from "./components/WorkspaceInvitation";
+import { FollowUpdateContext, hasUpdate, useFollowUpdateChecks, type FollowRepair, type FollowUpdate } from "./services/follow-updates";
 import { InstanceFolders } from "./components/InstanceFolders";
+import { useInstanceFolders, type InstanceFolderCache } from "./services/use-instance-folders";
+import { InstalledContentRow, usePackArtwork, type ContentCategory, type InstanceContentItem } from "./components/InstalledContentRow";
+import { formatBytes } from "./services/format-bytes";
+import { clearInstalledContent, pruneInstalledContent, refreshInstalledContent, useInstalledContent } from "./services/installed-content-cache";
+import { InstanceModMaintenance, ModMaintenanceIssues, ModMaintenanceSettings } from "./components/ModMaintenance";
+import { DuplicateResolutionPage, type DuplicateChoice } from "./components/PackFileReviewPages";
+import { MinecraftModUpdate } from "./components/MinecraftModUpdate";
+import { InstanceContentIssue } from "./components/InstanceContentIssue";
+import { isModAdvisory, isModDuplicateIssue, useModMaintenance, type ModDuplicateReport, type ModMaintenance } from "./services/mod-maintenance";
 import { Server } from "lucide-react";
 import { PortalPage } from "./components/PortalPage";
 import type { PortalEntry, PortalLibrary, PortalTarget } from "./services/portal";
@@ -39,12 +56,14 @@ import { defaultCatalogFilters, catalogFiltersChanged, catalogInstallRestriction
 import { ScreenshotShelf } from "./components/ScreenshotShelf";
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useLayoutEffect,
   useId,
   useRef,
   useState,
+  useContext,
   type CSSProperties,
   type MouseEvent,
   type ReactNode,
@@ -58,6 +77,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update as TauriUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { Resource } from "@tauri-apps/api/core";
+import { launcherUpdateDelay, previewLauncherUpdate, runLauncherUpdate, type LauncherUpdatePhase, type UpdateAttempt } from "./services/launcher-update";
 import { animate } from "animejs";
 import { waapi, type WAAPIAnimation } from "animejs/waapi";
 import {
@@ -70,6 +91,7 @@ import {
   ChevronRight,
   Clipboard,
   Keyboard,
+  Link2,
   Cpu,
   Cuboid,
   Copy,
@@ -100,7 +122,6 @@ import {
   Rocket,
   RotateCw,
   Search,
-  Share2,
   Settings as SettingsIcon,
   Shield,
   SlidersHorizontal,
@@ -131,11 +152,14 @@ import "./components/account-depth.css";
 import "./components/ceramic-actions.css";
 import { PixelPlayButton } from "./components/PixelPlayButton";
 import { useLauncherActivity } from "./services/use-launcher-activity";
+import { useNotificationCenter, type NotificationItem } from "./services/notification-center";
+import { useTitleBarLaunchProgress } from "./services/use-titlebar-launch-progress";
+import { supportsNowPlaying, useNowPlaying } from "./services/now-playing";
 import { monitorBackend } from "./services/backend";
-import { Locker, lockerSections, type LockerSection } from "./components/Locker";
+import { Locker, lockerSections, type CosmeticUnlock, type LockerSection } from "./components/Locker";
+import type { DesktopCosmeticUnlock } from "./components/DesktopCosmeticUnlock";
 import { UtilitiesPage } from "./components/UtilitiesPage";
 import { SocialPage, type SocialDestination } from "./components/SocialPage";
-import { ShareInstanceDialog } from "./components/ShareInstanceDialog";
 import { ModDetailDrawer, type ModDrawerSelection, type ModProjectDetails } from "./components/ModDetailDrawer";
 import { OnboardingFlow, OnboardingSplash } from "./components/OnboardingFlow";
 import "./components/desktop-redesign.css";
@@ -168,13 +192,23 @@ const isSidebarChoice = (value: string): value is SidebarChoice => sidebarChoice
 
 const interfaceFonts = ["Segoe UI", "Arial", "Bahnschrift", "Calibri", "Consolas", "Georgia", "Tahoma", "Trebuchet MS", "Verdana"] as const;
 const defaultColors = {
-  oled: { Background: "#0b0b0b", Foreground: "#ffffff", Sidebar: "#151515", Panel: "#101010" },
-  light: { Background: "#f6f6f6", Foreground: "#1b1b1b", Sidebar: "#e6e6e6", Panel: "#dadada" },
+  oled: { Background: "#0b0b0b", Foreground: "#ffffff", Sidebar: "#151515", Panel: "#101010", Island: "#050505" },
+  light: { Background: "#f6f6f6", Foreground: "#1b1b1b", Sidebar: "#e6e6e6", Panel: "#dadada", Island: "#050505" },
 };
 function paletteKey(mode: keyof typeof defaultColors, part: keyof typeof defaultColors.oled) {
   return `${mode}${part}` as const;
 }
 function validColor(value: string) { return /^#[0-9a-f]{6}$/i.test(value); }
+
+function islandInk(color: string) {
+  const [red, green, blue] = [1, 3, 5].map(index => {
+    const channel = Number.parseInt(color.slice(index, index + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  // Above this luminance, black has stronger contrast than white.
+  return luminance > Math.sqrt(1.05 * 0.05) - 0.05 ? "#000000" : "#ffffff";
+}
 
 export type SettingsState = AccentPreferences & {
   theme: Theme;
@@ -189,12 +223,16 @@ export type SettingsState = AccentPreferences & {
   lightSidebar: string;
   oledPanel: string;
   lightPanel: string;
+  oledIsland: string;
+  lightIsland: string;
   dividerStrength: number;
   animations: boolean;
+  showNowPlaying: boolean;
   buttonPressDuration: number;
   ultraPerformance: boolean;
   tray: boolean;
   updates: boolean;
+  modChecksOnStartup: boolean;
   memory: string;
   java: string;
   closeAfterLaunch: boolean;
@@ -219,7 +257,7 @@ export type SettingsState = AccentPreferences & {
 const defaults: SettingsState = {
   backdrop: backgroundDefaults,
   customAccent: false, lastCustomAccent: "",
-  oledSidebar: "", lightSidebar: "", oledPanel: "", lightPanel: "", dividerStrength: 13,
+  oledSidebar: "", lightSidebar: "", oledPanel: "", lightPanel: "", oledIsland: "", lightIsland: "", dividerStrength: 13,
   theme: "oled",
   oledBackground: "", oledForeground: "", lightBackground: "", lightForeground: "",
   interfaceFont: "Segoe UI",
@@ -227,10 +265,12 @@ const defaults: SettingsState = {
   spacing: "compact",
   accent: "#87a9f3",
   animations: true,
+  showNowPlaying: false,
   buttonPressDuration: 750,
   ultraPerformance: false,
   tray: true,
   updates: true,
+  modChecksOnStartup: true,
   memory: "4096 MB",
   java: "Automatic",
   closeAfterLaunch: false,
@@ -335,20 +375,25 @@ function revealDropdown(menu: HTMLDivElement) {
 }
 
 function useLauncherMenu(open: boolean, close: (value: boolean) => void, trigger: React.RefObject<HTMLButtonElement | null>,
-  menu: React.RefObject<HTMLDivElement | null>, width: number, alignEnd = false, anchor?: { readonly current: HTMLElement | null }, contentKey?: unknown) {
+  menu: React.RefObject<HTMLDivElement | null>, width: number, alignEnd = false, anchor?: { readonly current: HTMLElement | null }, contentKey?: unknown,
+  insetContainerRef?: React.RefObject<HTMLElement | null>) {
   const [position, setPosition] = useState<FloatingMenuPosition>({ left: 0, top: 0, width, maxHeight: 380 });
   useLayoutEffect(() => {
     const panel = menu.current, button = trigger.current;
     if (!open || !panel || !button) return;
     const place = () => {
       const bounds = button.getBoundingClientRect();
-      const wide = Math.max(bounds.width, width);
+      const container = insetContainerRef?.current?.getBoundingClientRect();
+      // Expand halfway into the gutter on each side of the trigger.
+      const wide = container ? (container.width + bounds.width) / 2 : Math.max(bounds.width, width);
       const height = panel.scrollHeight + panel.offsetHeight - panel.clientHeight;
-      setPosition(fitFloatingMenu(anchor?.current?.getBoundingClientRect() || bounds, wide, height, alignEnd ? bounds.right - wide : bounds.left));
+      const left = container ? (container.left + bounds.left) / 2 : alignEnd ? bounds.right - wide : bounds.left;
+      setPosition(fitFloatingMenu(anchor?.current?.getBoundingClientRect() || bounds, wide, height, left));
     };
     place();
     const observer = new ResizeObserver(place);
     observer.observe(button); observer.observe(panel);
+    if (insetContainerRef?.current) observer.observe(insetContainerRef.current);
     const outside = (event: PointerEvent) => { if (!panel.contains(event.target as Node) && !button.contains(event.target as Node)) close(false); };
     const keyboard = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(false); button.focus({ preventScroll: true }); return; }
@@ -369,7 +414,7 @@ function useLauncherMenu(open: boolean, close: (value: boolean) => void, trigger
     window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
     return () => { observer.disconnect(); document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", keyboard);
       window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
-  }, [open, width, alignEnd, anchor, contentKey, close, menu, trigger]);
+  }, [open, width, alignEnd, anchor, contentKey, close, menu, trigger, insetContainerRef]);
   useLayoutEffect(() => { if (open && menu.current) revealDropdown(menu.current); }, [open, menu]);
   return position;
 }
@@ -385,6 +430,8 @@ export function Select({
   ariaLabel,
   menuOwner,
   menuPortalRef,
+  menuWidthRef,
+  showCheckmark = true,
   renderOption,
 
 }: {
@@ -399,12 +446,21 @@ export function Select({
   renderOption?: (option: string) => React.ReactNode;
   menuOwner?: string;
   menuPortalRef?: { readonly current: HTMLElement | null };
+  menuWidthRef?: React.RefObject<HTMLElement | null>;
+  showCheckmark?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
-  const menuPosition = useLauncherMenu(open, setOpen, triggerRef, menuRef, variant === "filter" ? 150 : 116, true, menuAnchorRef, options.length);
+  const focusChoiceOnOpen = useRef(false);
+  const menuPosition = useLauncherMenu(open, setOpen, triggerRef, menuRef, variant === "filter" ? 150 : 116, true, menuAnchorRef, options.length, menuWidthRef);
+  useLayoutEffect(() => {
+    if (!open || !focusChoiceOnOpen.current) return;
+    focusChoiceOnOpen.current = false;
+    const panel = menuRef.current;
+    (panel?.querySelector<HTMLButtonElement>(".chosen:not(:disabled)") ?? panel?.querySelector<HTMLButtonElement>("button:not(:disabled)"))?.focus();
+  }, [open]);
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   return (
     <div className={`select-wrap ${variant === "filter" ? `filter-select ${value !== "All" ? "filtered" : ""}` : ""}`}>
@@ -412,7 +468,13 @@ export function Select({
         type="button"
         ref={triggerRef}
         className="select-trigger"
-        onKeyDown={event => { if (!open && ["ArrowDown", "ArrowUp"].includes(event.key)) { event.preventDefault(); setOpen(true); requestAnimationFrame(() => { const panel = menuRef.current; (panel?.querySelector<HTMLButtonElement>(".chosen:not(:disabled)") ?? panel?.querySelector<HTMLButtonElement>("button:not(:disabled)"))?.focus(); }); } }}
+        onKeyDown={event => {
+          if (open || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          focusChoiceOnOpen.current = true;
+          setOpen(true);
+        }}
         disabled={disabled}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
@@ -435,7 +497,7 @@ export function Select({
               disabled={disabled || disabledOptions.includes(option)}
               aria-pressed={option === value}
               onClick={() => { setOpen(false); triggerRef.current?.focus({ preventScroll: true }); onChange(option); }}
-            ><span>{renderOption ? renderOption(option) : option}</span>{option === value && <Check size={17} aria-hidden="true" />}
+            ><span>{renderOption ? renderOption(option) : option}</span>{showCheckmark && option === value && <Check size={17} aria-hidden="true" />}
             </button>
           ))}
         </div>, menuPortalRef?.current ?? triggerRef.current?.closest("dialog[open]") ?? document.body
@@ -811,6 +873,7 @@ function SettingsPage({
   updateChecking,
   onCheckUpdates,
   onOpenUpdate,
+  modMaintenance,
   accounts,
   switchingAccount,
   onSwitchAccount,
@@ -836,6 +899,7 @@ function SettingsPage({
   updateChecking: boolean;
   onCheckUpdates: () => void;
   onOpenUpdate: () => void;
+  modMaintenance: ReactNode;
   accounts: MinecraftProfile[];
   switchingAccount: boolean;
   onSwitchAccount: (account: MinecraftProfile) => Promise<void>;
@@ -984,12 +1048,12 @@ function SettingsPage({
                     onApply={accent => setSettings({ ...settings, accent, lastCustomAccent: accent })} />}
                 </div>
               </SettingsRow>
-              {(["Background", "Sidebar", "Panel", "Foreground"] as const).map(part => {
+              {(["Background", "Sidebar", "Panel", "Island", "Foreground"] as const).map(part => {
                 const key = paletteKey(resolvedTheme, part);
                 const name = part === "Foreground" ? "Text" : part === "Panel" ? "Context sidebar" : part === "Sidebar" ? "Icon rail" : part;
                 const color = validColor(settings[key]) ? settings[key] : defaultColors[resolvedTheme][part];
-                return <SettingsRow key={part} title={name} description={{ Background: "The workspace background in this color mode.", Sidebar: "The narrow icon rail and title bar.", Panel: "The wider navigation panel beside the icon rail.", Foreground: "The main text color in this mode." }[part]}>
-                  <CustomAccentPicker label={name + " color"} value={color} onApply={value => update(key, value)} />
+                return <SettingsRow key={part} title={name} description={{ Background: "The workspace background in this color mode.", Sidebar: "The narrow icon rail and title bar.", Panel: "The wider navigation panel beside the icon rail.", Island: "The centered top-bar control and its expanded panel.", Foreground: "The main text color in this mode." }[part]}>
+                  <CustomAccentPicker label={name + " color"} value={color} onApply={value => update(key, part === "Island" ? normalizeIslandColor(value) : value)} />
                 </SettingsRow>;
               })}
               <SettingsRow title="Dividers" description="Adjust the visibility of lines between sections and rows.">
@@ -1012,6 +1076,9 @@ function SettingsPage({
               <SettingsRow title="Reduce motion" description="Use fewer animations throughout the launcher.">
                 <Toggle label="Reduce motion" value={!settings.animations} onChange={value => update("animations", !value)} />
               </SettingsRow>
+              {supportsNowPlaying && <SettingsRow title="Show Now Playing" description="Show media from supported Windows apps in the top bar.">
+                <Toggle label="Show Now Playing" value={settings.showNowPlaying} onChange={value => update("showNowPlaying", value)} />
+              </SettingsRow>}
               <details className="appearance-extra"><summary>More appearance options<ChevronDown size={15} /></summary>
               <SettingsRow
                 title="Button Pop Duration"
@@ -1267,23 +1334,28 @@ function SettingsPage({
               {aboutMessage && <p role="alert">{aboutMessage}</p>}
             </div>
           </div>
-          <div className="settings-section" {...section("Updates")}>
-            <SettingsHeading title="Updates" description="Keep Delight Client secure and up to date." />
+          <div className="settings-section updates-settings" {...section("Updates")}>
+            <h2>Updates</h2>
             <div className="settings-card updates-settings-card">
-              <SettingsRow title="Automatic Checks" description="Check GitHub Releases once whenever Delight Client opens.">
-                <Toggle value={settings.updates} onChange={(v) => update("updates", v)} />
-              </SettingsRow>
-              <SettingsRow title="Current Version" description="The version currently installed on this computer.">
-                <span className="current-app-version">v{currentVersion}</span>
-              </SettingsRow>
-              <SettingsRow
-                title={availableVersion ? `Version ${availableVersion} available` : "Update Status"}
-                description={availableVersion ? `Delight can update from v${currentVersion} to v${availableVersion}.` : "Delight automatically checks once whenever the launcher opens."}
-              >
+              <div className="settings-update-overview" data-setting-help="Installed version and launcher update check">
+                <div>
+                  <h3>Delight Client</h3>
+                  <p>v{currentVersion}{availableVersion && <span> · v{availableVersion} available</span>}</p>
+                </div>
                 {availableVersion
-                  ? <button className="settings-update-button available" onClick={onOpenUpdate}><Download size={15} />View update</button>
-                  : <button className="settings-update-button" disabled={updateChecking} onClick={onCheckUpdates}><RotateCw className={updateChecking ? "spinning" : ""} size={15} />{updateChecking ? "Checking…" : "Check for updates"}</button>}
+                  ? <button type="button" className="settings-update-button available" onClick={onOpenUpdate}><Download size={15} aria-hidden="true" />View update</button>
+                  : <button type="button" className="settings-action" disabled={updateChecking} onClick={onCheckUpdates}><RotateCw className={updateChecking ? "spinning" : undefined} size={15} aria-hidden="true" />{updateChecking ? "Checking…" : "Check for updates"}</button>}
+              </div>
+              <SettingsRow title="Automatic launcher checks" description="Check for launcher updates when Delight opens.">
+                <Toggle value={settings.updates} label="Automatic launcher checks" onChange={value => update("updates", value)} />
               </SettingsRow>
+            </div>
+            <h2 className="settings-mods-heading">Mods</h2>
+            <div className="settings-card">
+              <SettingsRow title="Check when Delight opens" description="Check installed mods in every instance in the background.">
+                <Toggle value={settings.modChecksOnStartup} label="Check when Delight opens" onChange={value => update("modChecksOnStartup", value)} />
+              </SettingsRow>
+              {modMaintenance}
             </div>
           </div>
           <div className="settings-section" {...section("My Profile")}>
@@ -1402,12 +1474,14 @@ type Release = { id: string; type: string; url: string };
 function NewInstancePage({
   onCancel,
   onCreated,
+  onPlayerLink,
   defaults: instanceDefaults,
   initialStep,
 }: {
   initialStep: "source" | "file";
   onCancel: () => void;
   onCreated: (destination: "home" | "downloads") => void;
+  onPlayerLink: () => void;
   defaults: SettingsState;
 }) {
   const [draft, setDraft] = useState<InstanceDraft>({
@@ -1546,6 +1620,7 @@ function NewInstancePage({
       <button onClick={() => navigate("scratch")}><Cuboid/><span>Start from scratch</span><ChevronRight/></button>
       <button disabled={!versionReady} onClick={() => navigate("catalog")}><span className="modrinth-brand" aria-hidden="true"/><span>Add from Modrinth</span><ChevronRight/></button>
       <button onClick={() => navigate("file")}><FolderInput/><span>Import from file</span><ChevronRight/></button>
+      <button onClick={onPlayerLink}><Link2/><span>Open player link</span><ChevronRight/></button>
     </section> : step === "file" ? <section className="creation-file-setup"><h2>Choose a modpack file</h2>
       <p>Fabric modpacks in .mrpack or Modrinth .zip format.</p>
       {pack && <div className="creation-file"><PackageOpen size={20}/><span>{pack.path}</span></div>}
@@ -1615,13 +1690,10 @@ function MemoryAmount({ value, onChange }: { value: number; onChange: (value: nu
       setEditing(null);
     }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} /><span>MB</span></label>;
 }
-type InstanceContentItem = { id: string; name: string; version: string; fileName: string; size: number; enabled: boolean; icon?: string | null };
 
 type CatalogItem = { provider: string; projectId: string; slug: string; title: string; summary: string; iconUrl?: string | null; iconSourceUrl?: string | null; author: string; downloads: number; loader: string; gameVersion: string; versionId: string; versionNumber: string; fileName: string; fileSize: number; loaders?: string[]; gameVersions?: string[] };
 type CatalogSearchResult = { items: CatalogItem[]; offset: number; limit: number; total: number };
-const instanceContentMemoryCache = new Map<string, InstanceContentItem[]>();
 const catalogMemoryCache = new Map<string, CatalogSearchResult>();
-const instanceContentCacheKey = (instanceId: string, category: Exclude<InstanceTab, "settings">) => `${instanceId}:${category}`;
 const catalogCacheKey = (category: string, gameVersion: string, query: string, page: number, filters?: CatalogFilters) => `${category}:${gameVersion}:${query.trim().toLowerCase()}:${page}${filters ? `:${JSON.stringify(filters)}` : ""}`;
 function warmCatalogImages(result: CatalogSearchResult) { for (const item of result.items) if (item.iconUrl) { const image = new Image(); image.src = item.iconUrl; } }
 async function waitForCatalogFirstBatch(items: CatalogItem[]) {
@@ -1648,7 +1720,7 @@ function CatalogLoadingState({ label }: { label: string }) {
   </div>;
 }
 function clearTransientClientCaches() {
-  instanceContentMemoryCache.clear();
+  clearInstalledContent();
   catalogMemoryCache.clear();
   window.dispatchEvent(new Event("bloom-clear-transient-caches"));
 }
@@ -1813,7 +1885,7 @@ function ModrinthPackBrowser({ initialVersion, versions, onClose, onImported }: 
     </>}
   </section>;
 }
-type InstanceTab = "mods" | "resourcepacks" | "shaderpacks" | "settings";
+type InstanceTab = ContentCategory | "settings";
 const JVM_PRESETS = {
   Default: "",
   Performance: "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:+DisableExplicitGC -XX:MaxGCPauseMillis=50",
@@ -1825,11 +1897,13 @@ function InstanceContentActions({
   category,
   onDelete,
   onCopy,
+  onRestore,
 }: {
   item: InstanceContentItem;
   category: Exclude<InstanceTab, "settings">;
   onDelete: () => Promise<void>;
   onCopy: () => void;
+  onRestore?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -1841,6 +1915,7 @@ function InstanceContentActions({
     {open && createPortal(
       <div ref={menuRef} role="dialog" aria-label={`Actions for ${item.name}`} className="select-menu select-menu-portal content-actions-menu" style={{ ...closedDropdownStyle, position: "fixed", top: position.top, left: position.left, right: "auto", width: position.width, maxHeight: position.maxHeight }}>
         <button style={{ opacity: 0 }} onClick={() => { setOpen(false); onCopy(); }}><Copy size={14} />Copy to instance…</button>
+        {onRestore && <button style={{ opacity: 0 }} onClick={() => { setOpen(false); onRestore(); }}><RefreshCw size={14} />Restore previous version</button>}
         <button style={{ opacity: 0 }} className="view-modrinth-action" onClick={() => { setOpen(false); void openUrl(`https://modrinth.com/${modrinthSection}?q=${encodeURIComponent(item.name)}`); }}><ExternalLink size={14} />View on Modrinth</button>
         <button style={{ opacity: 0 }} className="delete-content-action" onClick={() => { setOpen(false); void onDelete(); }}><Trash2 size={14} />Delete</button>
       </div>,
@@ -1886,27 +1961,55 @@ function InstanceWorlds({ instanceId, busy, onPlay }: {
   </ul>;
 }
 
-function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "mods", initialCatalog = false, onPopOut, floating, onPlay, onRename, onExport, onShare, onDuplicate, onDelete, onChanged, onInstallContent, onMessage }: { onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; contentTasks: ContentDownload[]; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; onPopOut: () => void; floating: boolean; onPlay: (target?: PortalTarget) => void; onRename: (name: string) => Promise<void>; onExport: () => Promise<void>; onShare: () => void; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
+function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspace, contentTasks, groupRole, busy, initialTab = "mods", initialCatalog = false, onPopOut, floating, onPlay, onRename, onExport, onDuplicate, onDelete, onChanged, onInstallContent, onMessage, maintenance }: { maintenance: ModMaintenance; duplicateTarget?: string; onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; contentTasks: ContentDownload[]; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; workspaceOpen: boolean; onOpenWorkspace: () => void; onPopOut: () => void; floating: boolean; onPlay: (target?: PortalTarget) => void; onRename: (name: string) => Promise<void>; onExport: () => Promise<void>; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
+  const followReview = useContext(FollowUpdateContext)?.reviews[instance.id];
+  const maintenanceEntry = maintenance.entries[instance.id];
+  const maintenanceReport = maintenanceEntry?.report;
+  const applyingMods = maintenance.active === instance.id;
+  const modsQueued = maintenance.queued.includes(instance.id);
+  const [modEnableErrors, setModEnableErrors] = useState<Record<string, string>>({});
+  const [modImport, setModImport] = useState<{ pending?: boolean; error?: string; replacement?: string[] }>({});
+  const [versionReview, setVersionReview] = useState(false);
+  const [updatingVersion, setUpdatingVersion] = useState(false);
+  const modsTabButton = useRef<HTMLButtonElement>(null);
   const contentTransfer = useContentTransfer();
   const [tab, setTab] = useState<InstanceTab>(initialTab);
   const [worldsOpen, setWorldsOpen] = useState(false);
-  const [items, setItems] = useState<InstanceContentItem[]>(() => initialTab === "settings" ? [] : instanceContentMemoryCache.get(instanceContentCacheKey(instance.id, initialTab)) || []);
-  const [contentReady, setContentReady] = useState(() => initialTab === "settings" || instanceContentMemoryCache.has(instanceContentCacheKey(instance.id, initialTab)));
-  const [contentError, setContentError] = useState("");
+  const { items, ready: contentReady, hasInventory, error: contentError, refresh: loadContent } =
+    useInstalledContent(instance, tab === "settings" || workspaceOpen || worldsOpen ? null : tab);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("Name");
   const [filter, setFilter] = useState("All");
-  const [packArtwork, setPackArtwork] = useState<Record<string, string>>({});
-  const artworkKey = tab === "shaderpacks" || tab === "resourcepacks" ? JSON.stringify(items.map(item => [item.fileName, item.size])) : "";
+  const packArtwork = usePackArtwork(instance.id, tab, contentReady ? items : undefined);
+  const [duplicateReport, setDuplicateReport] = useState<ModDuplicateReport>();
+  const [duplicateChoice, setDuplicateChoice] = useState<DuplicateChoice>();
+  const [duplicateWriting, setDuplicateWriting] = useState(false);
+  const duplicateButton = useRef<HTMLButtonElement>(null);
+  const pendingDuplicateFocus = useRef(duplicateTarget);
+  const duplicateInventory = tab === "mods" ? JSON.stringify(items.map(item => [item.fileName, item.size, item.enabled])) : "";
   useEffect(() => {
+    if (tab !== "mods" || !contentReady || workspaceOpen || duplicateChoice) return;
     let current = true;
-    setPackArtwork({});
-    if (contentReady && items.length && (tab === "shaderpacks" || tab === "resourcepacks")) {
-      void invoke<Record<string, string>>("get_pack_artwork", { instanceId: instance.id, category: tab })
-        .then(images => { if (current) setPackArtwork(images ?? {}); }).catch(() => {});
+    const scan = () => void invoke<ModDuplicateReport>("check_mod_duplicates", { instanceId: instance.id, repair: !busy })
+      .catch(() => invoke<ModDuplicateReport>("check_mod_duplicates", { instanceId: instance.id }))
+      .then(report => {
+        if (!current || !report) return;
+        setDuplicateReport(report);
+        if (report.archived || report.conflicts.some(group => group.candidates.some(candidate =>
+          !items.some(item => item.fileName === candidate.fileName)))) void loadContent(true);
+      }).catch(() => {});
+    scan();
+    window.addEventListener("focus", scan);
+    return () => { current = false; window.removeEventListener("focus", scan); };
+  }, [instance.id, tab, contentReady, workspaceOpen, busy, duplicateInventory, duplicateChoice]);
+  useLayoutEffect(() => {
+    const button = duplicateButton.current;
+    if (pendingDuplicateFocus.current && button) {
+      button.scrollIntoView({ block: "nearest" });
+      button.focus({ preventScroll: true });
+      pendingDuplicateFocus.current = undefined;
     }
-    return () => { current = false; };
-  }, [instance.id, tab, artworkKey, contentReady]);
+  });
   const [contentPage, setContentPage] = useState(1);
   const [browsingCatalog, setBrowsingCatalog] = useState(initialCatalog && instance.loader.toLowerCase().includes("fabric"));
   const [catalog, setCatalog] = useState<CatalogSearchResult>({ items: [], offset: 0, limit: 50, total: 0 });
@@ -1946,44 +2049,33 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
   const iconInput = useRef<HTMLInputElement>(null);
   const contentListRef = useRef<HTMLDivElement>(null);
   const instanceMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const returnToActions = useRef(false);
+  useLayoutEffect(() => {
+    if (!workspaceOpen && returnToActions.current) {
+      instanceMenuTriggerRef.current?.focus({ preventScroll: true });
+      returnToActions.current = false;
+    }
+  }, [workspaceOpen]);
   const instanceMenuRef = useRef<HTMLDivElement>(null);
-  const contentLoadSequence = useRef(0);
-  const catalogLoadSequence = useRef(0);
-  const loadContent = async () => {
-    if (tab === "settings") return;
-    const category = tab;
-    const key = instanceContentCacheKey(instance.id, category);
-    const cached = instanceContentMemoryCache.get(key);
-    setContentError("");
-    if (cached) {
-      setItems(cached);
-      setContentReady(true);
-    } else {
-      setContentReady(false);
+  const versionAction = useRef<HTMLButtonElement>(null);
+  const returnToVersionAction = useRef(false);
+  useLayoutEffect(() => {
+    if (!versionReview && returnToVersionAction.current) {
+      versionAction.current?.focus({ preventScroll: true });
+      returnToVersionAction.current = false;
     }
-    const request = ++contentLoadSequence.current;
-    try {
-      const next = await invoke<InstanceContentItem[]>("list_instance_content", { instanceId: instance.id, category });
-      instanceContentMemoryCache.set(key, next);
-      if (request === contentLoadSequence.current) { setItems(next); setContentReady(true); }
-    } catch (error) {
-      if (request !== contentLoadSequence.current) return;
-      setContentReady(true);
-      if (cached?.length) onMessage(String(error), "error");
-      else {
-        setItems([]);
-        setContentError(String(error));
-      }
-    }
+  }, [versionReview]);
+  const closeVersionReview = () => {
+    returnToVersionAction.current = true;
+    setVersionReview(false);
   };
-  useEffect(() => { void loadContent(); const focus = () => { if (!document.hidden) void loadContent(); }; window.addEventListener("focus", focus); return () => window.removeEventListener("focus", focus); }, [tab, instance.id]);
+  const catalogLoadSequence = useRef(0);
   useEffect(() => {
     if (!contentCompletions.length) return;
     setModDrawer(current => {
       const installed = contentCompletions.find(task => task.projectId === current?.projectId);
       return current && installed ? { ...current, installed: true, canInstall: false, installedVersion: installed.version || current.installedVersion } : current;
     });
-    void loadContent();
   }, [instance.id, tab, contentCompletionKey]);
   useEffect(() => { setName(instance.name); setMemory(instance.memory); setJvmArguments(instance.jvmArguments); }, [instance]);
   useEffect(() => { setModDrawer(null); setModDrawerDetails(null); setModDrawerError(""); }, [instance.id, tab, browsingCatalog, catalogFilters, catalogVersion]);
@@ -2041,13 +2133,29 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
     }, search ? 320 : 0);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [browsingCatalog, tab, search, contentPage, instance.version, catalogFilters, catalogVersion, catalogRetry]);
-  const toggleItem = async (item: InstanceContentItem, enabled: boolean) => { try { await invoke("toggle_instance_content", { instanceId: instance.id, category: tab, fileName: item.fileName, enabled }); await loadContent(); } catch (error) { onMessage(String(error), "error"); } };
+  const toggleItem = async (item: InstanceContentItem, enabled: boolean) => {
+    const isMod = tab === "mods";
+    if (isMod) setModEnableErrors(current => {
+      const next = { ...current };
+      delete next[item.fileName];
+      return next;
+    });
+    try {
+      await invoke("toggle_instance_content", { instanceId: instance.id, category: tab, fileName: item.fileName, enabled });
+      if (isMod) void maintenance.check(instance.id, true);
+      await loadContent(true);
+    } catch (error) {
+      if (isMod) setModEnableErrors(current => ({ ...current, [item.fileName]: userError(error) }));
+      else onMessage(String(error), "error");
+    }
+  };
   const deleteItem = async (item: InstanceContentItem) => {
     if (tab === "settings") return;
     try {
       await invoke("delete_instance_content", { instanceId: instance.id, category: tab, fileName: item.fileName });
       onMessage(`${item.name} was deleted.`);
-      await loadContent();
+      if (tab === "mods") void maintenance.check(instance.id, true);
+      await loadContent(true);
     } catch (error) { onMessage(String(error), "error"); }
   };
   const chooseIcon = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { void invoke<InstanceDraft>("set_instance_icon", { instanceId: instance.id, icon: String(reader.result) }).then(onChanged).catch(error => onMessage(String(error), "error")); }; reader.readAsDataURL(file); };
@@ -2117,7 +2225,20 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
       setPendingCatalogItems(current => { const next = new Set(current); next.delete(key); return next; });
     }
   };
-  const visibleItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()) && (filter === "All" || (filter === "Enabled" ? item.enabled : !item.enabled))).sort((a, b) => sort === "Size" ? b.size - a.size : a.name.localeCompare(b.name));
+  const conflictByFile = new Map(duplicateReport?.conflicts.flatMap(group => group.candidates.map(file => [file.fileName, group] as const)));
+  const shownGroups = new Set<string>();
+  const visibleItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()) && (filter === "All" || (filter === "Enabled" ? item.enabled : !item.enabled)))
+    .filter(item => {
+      const group = conflictByFile.get(item.fileName);
+      if (!group) return true;
+      if (shownGroups.has(group.modId)) return false;
+      shownGroups.add(group.modId);
+      return true;
+    }).sort((a, b) => {
+      const first = Number(!!duplicateTarget && conflictByFile.get(b.fileName)?.modId === duplicateTarget) -
+        Number(!!duplicateTarget && conflictByFile.get(a.fileName)?.modId === duplicateTarget);
+      return first || (sort === "Size" ? b.size - a.size : a.name.localeCompare(b.name));
+    });
   const pageCount = Math.max(1, Math.ceil(visibleItems.length / 50));
   const safePage = Math.min(contentPage, pageCount);
   const pagedItems = visibleItems.slice((safePage - 1) * 50, safePage * 50);
@@ -2151,7 +2272,7 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
     const observer = new ResizeObserver(fillViewport);
     observer.observe(list);
     return () => observer.disconnect();
-  }, [tab, worldsOpen, renderedItemCount, totalOnPage, browsingCatalog, catalogLoading, contentReady, contentPage, instance.id, search, filter]);
+  }, [workspaceOpen, tab, worldsOpen, renderedItemCount, totalOnPage, browsingCatalog, catalogLoading, contentReady, contentPage, instance.id, search, filter]);
   const changeCatalogPage = (nextPage: number) => {
     if (tab === "settings") return;
     const cached = catalogMemoryCache.get(catalogCacheKey(tab, catalogGameVersion, search, nextPage, activeCatalogFilters));
@@ -2182,43 +2303,64 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
     if (cached) { setCatalog(cached); setCatalogLoading(false); } else setCatalogLoading(true);
   };
   useEffect(() => {
-    if (tab === "settings") { setDraggingContent(false); return; }
+    if (workspaceOpen || duplicateChoice || applyingMods || updatingVersion || tab === "settings") { setDraggingContent(false); return; }
     const category = tab;
     const itemLabel = tab === "mods" ? "mod" : tab === "resourcepacks" ? "resource pack" : "shader";
-    let unlisten: (() => void) | undefined;
-    void getCurrentWindow().onDragDropEvent((event) => {
+    let active = true;
+    const subscription = getCurrentWindow().onDragDropEvent((event) => {
+      if (!active) return;
       if (event.payload.type === "enter") setDraggingContent(true);
       if (event.payload.type === "leave") setDraggingContent(false);
       if (event.payload.type === "drop") {
         setDraggingContent(false);
         const paths = event.payload.paths;
-        onMessage(`Importing ${paths.length} ${itemLabel}${paths.length === 1 ? "" : "s"}…`);
+        if (category === "mods") setModImport({ pending: true });
+        else onMessage(`Importing ${paths.length} ${itemLabel}${paths.length === 1 ? "" : "s"}…`);
         const importRequest = category === "mods"
           ? invoke<string[]>("import_instance_mod_files", { instanceId: instance.id, paths })
           : invoke<string[]>("import_instance_content_files", { instanceId: instance.id, category, paths });
         void importRequest
-          .then((names) => { setBrowsingCatalog(false); setSearch(""); setContentPage(1); onMessage(`${names.length} ${itemLabel}${names.length === 1 ? "" : "s"} added to ${instance.name}.`); return loadContent(); })
-          .catch((error) => onMessage(String(error), "error"));
+          .then((names) => {
+            setBrowsingCatalog(false); setSearch(""); setContentPage(1);
+            if (category === "mods") {
+              setModImport(names.length ? {} : { error: "Already installed." });
+              void maintenance.check(instance.id, true);
+            } else onMessage(`${names.length} ${itemLabel}${names.length === 1 ? "" : "s"} added to ${instance.name}.`);
+            return refreshInstalledContent(instance, category, true);
+          })
+          .catch(error => {
+            if (category === "mods") {
+              const message = userError(error);
+              setModImport({ error: message, replacement: message.includes("Replace installed mod:") ? paths : undefined });
+            }
+            else onMessage(String(error), "error");
+          });
       }
-    }).then((value) => { unlisten = value; });
-    return () => unlisten?.();
-  }, [tab, instance.id]);
+    });
+    return () => { active = false; void subscription.then(unlisten => unlisten()); };
+  }, [workspaceOpen, duplicateChoice, applyingMods, updatingVersion, tab, instance.id]);
   const contentTabs: Array<[Exclude<InstanceTab, "settings">, string, typeof Puzzle]> = [["mods", "Mods", Puzzle], ["resourcepacks", "Resource packs", Layers3], ["shaderpacks", "Shaders", WandSparkles]];
-  const openContentTab = (nextTab: Exclude<InstanceTab, "settings">) => {
-    const cached = instanceContentMemoryCache.get(instanceContentCacheKey(instance.id, nextTab));
-    setItems(cached || []);
-    setContentReady(Boolean(cached));
-    setTab(nextTab);
-  };
+  if (workspaceOpen) return null;
   return <div className="instance-workspace">
     {draggingContent && <div className="content-drop-overlay" role="status" aria-label={`Drop files into ${categoryLabel}`}><FileDown className="content-drop-symbol" size={58} strokeWidth={1.75} aria-hidden="true" /></div>}
     <div className="desktop-breadcrumb"><Cuboid size={16} />Instances <ChevronRight size={13} /><strong>{instance.name}</strong></div>
-    <section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} strokeWidth={2.4} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1 aria-label={instance.name}><InstanceName name={instance.name} onRename={onRename} disabled={savingSettings} /></h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy} onClick={() => onPlay()}><Play size={17} fill="currentColor" />Play</button><button className="instance-more desktop-open-folder" aria-label="Open instance folder" title="Open instance folder" onClick={() => void invoke("open_instance_folder", { instanceId: instance.id }).catch(error => onMessage(String(error), "error"))}><FolderOpen size={20} /></button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} role="dialog" aria-label={`Actions for ${instance.name}`} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
+<section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} strokeWidth={2.4} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1 aria-label={instance.name}><InstanceName name={instance.name} onRename={onRename} disabled={savingSettings} /></h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy || updatingVersion} onClick={() => onPlay()}>{hasUpdate(followReview) ? <><Download size={17}/>View update</> : <><Play size={17} fill="currentColor"/>Play</>}</button><button className="instance-more desktop-open-folder" aria-label="Open instance folder" title="Open instance folder" onClick={() => void invoke("open_instance_folder", { instanceId: instance.id }).catch(error => onMessage(String(error), "error"))}><FolderOpen size={20} /></button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} role="dialog" aria-label={`Actions for ${instance.name}`} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onPopOut(); }}><ExternalLink size={18} /><span><b>{floating ? "Put away floating controls" : "Pop out Play controls"}</b></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id }); }}><FolderOpen size={18} /><span><b>Open folder</b></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id, category: "mods" }); }}><PackageOpen size={18} /><span><b>Open mods folder</b></span></button>
+      {instance.loader.toLowerCase() === "fabric" && <button type="button" className="instance-menu-action"
+        style={{ opacity: 0 }} disabled={applyingMods || modsQueued || updatingVersion}
+        onClick={() => {
+          setMenuOpen(false);
+          instanceMenuTriggerRef.current?.focus({ preventScroll: true });
+          maintenance.requestUpdate(instance.id);
+        }}><Download size={18} /><span><b>{applyingMods ? "Updating\u2026" : modsQueued ? "Update queued" : "Update all"}</b></span></button>}
       <span className="instance-menu-divider" />
-      <button className="instance-menu-action described" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onShare(); }}><Share2 size={18} /><span><b>Share instance</b></span></button>
+      <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => {
+        returnToActions.current = true;
+        setMenuOpen(false);
+        onOpenWorkspace();
+      }}><PackageOpen size={18} /><span><b>Open Pack Workspace</b></span></button>
       <button className="instance-menu-action described" style={{ opacity: 0 }} disabled={instanceMenuBusy !== null || busy} onClick={() => { setInstanceMenuBusy("duplicate"); void onDuplicate().finally(() => { setInstanceMenuBusy(null); setMenuOpen(false); }); }}><Copy size={18} /><span><b>{instanceMenuBusy === "duplicate" ? "Duplicating…" : "Duplicate instance"}</b></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setWorldsOpen(false); setTab("settings"); setMenuOpen(false); }}><SettingsIcon size={18} /><span><b>Instance settings</b></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} disabled={busy || instanceMenuBusy !== null} onClick={() => { setInstanceMenuBusy("export"); void onExport().catch(() => {}).finally(() => { setInstanceMenuBusy(null); setMenuOpen(false); }); }}><Download size={18} /><span><b>{instanceMenuBusy === "export" ? "Exporting…" : "Export ZIP"}</b></span></button>
@@ -2227,12 +2369,20 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
     </div>, document.body)}</div></div></div>
     <div className="instance-tabbar">
       <div className="instance-content-segments" role="tablist" aria-label="Instance content">
-        {contentTabs.map(([id, label, Icon]) => <button key={id} className={!worldsOpen && tab === id ? "active" : ""} role="tab" data-ask-target={id} aria-selected={!worldsOpen && tab === id} onClick={() => { setWorldsOpen(false); openContentTab(id); }}><Icon size={16} aria-hidden="true" />{label}</button>)}
+        {contentTabs.map(([id, label, Icon]) => <button key={id} ref={id === "mods" ? modsTabButton : undefined} className={!worldsOpen && tab === id ? "active" : ""} role="tab" data-ask-target={id} aria-selected={!worldsOpen && tab === id} onClick={() => { setWorldsOpen(false); setTab(id); }}><Icon size={16} aria-hidden="true" />{label}</button>)}
         <button className={worldsOpen ? "active" : ""} role="tab" aria-selected={worldsOpen} onClick={() => setWorldsOpen(true)}><Globe size={16} aria-hidden="true" />Worlds</button>
         <button className={!worldsOpen && tab === "settings" ? "active" : ""} role="tab" aria-label="Instance settings" aria-selected={!worldsOpen && tab === "settings"} onClick={() => { setWorldsOpen(false); setTab("settings"); }}><SettingsIcon size={16} aria-hidden="true" />Settings</button>
       </div>
     </div></section>
-    {worldsOpen ? <InstanceWorlds instanceId={instance.id} busy={busy} onPlay={onPlay} /> : tab === "settings" ? (
+    {worldsOpen ? <InstanceWorlds instanceId={instance.id} busy={busy} onPlay={onPlay} /> : tab === "settings" && versionReview ? (
+      <MinecraftModUpdate<InstanceDraft> instanceId={instance.id} current={instance.version}
+        busy={busy} Select={Select} onBusy={setUpdatingVersion} onBack={closeVersionReview} onUpdated={updated => {
+          onChanged(updated);
+          closeVersionReview();
+          void refreshInstalledContent(updated, "mods", true);
+          void maintenance.check(updated.id, true);
+        }} />
+    ) : tab === "settings" ? (
       <section className="instance-manager settings-manager instance-preferences">
         <header className="instance-preferences-heading">
           <h2>Instance settings</h2>
@@ -2245,7 +2395,15 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
             <input id="instance-display-name" value={name} onChange={event => setName(event.target.value)} />
             <InfoTip label="Instance name">The name shown in your instance list and on Home.</InfoTip>
           </div>
+          {instance.loader.toLowerCase() === "fabric" && <div className="instance-preference-row">
+            <span className="instance-preference-label">Minecraft version</span>
+            <button ref={versionAction} type="button" className="settings-action" disabled={busy}
+              onClick={() => setVersionReview(true)}>Change version</button>
+          </div>}
           {instance.loader.toLowerCase() === "fabric" && <FabricLoaderSetting instanceId={instance.id} minecraftVersion={instance.version} currentVersion={instance.loaderVersion} value={loaderVersion} onChange={setLoaderVersion} disabled={busy || savingSettings} busy={busy} />}
+          <InstanceModMaintenance entry={maintenanceEntry} disabled={applyingMods}
+            onCheck={() => void maintenance.recheck(instance.id)}
+            onReview={() => { setWorldsOpen(false); setTab("mods"); modsTabButton.current?.focus(); }} />
           <div className="instance-preference-row">
             <div className="instance-preference-label">Memory</div>
             <PercentSlider value={memory} onChange={setMemory} label="Minecraft memory" min={1024} max={16384} step={512} unit=" MB" />
@@ -2265,6 +2423,20 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
           </details>
         </fieldset>
       </section>
+    ) : duplicateChoice && tab === "mods" ? (
+      <div>
+        <button type="button" className="settings-action" disabled={duplicateWriting} onClick={() => {
+          pendingDuplicateFocus.current = duplicateChoice.modId;
+          setDuplicateChoice(undefined);
+        }}>Back to mods</button>
+        <DuplicateResolutionPage instanceMods choice={duplicateChoice} instanceId={instance.id} loader={instance.loader}
+          onBusy={setDuplicateWriting} onResolved={() => {
+            setDuplicateReport(previous => previous && ({ ...previous, conflicts: previous.conflicts.filter(group => group.modId !== duplicateChoice.modId) }));
+            setDuplicateChoice(undefined);
+            void loadContent(true);
+            modsTabButton.current?.focus();
+          }} />
+      </div>
     ) : (
       <section className={`instance-manager ${browsingCatalog ? "catalog-manager" : ""}`}>
         <ContentToolbar key={`${instance.id}:${tab}`} category={categoryLabel}
@@ -2291,7 +2463,31 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
             />
             {search && <button type="button" className="content-search-clear" aria-label="Clear search" title="Clear search" onClick={() => updateContentSearch("")}><CloseIcon size={17} /></button>}
           </div>}
+          installedAction={tab === "mods" ? <ModMaintenanceIssues entry={maintenanceEntry} hasDuplicates={duplicateReport ? duplicateReport.conflicts.length > 0 : undefined}
+            retry={() => void maintenance.recheck(instance.id)} /> : undefined}
           onAdd={openCatalog} onBack={closeCatalog} />
+        {!browsingCatalog && tab === "mods" && <>
+          {(modImport.pending || modImport.error) && <div className="mod-maintenance-notice">
+            {modImport.pending && <p role="status">Importing mods…</p>}
+            {modImport.replacement ? <>
+              <InstanceContentIssue title="Replace installed mod?" details={modImport.error?.replace("Replace installed mod: ", "")} />
+              <button type="button" className="settings-action" onClick={() => setModImport({})}>Keep current</button>
+              <button type="button" className="instance-play ceramic-action" disabled={busy} onClick={() => {
+                const paths = modImport.replacement;
+                setModImport({ pending: true });
+                void invoke("import_instance_mod_files", { instanceId: instance.id, paths, replaceExisting: true }).then(() => {
+                  setModImport({});
+                  void loadContent(true);
+                  void maintenance.check(instance.id, true);
+                }).catch(error => setModImport({ error: userError(error) }));
+              }}>Replace</button>
+            </> : modImport.error && <InstanceContentIssue title={modImport.error === "Already installed." ? modImport.error : "Couldn’t import mods."}
+              details={modImport.error === "Already installed." ? undefined : modImport.error} />}
+          </div>}
+        </>}
+        {!browsingCatalog && contentError && <InstanceContentIssue
+          title={`Couldn’t ${hasInventory ? "refresh" : "load"} installed ${categoryLabel.toLowerCase()}.`}
+          details={contentError} onRetry={() => void loadContent(true)} />}
         {!browsingCatalog && contentReady && visibleItems.length > 0 && <div className="desktop-content-columns" aria-hidden="true"><span>{categoryLabel}</span><span>Enabled</span></div>}
         <div className="instance-content-list-shell">
           <div ref={contentListRef} className="content-list" onScroll={event => revealMoreContent(event.currentTarget)}>
@@ -2308,29 +2504,43 @@ function InstancePage({ instance, contentTasks, groupRole, busy, initialTab = "m
                 {activeCatalogFilters && <button onClick={resetCatalogFilters}>Reset filters</button>}
               </>}
             />
-          ) : !contentReady ? <CatalogLoadingState label={`Loading ${categoryLabel.toLowerCase()}`} /> : contentError ? <ContentEmptyState
-            title={`Couldn’t load ${categoryLabel.toLowerCase()}.`} description={contentError}
-            actions={<button onClick={() => void loadContent()}>Try again</button>}
-          /> : visibleItems.length ? renderedInstalledItems.map(item => <div className="content-item installed-content-item instance-list-row" key={item.id}>
-            <button type="button" className="content-detail-hitarea" draggable={false} onDragStart={event => event.preventDefault()} onPointerDown={event => contentTransfer.start(event, { ...item, sourceId: instance.id, category: tab })} onClick={() => { if (tab === "mods") showInstalledModDetails(item); }} aria-label={tab === "mods" ? `Open details for ${item.name}` : `${item.name}; drag to another instance to copy`}>
-            <span className="content-icon"><CatalogArtwork source={packArtwork[item.fileName]} embedded={item.icon}
-              fallback={tab === "mods" ? <Puzzle size={22} /> : tab === "shaderpacks" ? <Cuboid size={22} /> : <PackageOpen size={22} />} /></span>
-            <div className="content-name">
-              <b>{item.name}</b>
-              <small className="content-metadata">
-                <span>{item.version || item.fileName}</span>
-                <i aria-hidden="true" />
-                <span>{tab === "mods" ? instance.loader : tab === "resourcepacks" ? "Minecraft" : "Shader"}</span>
-                <i aria-hidden="true" />
-                <span>{formatBytes(item.size)}</span>
-              </small>
-            </div>
-            </button>
-            <div className="content-row-actions">
-              <Toggle value={item.enabled} onChange={value => void toggleItem(item, value)} />
-              <InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} onCopy={() => contentTransfer.choose({ ...item, sourceId: instance.id, category: tab })} />
-            </div>
-          </div>) : items.length ? <ContentEmptyState
+          ) : !contentReady ? <CatalogLoadingState label={`Loading ${categoryLabel.toLowerCase()}`} /> : contentError && !hasInventory ? null : visibleItems.length ? renderedInstalledItems.map(item => {
+            const conflict = tab === "mods" ? conflictByFile.get(item.fileName) : undefined;
+            if (conflict) return <InstalledContentRow key={conflict.modId} category="mods" loader={instance.loader}
+              item={{ ...item, version: "Multiple versions" }}>
+              <span className="content-status-dot" data-status="warning" role="img" aria-label="Needs attention" />
+              <button ref={conflict.modId === (pendingDuplicateFocus.current ?? duplicateTarget) ? duplicateButton : undefined}
+                type="button" className="settings-action pack-resolve-action" aria-label={`Choose version for ${item.name}`}
+                onClick={() => setDuplicateChoice({ modId: conflict.modId, candidates: conflict.candidates.map(candidate => ({
+                  version: "", size: 0, ...items.find(installed => installed.fileName === candidate.fileName), ...candidate,
+                  name: conflict.name || item.name, category: "mods",
+                })) })}>Choose version</button>
+            </InstalledContentRow>;
+            const update = tab === "mods" ? maintenanceReport?.updates.find(candidate => candidate.fileName === item.fileName) : undefined;
+            return <InstalledContentRow key={item.id}
+            item={item} category={tab} loader={instance.loader} artwork={packArtwork[item.fileName]}
+            note={tab === "mods" ? <>
+              {update && <span className="pack-file-source">Update available · {update.toVersion}</span>}
+              {modEnableErrors[item.fileName] && <span className="pack-file-issue" role="alert"><CircleAlert size={14} aria-hidden="true" />{modEnableErrors[item.fileName]}</span>}
+              {maintenanceReport?.issues.filter(issue => issue.fileName === item.fileName && !isModDuplicateIssue(issue)).map(issue =>
+                isModAdvisory(issue)
+                  ? <span key={issue.message} className="pack-file-source">{issue.kind === "update" && !issue.message.startsWith("Update to ") ? "Update skipped \u00b7 " : ""}{issue.message}</span>
+                  : <span key={issue.message} className="pack-file-issue"><CircleAlert size={14} aria-hidden="true" />{issue.message}</span>)}
+            </> : undefined}
+            interaction={{
+              "aria-label": tab === "mods" ? `Open details for ${item.name}` : `${item.name}; drag to another instance to copy`,
+              onPointerDown: event => contentTransfer.start(event, { ...item, sourceId: instance.id, category: tab }),
+              onClick: () => { if (tab === "mods") showInstalledModDetails(item); },
+            }}>
+            <Toggle value={item.enabled} disabled={tab === "mods" && applyingMods} label={item.enabled ? `Disable ${item.name}` : `Enable ${item.name}`} onChange={value => void toggleItem(item, value)} />
+            <InstanceContentActions item={item} category={tab} onDelete={() => deleteItem(item)} onCopy={() => contentTransfer.choose({ ...item, sourceId: instance.id, category: tab })}
+              onRestore={tab === "mods" && !busy && duplicateReport?.restorableFiles?.includes(item.fileName) ? () => {
+                void invoke<ModDuplicateReport>("restore_previous_mod_version", { instanceId: instance.id, fileName: item.fileName })
+                  .then(report => { setDuplicateReport(report); void loadContent(true); })
+                  .catch(error => onMessage(userError(error), "error"));
+              } : undefined} />
+          </InstalledContentRow>;
+          }) : items.length ? <ContentEmptyState
             title={search ? `No ${categoryLabel.toLowerCase()} match “${search}”.` : `No ${filter.toLowerCase()} ${categoryLabel.toLowerCase()}.`}
             actions={<>
               {search && <button onClick={() => updateContentSearch("")}>Clear search</button>}
@@ -2448,7 +2658,6 @@ function DownloadArtwork({ source, progress }: { source: string; progress?: numb
   return <span className={`download-artwork ${progress === undefined ? "" : "download-artwork-progress"}`} aria-hidden="true"><img src={image} alt="" />{progress !== undefined && <img className="download-artwork-fill" src={image} alt="" style={{ clipPath: `inset(${100 - percent}% 0 0)` }} />}</span>;
 }
 
-const formatBytes = (bytes = 0) => bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
 
 type InstanceLibraryDestination = "view" | "add-mods" | InstanceTab;
 
@@ -2464,22 +2673,20 @@ function LaunchFill({ activity, instanceId }: { activity: DownloadViewState; ins
     style={{ clipPath: `inset(0 0 0 ${progress}%)` }} />;
 }
 
-function InstanceSidebar({ instances, selectedId, activity, onCancelLaunch, transferring, onCreate, onOpen }: {
-  instances: InstanceDraft[]; selectedId?: string; activity: DownloadViewState; onCancelLaunch: () => void; transferring: boolean;
+function InstanceSidebar({ folderCache, instances, selectedId, activity, onCancelLaunch, transferring, onCreate, onOpen }: {
+  folderCache: InstanceFolderCache; instances: InstanceDraft[]; selectedId?: string; activity: DownloadViewState; onCancelLaunch: () => void; transferring: boolean;
   onCreate: () => void; onOpen: (instance: InstanceDraft) => void;
 }) {
   const filterTrigger = useRef<HTMLButtonElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [organizing, setOrganizing] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [query, setQuery] = useState("");
   const [loader, setLoader] = useState("All");
-  const filtered = instances.filter(item => (loader === "All" || item.loader === loader) && item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const grouped = organizing && !transferring;
   const row = (item: InstanceDraft, organize?: () => void) => {
     const progress = instanceLaunchProgress(activity, item.id);
     return <div key={item.id} className="desktop-instance-link" data-launching={progress !== null || undefined} data-content-drop-id={item.id} data-content-drop-name={item.name}>
-      <button className="instance-nav-name" data-folder-drag-handle={grouped || undefined} title={item.name} aria-current={selectedId === item.id ? "page" : undefined}
+      <button className="instance-nav-name" data-folder-drag-handle={!transferring || undefined} title={item.name} aria-current={selectedId === item.id ? "page" : undefined}
+        onContextMenu={organize && (event => { event.preventDefault(); organize(); })}
         onClick={() => onOpen(item)}>
         {item.icon ? <img src={item.icon} alt="" draggable={false} /> : <Cuboid size={17} />}<span>{item.name}</span>
       </button>
@@ -2488,7 +2695,7 @@ function InstanceSidebar({ instances, selectedId, activity, onCancelLaunch, tran
         <span className="instance-launch-progress" role="progressbar" aria-label="Launching Minecraft" aria-valuenow={progress}>
           <i style={{ width: `${progress}%` }} />
         </span>
-      </> : organize ? <button className="instance-row-action" aria-label={`Move ${item.name} to folder`} title="Move to folder" onClick={organize}><FolderInput size={15} /></button> : null}
+      </> : null}
     </div>;
   };
   return <section className="instance-navigation" aria-label="Instance library" data-ask-target="instances">
@@ -2496,20 +2703,16 @@ function InstanceSidebar({ instances, selectedId, activity, onCancelLaunch, tran
     <div className="instance-nav-heading">
       <h2>Instances</h2>
       <button ref={filterTrigger} aria-label="Filter instances" title="Filter instances" aria-haspopup="menu" aria-controls={filterOpen ? "instance-library-filters" : undefined} aria-expanded={filterOpen} data-filtered={Boolean(query || loader !== "All")} onClick={() => setFilterOpen(value => !value)}><SlidersHorizontal size={15} /></button>
-      <button aria-label="Organize folders" title="Organize folders" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}><FolderOpen size={15} /></button>
+      <button aria-label="New folder" title="New folder" disabled={transferring} onClick={() => setCreatingFolder(true)}><FolderPlus size={15} /></button>
     </div>
     {filterOpen && <FilterMenu anchor={filterTrigger} id="instance-library-filters" title="Filter instances" onClose={() => setFilterOpen(false)}><div className="instance-nav-filters">
       <label><Search size={15} /><input autoFocus aria-label="Search instances" placeholder="Search instances…" value={query} onChange={event => setQuery(event.target.value)} /></label>
       <FilterSection label="Mod loader" value={loader} options={["All", ...new Set(instances.map(item => item.loader))]} onChange={setLoader} />
       <FilterReset disabled={!query && loader === "All"} onReset={() => { setQuery(""); setLoader("All"); }} />
     </div></FilterMenu>}
-    {grouped ? <>
-      <button className="instance-folder-create" onClick={() => setCreatingFolder(true)}><FolderPlus size={16} />New folder</button>
-      <InstanceFolders instances={instances} query={query} loader={loader} createOpen={creatingFolder} onCloseCreate={() => setCreatingFolder(false)} renderInstance={row} />
-    </> : <div className="instance-nav-list" role="navigation" aria-label="Your instances">
-      {(transferring ? instances : filtered).map(item => row(item))}
-      {instances.length > 0 && !filtered.length && !transferring && <p>No matching instances</p>}
-    </div>}
+    {transferring ? <div className="instance-nav-list" role="navigation" aria-label="Your instances">
+      {instances.map(item => row(item))}
+    </div> : <InstanceFolders cache={folderCache} instances={instances} query={query} loader={loader} createOpen={creatingFolder} onCloseCreate={() => setCreatingFolder(false)} renderInstance={row} />}
   </section>;
 }
 
@@ -2581,7 +2784,7 @@ function DownloadsPage({ section, download, contentTasks, onCancelContent, onDis
       </>}
       {section === "Queued" && (queuedContent.length ? queuedContent.map(({ task, position }) => contentRow(task, position)) : <p className="downloads-list-empty" role="status">{isFiltered ? "No matching queued downloads" : "The queue is empty."}</p>)}
       {section === "Completed" && <DownloadHistory items={history} filtered={isFiltered} motion={motion} onClear={() => onClear(history.map(item => item.id))} renderItem={item => <div className="download-task completed-task">
-        <span className={`download-task-icon ${item.iconUrl ? "has-artwork" : ""}`}>{item.iconUrl ? <DownloadArtwork source={item.iconUrl} /> : (!item.kind || item.kind === "game") ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : item.kind === "mod" ? <Puzzle size={22} /> : item.kind === "resourcepack" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="download-task-main"><b>{item.name}</b><small>{item.kind && item.kind !== "game" ? `${item.version} • Installed to ${item.targetName}` : `${item.version} • ${item.loader || "Vanilla"}`}</small></div><span className="completed-time">Completed {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-Math.max(1, Math.round((Date.now() - item.completedAt) / 60000)), "minute")}</span><button type="button" className="remove-history" aria-label={`Remove ${item.name} from history`} title="Remove from history" onClick={() => onClear([item.id])}><Trash2 size={17}/></button>
+        <span className={`download-task-icon ${item.iconUrl ? "has-artwork" : ""}`}>{item.iconUrl ? <DownloadArtwork source={item.iconUrl} /> : (!item.kind || item.kind === "game") ? <b className="instance-icon-fallback" aria-hidden="true">?</b> : item.kind === "mod" ? <Puzzle size={22} /> : item.kind === "resourcepack" ? <PackageOpen size={22} /> : <Cuboid size={22} />}</span><div className="download-task-main"><b>{item.name}</b><small>{item.kind && item.kind !== "game" ? `${item.version ? item.version + " • " : ""}Installed to ${item.targetName}` : `${item.version} • ${item.loader || "Vanilla"}`}</small></div><span className="completed-time">Completed {new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(-Math.max(1, Math.round((Date.now() - item.completedAt) / 60000)), "minute")}</span><button type="button" className="remove-history" aria-label={`Remove ${item.name} from history`} title="Remove from history" onClick={() => onClear([item.id])}><Trash2 size={17}/></button>
       </div>} />}
     </div>
   </div>;
@@ -2691,26 +2894,49 @@ export function App() {
   }, [instances, playedIds]);
   const [packMemberships, setPackMemberships] = useState<Map<string, PackChannelRole>>(() => new Map());
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
-  const [shareInstance, setShareInstance] = useState<InstanceDraft | null>(null);
+  // Browsing another pack leaves the entry instance and its active tab mounted.
+  const [workspaceInstanceId, setWorkspaceInstanceId] = useState<string | null>(null);
+  const [workspacePage, setWorkspacePage] = useState<WorkspacePage>("overview");
   const [floatingInstanceId, setFloatingInstanceId] = useState<string | null>(null);
   const [instanceNavigationKey, setInstanceNavigationKey] = useState(0);
+  const [duplicateDestination, setDuplicateDestination] = useState<{ instanceId: string; modId: string }>();
   const [alulaSidebar, setAlulaSidebar] = useState<HTMLDivElement | null>(null);
   const [socialSidebar, setSocialSidebar] = useState<HTMLDivElement | null>(null);
   const [socialDestination, setSocialDestination] = useState<SocialDestination>();
   const [instanceDestination, setInstanceDestination] = useState<InstanceLibraryDestination>("view");
   const [libraryState, setLibraryState] = useState<"loading" | "ready" | "error">("loading");
+  const folderLibraryKey = useMemo(() => JSON.stringify(instances.map(instance => instance.id).sort()), [instances]);
+  const folderCache = useInstanceFolders(libraryState === "ready" ? folderLibraryKey : null);
   const [libraryError, setLibraryError] = useState("");
   const instanceRoute = requestedPage === "instances" || requestedPage === "instance";
   const selectedInstance = instances.find(item => item.id === selectedInstanceId) ?? instances[0];
   const page = instanceRoute
     ? selectedInstance ? "instance" : libraryState === "ready" ? "new-instance" : "instances"
     : requestedPage;
-  const [creationEntry, setCreationEntry] = useState({ step: "source" as "source" | "file", revision: 0 });
+  const workspaceInstance = page === "instance" && workspaceInstanceId !== null
+    ? instances.find(instance => instance.id === workspaceInstanceId) ?? selectedInstance
+    : undefined;
+  const sharing = useWorkspaceSharing(workspaceInstance?.id);
+  const activeWorkspacePage = sharing.channel !== undefined && !sharing.destinations.includes(workspacePage) ? "overview" : workspacePage;
+  useEffect(() => {
+    if (activeWorkspacePage !== workspacePage) setWorkspacePage(activeWorkspacePage);
+  }, [activeWorkspacePage, workspacePage]);
+  const [creationEntry, setCreationEntry] = useState({ step: "source" as "source" | "file" | "player-link" | "invite", link: "", revision: 0 });
+  const [inboundLink, setInboundLink] = useState("");
+  const [installingPlayerLink, setInstallingPlayerLink] = useState<string | null>(null);
+  const playerInstalling = installingPlayerLink !== null;
+  const [playAfterReview, setPlayAfterReview] = useState<{id: string; target?: PortalTarget} | null>(null);
+  const applyingUpdate = useRef(false);
+  useEffect(() => {
+    if (playAfterReview && (workspaceInstanceId !== playAfterReview.id || workspacePage !== "releases")) setPlayAfterReview(null);
+  }, [playAfterReview, workspaceInstanceId, workspacePage]);
   const [alulaOrigin, setAlulaOrigin] = useState<AppPage>("home");
-  const setPage = (next: AppPage, entry: "source" | "file" = "source") => {
+  const setPage = (next: AppPage, entry: typeof creationEntry.step = "source", link = "") => {
+    setPlayAfterReview(null);
+    setWorkspaceInstanceId(null);
     if (next === "alula" && page !== "alula") setAlulaOrigin(page);
     if (next === "new-instance" || next === "instances") {
-      setCreationEntry(previous => ({ step: entry, revision: previous.revision + 1 }));
+      setCreationEntry(previous => ({ step: entry, link, revision: previous.revision + 1 }));
     }
     if (next === "instances") {
       setInstanceNavigationKey(value => value + 1);
@@ -2720,9 +2946,25 @@ export function App() {
     navigate(next);
   };
   useEffect(() => {
+    let current = true;
+    let draining = Promise.resolve();
+    const drain = () => {
+      // Register the listener first so activations during startup are also delivered.
+      draining = draining.then(async () => {
+        if (!current) return;
+        const links = await invoke<string[]>("take_workspace_player_links");
+        if (current && links?.length) setInboundLink(links[links.length - 1]);
+      }).catch(() => {});
+    };
+    const subscription = listen("workspace-player-link", drain);
+    void subscription.then(drain, drain);
+    return () => { current = false; void subscription.then(stop => stop()).catch(() => {}); };
+  }, []);
+  useEffect(() => {
     if (instanceRoute && selectedInstance && selectedInstance.id !== selectedInstanceId) setSelectedInstanceId(selectedInstance.id);
   }, [instanceRoute, selectedInstance, selectedInstanceId]);
   const workspace = useRef<HTMLElement>(null);
+  const contextSidebar = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     const main = workspace.current;
     if (!main) return;
@@ -2731,7 +2973,7 @@ export function App() {
       const transition = waapi.animate(main, { opacity: [0.86, 1], duration: 120, ease: "outQuad" });
       return () => { transition.cancel(); };
     }
-  }, [page, selectedInstance?.id]);
+  }, [page, selectedInstance?.id, workspaceInstance?.id, activeWorkspacePage]);
   const instanceOpenTimers = useRef(new Map<string, number>());
   const [spotlightInstanceId, setSpotlightInstanceId] = useState<string | null>(() => localStorage.getItem("bloom-spotlight-instance"));
   const [gameDownload, setDownload] = useState<DownloadViewState>({
@@ -2747,6 +2989,7 @@ export function App() {
   const [ringProgress, setRingProgress] = useState(0);
   const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
   const [gameRunning, setGameRunning] = useState(false);
+  const titleBarLaunch = useTitleBarLaunchProgress();
   const launchRequestPending = useRef(false);
   const [toast, setToast] = useState("");
   const toolToastTimer = useRef<number | undefined>(undefined);
@@ -2762,15 +3005,19 @@ export function App() {
   const [availableUpdate, setAvailableUpdate] = useState<TauriUpdate | null>(null);
   const [currentVersion, setCurrentVersion] = useState(bundledVersion);
   const [updateChecking, setUpdateChecking] = useState(false);
-  const [updatePanelOpen, setUpdatePanelOpen] = useState(false);
-  const [updatePhase, setUpdatePhase] = useState<"ready" | "downloading" | "installing" | "error">("ready");
+  const [updateVerified, setUpdateVerified] = useState(false);
+  const [notificationRequest, setNotificationRequest] = useState(0);
+  const [updateRequest, setUpdateRequest] = useState(0);
+  const openUpdateConfirmation = () => setUpdateRequest(request => request + 1);
+  const [updatePhase, setUpdatePhase] = useState<LauncherUpdatePhase>("ready");
+  const updateBusy = updatePhase === "downloading" || updatePhase === "installing" || updatePhase === "restarting";
   const [updateProgress, setUpdateProgress] = useState<number | undefined>(undefined);
   const [updateError, setUpdateError] = useState("");
   const [mockUpdateActive, setMockUpdateActive] = useState(false);
   const updateCheckStarted = useRef(false);
-  const updateDialog = useRef<HTMLDialogElement>(null);
-  const mockUpdateInterval = useRef<number | null>(null);
-  const mockInstallTimer = useRef<number | null>(null);
+  const updateCheck = useRef<Promise<TauriUpdate | null> | undefined>(undefined);
+  const updateInFlight = useRef(false);
+  const updateAttempt = useRef<UpdateAttempt>({ stage: "ready" });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [crashPreview, setCrashPreview] = useState<{ initial: string; context: AlulaContext }>();
   const failure = logs.filter(entry => entry.stream === "launcher" && /-(launch-error|invoke-error)$/.test(entry.id)).at(-1);
@@ -2799,6 +3046,12 @@ export function App() {
     localStorage.getItem(ONBOARDING_COMPLETE_STORAGE_KEY) === "complete"
       || Boolean(localStorage.getItem("bloom-profile")),
   );
+  useEffect(() => {
+    if (!accountHydrated || onboardingOpen || playerInstalling || !inboundLink) return;
+    // Like opening a file, the most recently activated link is the foreground preview.
+    setPage("new-instance", isWorkspaceInvite(inboundLink) ? "invite" : "player-link", inboundLink);
+    setInboundLink("");
+  }, [inboundLink, accountHydrated, onboardingOpen, playerInstalling]);
   const [profileIcon, setProfileIcon] = useState<string | null>(() => localStorage.getItem(PROFILE_ICON_STORAGE_KEY));
   const accountMenu = useRef<HTMLDivElement>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -2834,6 +3087,9 @@ export function App() {
       loaded.dividerStrength = Number.isFinite(loaded.dividerStrength) ? Math.max(0, Math.min(100, loaded.dividerStrength)) : defaults.dividerStrength;
       loaded.interfaceSize = Math.max(90, Math.min(125, Number(loaded.interfaceSize) || defaults.interfaceSize));
       loaded.spacing = loaded.spacing === "comfortable" ? "comfortable" : defaults.spacing;
+      loaded.oledIsland = normalizeIslandColor(loaded.oledIsland);
+      loaded.lightIsland = normalizeIslandColor(loaded.lightIsland);
+      loaded.showNowPlaying = loaded.showNowPlaying === true;
       const savedSidebar = loaded.rightSidebar as string;
       loaded.rightSidebar = isSidebarChoice(savedSidebar) ? savedSidebar
         : savedSidebar === "What’s New" ? "Custom Image" : defaults.rightSidebar;
@@ -2857,6 +3113,26 @@ export function App() {
   useEffect(() => {
     void getCurrentWebview().setZoom(settings.interfaceSize / 100).catch(() => {});
   }, [settings.interfaceSize]);
+  const notifications = useNotificationCenter();
+  const { observeLauncher, observeFollowed } = notifications;
+  const followChecks = useFollowUpdateChecks(instances, settings.modChecksOnStartup, observeFollowed);
+  useEffect(() => {
+    void observeLauncher(currentVersion);
+  }, [currentVersion, observeLauncher]);
+  const checkedDuplicates = useRef(new Set<string>());
+  useEffect(() => {
+    if (libraryState !== "ready") return;
+    const pending = instances.filter(item => item.loader.toLowerCase() === "fabric" && !checkedDuplicates.current.has(item.id));
+    if (!pending.length) return;
+    pending.forEach(item => checkedDuplicates.current.add(item.id));
+    void (async () => {
+      for (const item of pending) {
+        const report = await invoke<ModDuplicateReport>("check_mod_duplicates", { instanceId: item.id, repair: true })
+          .catch(() => invoke<ModDuplicateReport>("check_mod_duplicates", { instanceId: item.id }).catch(() => undefined));
+        if (report?.archived) void refreshInstalledContent(item, "mods", true);
+      }
+    })();
+  }, [instances, libraryState]);
   const sidebarImage = useLauncherImage(settings.rightSidebar === "Custom Image", "selected");
   const editingWallpaper = page === "settings" && settingsTarget === "Background";
   const wallpaper = useLauncherImage(settings.backdrop.source === "Image" || editingWallpaper, "wallpaper");
@@ -2864,11 +3140,17 @@ export function App() {
   const contentDownloads = useContentDownloads({
     ultraPerformance: settings.ultraPerformance,
     onInstalled: tasks => {
-      for (const task of tasks) instanceContentMemoryCache.delete(instanceContentCacheKey(task.instanceId, task.category));
+      const affected = new Map(tasks.filter(task => !task.projectId.startsWith("maintenance-"))
+        .map(task => [JSON.stringify([task.instanceId, task.category]), task]));
+      for (const { instanceId, category } of affected.values()) {
+        const target = instances.find(instance => instance.id === instanceId);
+        if (target) void refreshInstalledContent(target, category, true);
+      }
+      for (const id of new Set(tasks.filter(task => task.category === "mods" && !task.projectId.startsWith("maintenance-")).map(task => task.instanceId))) void modMaintenance.check(id, true);
       addCompletedDownloads(tasks.map(task => ({ id: task.id, name: task.title, version: task.version, kind: contentKind(task), targetName: task.instanceName, iconUrl: task.iconUrl || undefined, completedAt: task.completedAt || Date.now() })));
     },
     onFailed: task => {
-      showToolMessage(userError(task.message), "error");
+      if (!task.projectId.startsWith("maintenance-")) showToolMessage(userError(task.message), "error");
       setLogs(current => [...current, { id: `${task.id}-error`, instanceId: task.instanceId, instanceName: task.instanceName, stream: "launcher", level: "error" as const, message: `${task.title}: ${task.message}`, timestamp: task.completedAt || Date.now() }].slice(-600));
     },
   });
@@ -2878,6 +3160,16 @@ export function App() {
     progress: contentActivity.progress, message: contentActivity.message, instanceId: contentActivity.instanceId,
     taskName: contentActivity.title, taskVersion: contentActivity.version, taskKind: contentKind(contentActivity), taskIcon: contentActivity.iconUrl || undefined,
   } : gameDownload;
+  const modMaintenance = useModMaintenance(instances, libraryState === "ready", settings.modChecksOnStartup,
+    followChecks.check, download.active || gameRunning || playerInstalling, instanceId => {
+      const target = instances.find(instance => instance.id === instanceId);
+      if (target) void refreshInstalledContent(target, "mods", true);
+    });
+  const updateBlockedReason = gameRunning ? "Close Minecraft to update"
+    : launchRequestPending.current || playerInstalling || modMaintenance.active
+      || contentDownloads.tasks.some(contentPending)
+      || (gameDownload.active && (gameDownload.state === "installing" || gameDownload.state === "launching"))
+      ? "Wait for the active task" : undefined;
   useEffect(() => () => {
     instanceOpenTimers.current.forEach((timer) => window.clearTimeout(timer));
     instanceOpenTimers.current.clear();
@@ -2915,6 +3207,9 @@ export function App() {
     const root = document.documentElement;
     root.dataset.theme = resolvedTheme;
     root.style.setProperty("--accent", settings.accent);
+    const channels = [1, 3, 5].map(index => Number.parseInt(settings.accent.slice(index, index + 2), 16));
+    const brightest = Math.max(...channels);
+    root.toggleAttribute("data-dark-neutral-accent", brightest <= 56 && brightest - Math.min(...channels) <= 16);
     root.style.setProperty("--divider-strength", settings.dividerStrength + "%");
     root.style.setProperty("--row-divider-strength", (settings.dividerStrength * 7 / 13) + "%");
     for (const part of ["Background", "Sidebar", "Panel", "Foreground"] as const) {
@@ -2925,6 +3220,9 @@ export function App() {
       if (validColor(value)) root.style.setProperty(property, value);
       else root.style.removeProperty(property);
     }
+    const islandColor = normalizeIslandColor(settings[paletteKey(resolvedTheme, "Island")]) || defaultColors[resolvedTheme].Island;
+    root.style.setProperty("--desktop-island-color", islandColor);
+    root.style.setProperty("--desktop-island-ink", islandInk(islandColor));
     const font = interfaceFonts.includes(settings.interfaceFont) ? settings.interfaceFont : defaults.interfaceFont;
     root.style.setProperty("--interface-font", '"' + font + '"');
     document.documentElement.dataset.spacing = settings.spacing;
@@ -2988,36 +3286,46 @@ export function App() {
     }).then(value => { unlisten = value; });
     return () => unlisten?.();
   }, [settings.tray]);
-  const checkForUpdates = async (manual = false) => {
+  const checkForUpdates = async (manual = false, fromConfirmation = false) => {
     if (import.meta.env.DEV) {
-      if (manual) { setMockUpdateActive(true); setUpdatePanelOpen(true); }
-      return;
+      if (manual) { setMockUpdateActive(true); openUpdateConfirmation(); }
+      return manual;
     }
-    if (availableUpdate) {
-      if (manual) setUpdatePanelOpen(true);
-      return;
+    if (availableUpdate && (!manual || updateInFlight.current || updateAttempt.current.stage !== "ready")) {
+      if (manual && !fromConfirmation) openUpdateConfirmation();
+      return true;
     }
-    if (updateChecking) return;
-    setUpdateChecking(true);
-    try {
-      const update = await check({ timeout: 15_000 });
-      setAvailableUpdate((previous) => {
-        if (previous && previous !== update) void previous.close().catch(() => {});
+    if (!updateCheck.current) {
+      setUpdateChecking(true);
+      if (fromConfirmation) setUpdateError("");
+      updateCheck.current = check({ timeout: 15_000 }).then(async update => {
+        setAvailableUpdate(update);
+        setUpdateVerified(true);
+        await observeLauncher(update?.currentVersion ?? currentVersion, update?.version, true);
+        if (availableUpdate) void availableUpdate.close().catch(() => {});
         return update;
+      }).finally(() => {
+        updateCheck.current = undefined;
+        setUpdateChecking(false);
       });
-      if (manual && !update) {
+    }
+    try {
+      const update = await updateCheck.current;
+      if (manual && update && !fromConfirmation) openUpdateConfirmation();
+      else if (manual && !update && !fromConfirmation) {
         setToastKind("notification");
         setToast("Delight Client is already up to date.");
         window.setTimeout(() => setToast(""), 3200);
       }
+      return Boolean(update);
     } catch (error) {
-      if (manual) {
+      if (fromConfirmation) setUpdateError("Couldn’t check for updates. Try again.");
+      else if (manual) {
         setToastKind("error");
         setToast(`Could not check for updates: ${String(error)}`);
         window.setTimeout(() => setToast(""), 4200);
       }
-    } finally {
-      setUpdateChecking(false);
+      return false;
     }
   };
   useEffect(() => {
@@ -3036,92 +3344,63 @@ export function App() {
     if (!import.meta.env.DEV) return;
     const showMockUpdate = (event: globalThis.KeyboardEvent) => {
       const isMockUpdateShortcut = shortcutMatches("mockUpdate", settings.shortcuts, event) || shortcutMatches("mockUpdateAlt", settings.shortcuts, event);
-      if (recording(event) || !isMockUpdateShortcut || event.repeat) return;
+      if (recording(event) || !isMockUpdateShortcut || event.repeat || updateInFlight.current) return;
       if (document.querySelector('dialog[open], [aria-modal="true"]')) return;
       event.preventDefault();
       event.stopPropagation();
-      setMockUpdateActive(true);
-      setUpdatePanelOpen(mockUpdateActive);
-      setUpdatePhase("ready");
-      setUpdateProgress(0);
-      setUpdateError("");
+      if (mockUpdateActive) openUpdateConfirmation();
+      else setMockUpdateActive(true);
     };
     window.addEventListener("keydown", showMockUpdate, { capture: true });
     return () => window.removeEventListener("keydown", showMockUpdate, { capture: true });
   }, [settings.shortcuts, mockUpdateActive]);
 
-  useEffect(() => () => {
-    if (mockUpdateInterval.current !== null) window.clearInterval(mockUpdateInterval.current);
-    if (mockInstallTimer.current !== null) window.clearTimeout(mockInstallTimer.current);
-  }, []);
-  useEffect(() => {
-    const dialog = updateDialog.current;
-    if (!dialog || !updatePanelOpen) return;
-    dialog.showModal();
-    return () => dialog.close();
-  }, [updatePanelOpen]);
-
   const installUpdate = async () => {
     if (import.meta.env.DEV && !mockUpdateActive) return;
-    if ((!availableUpdate && !mockUpdateActive) || !["ready", "error"].includes(updatePhase)) return;
-    setUpdatePanelOpen(true);
-    setUpdatePhase("downloading");
-    setUpdateProgress(0);
+    if (updateInFlight.current || updateCheck.current || updateBusy || updateBlockedReason || launchRequestPending.current) return;
+    const preview = import.meta.env.DEV && mockUpdateActive;
+    const update = preview ? previewLauncherUpdate : availableUpdate;
+    if (!update) return;
+    updateInFlight.current = true;
     setUpdateError("");
-    if (import.meta.env.DEV && mockUpdateActive) {
-      if (mockUpdateInterval.current !== null) window.clearInterval(mockUpdateInterval.current);
-      if (mockInstallTimer.current !== null) window.clearTimeout(mockInstallTimer.current);
-      let mockProgress = 0;
-      mockUpdateInterval.current = window.setInterval(() => {
-        mockProgress = Math.min(100, mockProgress + 4);
-        setUpdateProgress(mockProgress);
-        if (mockProgress < 100) return;
-        if (mockUpdateInterval.current !== null) window.clearInterval(mockUpdateInterval.current);
-        mockUpdateInterval.current = null;
-        setUpdatePhase("installing");
-        mockInstallTimer.current = window.setTimeout(() => {
-          mockInstallTimer.current = null;
-          setUpdatePanelOpen(false);
-          setUpdatePhase("ready");
-          setUpdateProgress(0);
-          setMockUpdateActive(false);
-          window.location.reload();
-        }, 1500);
-      }, 85);
-      return;
-    }
-    const realUpdate = availableUpdate;
-    if (!realUpdate) return;
-    let downloaded = 0;
-    let total = 0;
+    let reservation: Resource | undefined;
     try {
-      await realUpdate.downloadAndInstall((event) => {
-        if (event.event === "Started") {
-          total = event.data.contentLength || 0;
-          setUpdateProgress(total ? 0 : undefined);
-        } else if (event.event === "Progress") {
-          downloaded += event.data.chunkLength;
-          if (total > 0) setUpdateProgress(Math.min(100, (downloaded / total) * 100));
-        } else {
-          setUpdateProgress(100);
-          setUpdatePhase("installing");
-        }
+      if (!preview) reservation = new Resource(await invoke<number>("reserve_launcher_update"));
+      await runLauncherUpdate(update, updateAttempt.current, {
+        onPhase: setUpdatePhase,
+        onProgress: setUpdateProgress,
+        restart: preview ? () => launcherUpdateDelay(700) : relaunch,
       });
-      await relaunch();
+      if (preview) {
+        updateAttempt.current = { stage: "ready" };
+        setUpdatePhase("ready");
+        setUpdateProgress(undefined);
+        setMockUpdateActive(false);
+      }
     } catch (error) {
-      setUpdatePhase("error");
-      setUpdateError(String(error));
+      const stage = updateAttempt.current.stage;
+      setUpdatePhase(stage === "installed" ? "restartRequired" : "retry");
+      if (!reservation && !preview) setUpdateError(userError(error));
+      else if (stage === "installed") setUpdateError("Delight couldn’t restart.");
+      else if (stage === "downloaded") setUpdateError("The update couldn’t be installed.");
+      else setUpdateError("The update couldn’t be downloaded and verified.");
+    } finally {
+      await reservation?.close().catch(() => {});
+      updateInFlight.current = false;
     }
   };
 
-  const closeUpdateDialog = () => {
-    if (updatePhase === "downloading" || updatePhase === "installing") return;
-    setUpdatePanelOpen(false);
-  };
+  const cancellableLaunchId = titleBarLaunch.progress?.phase === "launching" ? titleBarLaunch.progress.id : undefined;
   const previewUpdate = import.meta.env.DEV && mockUpdateActive;
-  const displayedUpdateVersion = previewUpdate ? "9.9.9-test" : availableUpdate?.version;
-  const updateNotes = previewUpdate ? "Preview the launcher download and restart flow." : availableUpdate?.body?.trim();
-  const updateBusy = updatePhase === "downloading" || updatePhase === "installing";
+  const cachedUpdateVersion = !updateVerified && notifications.items.find(item =>
+    item.kind === "launcherUpdate" && item.available)?.version;
+  const displayedUpdateVersion = previewUpdate ? "9.9.9-test" : availableUpdate?.version || cachedUpdateVersion || undefined;
+  const updateNeedsCheck = !previewUpdate && !availableUpdate && Boolean(cachedUpdateVersion);
+  const clientNotice = useClientNotice();
+  const nowPlaying = useNowPlaying(
+    settings.showNowPlaying && accountHydrated && !onboardingOpen && !displayedUpdateVersion &&
+    !updateBusy && !titleBarLaunch.progress && (notifications.settled || updateVerified),
+  );
   useEffect(() => {
     let stop: (() => void) | undefined;
     const timer = window.setTimeout(() => {
@@ -3170,21 +3449,25 @@ export function App() {
     }, 250);
     return () => { window.clearTimeout(timer); window.clearTimeout(fallback); };
   }, []);
-  const instanceRead = useRef(0);
-  const refreshInstances = async () => {
-    const request = ++instanceRead.current;
-    try {
-      const next = await invoke<InstanceDraft[]>("list_instances");
-      if (request !== instanceRead.current) return;
+  const instanceRead = useRef<Promise<InstanceDraft[] | undefined> | undefined>(undefined);
+  const refreshInstances = (): Promise<InstanceDraft[] | undefined> => {
+    // A launch-complete notification can refresh the library while the new instance
+    // is opening. Both callers should receive the list that actually reaches the UI.
+    const request: Promise<InstanceDraft[] | undefined> = invoke<InstanceDraft[]>("list_instances").then(next => {
+      if (request !== instanceRead.current) return instanceRead.current;
       setInstances(next);
       setLibraryState("ready");
-    } catch (error) {
-      if (request !== instanceRead.current) return;
+      return next;
+    }, error => {
+      if (request !== instanceRead.current) return instanceRead.current;
       setLibraryError(userError(String(error)));
       setLibraryState("error");
-    }
+    });
+    instanceRead.current = request;
+    return request;
   };
-  useEffect(() => { void refreshInstances(); return () => { instanceRead.current++; }; }, []);
+  useEffect(() => { void refreshInstances(); return () => { instanceRead.current = undefined; }; }, []);
+  useEffect(() => { if (libraryState === "ready") pruneInstalledContent(instances); }, [libraryState, instances]);
   const refreshPackMemberships = () => void invoke<PackChannelMembership[]>("list_pack_channel_memberships")
     .then(items => setPackMemberships(new Map(items.map(item => [item.instanceId, item.role]))))
     .catch(() => setPackMemberships(new Map()));
@@ -3205,6 +3488,7 @@ export function App() {
     requestPending: () => launchRequestPending.current,
     onRunning: setGameRunning,
     onProgress: (next) => {
+        titleBarLaunch.accept(next);
         const playedId = next.instanceId;
         if (next.state === "running" && playedId) {
           setPlayedIds(previous => previous[0] === playedId ? previous : [playedId, ...previous.filter(id => id !== playedId)]);
@@ -3216,7 +3500,7 @@ export function App() {
         legacyInstallingInstance.current = next.state === "installing" ? next.instanceId : undefined;
         setDownload((current) => ({
           active: next.state === "installing" || next.state === "launching" || next.state === "running" || next.state === "complete",
-          launch: next.state === "launching" || next.state === "running" || (current.instanceId === next.instanceId && current.launch && (current.active || current.state === next.state)),
+          launch: Boolean(next.launchId) || next.state === "launching" || next.state === "running" || (current.instanceId === next.instanceId && current.launch && (current.active || current.state === next.state)),
           progress: next.progress,
           state: next.state,
           message: userError(next.message),
@@ -3329,14 +3613,23 @@ export function App() {
       ? { ...current, active: false } : current), 3000);
     return () => window.clearTimeout(timer);
   }, [gameDownload.state, gameDownload.instanceId, gameDownload.progress, gameDownload.active]);
-  const launch = async (instance: InstanceDraft, portalTarget?: PortalTarget) => {
-    if (launchRequestPending.current || download.active || gameRunning) {
+  const launch = async (instance: InstanceDraft, portalTarget?: PortalTarget, reviewed = false) => {
+    if (launchRequestPending.current || download.active || gameRunning || applyingUpdate.current || modMaintenance.active || updateInFlight.current) {
       setToastKind("notification");
       setToast("Something is already downloading or running. Please wait.");
       window.setTimeout(() => setToast(""), 3500);
       return;
     }
     launchRequestPending.current = true;
+    if (!reviewed) {
+      // The native launch gate also enforces a previously known minimum when offline.
+      const review = await followChecks.check(instance.id).catch(() => followChecks.reviews[instance.id]);
+      if (hasUpdate(review)) {
+        launchRequestPending.current = false;
+        openFollowReleases(instance, {id: instance.id, target: portalTarget});
+        return;
+      }
+    }
     setDownload({
       active: true,
       progress: 1,
@@ -3351,6 +3644,18 @@ export function App() {
       await invoke("launch_minecraft", { instanceId: instance.id, launchMethod: settings.launchMethod, downloadWorkers: settings.downloadWorkers, debugLogging: settings.debugLogging, ...(portalTarget ? { portalTarget } : {}) });
     } catch (error) {
       const message = String(error);
+      if (message.includes("Choose a mod version in Mods before launching.")) {
+        const report = await invoke<ModDuplicateReport>("check_mod_duplicates", { instanceId: instance.id }).catch(() => undefined);
+        if (report?.conflicts[0]) openDuplicate(instance, report.conflicts[0].modId);
+        else openInstancePage(instance);
+        setDownload({ active: false, progress: 0, state: "idle", message: "" });
+        return;
+      }
+      if (message.startsWith("Update this shared pack to version ")) {
+        openFollowReleases(instance, {id: instance.id, target: portalTarget});
+        setDownload({active: false, progress: 0, state: "idle", message: ""});
+        return;
+      }
       setToastKind("error");
       if (message.includes("Sign in with Microsoft") || message.toLowerCase().includes("needs to reconnect")) {
         setSignInOpen(true);
@@ -3364,9 +3669,122 @@ export function App() {
     }
   };
   const openInstancePage = (instance: InstanceDraft) => {
+    setDuplicateDestination(undefined);
     setSelectedInstanceId(instance.id);
     setInstanceDestination("view");
     setPage("instance");
+  };
+  const openDuplicate = (instance: InstanceDraft, modId: string) => {
+    setWorkspaceInstanceId(null);
+    openInstancePage(instance);
+    setDuplicateDestination({ instanceId: instance.id, modId });
+    setInstanceDestination("mods");
+    setInstanceNavigationKey(value => value + 1);
+  };
+  const openFollowReleases = (instance: InstanceDraft, play: typeof playAfterReview = null) => {
+    openInstancePage(instance);
+    setWorkspaceInstanceId(instance.id);
+    setWorkspacePage("releases");
+    setPlayAfterReview(play);
+  };
+  const openNotification = async (item: NotificationItem) => {
+    if (item.available) {
+      if (item.kind === "launcherUpdate") {
+        if (!await checkForUpdates(true)) return;
+      } else if (item.kind === "modUpdateCompleted") {
+        setDownloadSection("Completed");
+        setPage("downloads");
+      } else {
+        if (libraryState !== "ready") return;
+        const target = instances.find(instance => instance.id === item.instanceId);
+        if (target && item.kind === "followedRelease") openFollowReleases(target);
+        if (target && item.modId) openDuplicate(target, item.modId);
+        else if (target && item.kind === "modUpdateFailed") {
+          openInstancePage(target);
+          setInstanceDestination("mods");
+          setInstanceNavigationKey(value => value + 1);
+        }
+      }
+    }
+    await notifications.markRead(item.id);
+  };
+  const openWorkspaceEditor = async (id: string, stillHere: () => boolean) => {
+    const library = await refreshInstances();
+    const workingCopy = library?.find(item => item.id === id);
+    if (!workingCopy) throw new Error("Couldn’t open the working copy. Refresh your library and try again.");
+    if (!stillHere()) return;
+    openInstancePage(workingCopy);
+    setWorkspaceInstanceId(id);
+    setWorkspacePage("changes");
+  };
+  const workspaceCopyOrigin = useRef(workspaceInstance?.id);
+  workspaceCopyOrigin.current = workspaceInstance?.id;
+  const openLatestWorkspaceCopy = async (playerUrl: string, revision: number) => {
+    if (playerInstalling || download.active || gameRunning) {
+      throw new Error("Finish the active download or game session before opening a working copy.");
+    }
+    const from = workspaceInstance?.id;
+    setInstallingPlayerLink(playerUrl);
+    try {
+      const id = await invoke<string>("create_workspace_working_copy", {playerUrl, revision});
+      await openWorkspaceEditor(id, () => workspaceCopyOrigin.current === from);
+    } finally {
+      setInstallingPlayerLink(null);
+    }
+  };
+  const applyFollowUpdate = async (id: string, review: FollowUpdate, stillHere: () => boolean) => {
+    if (applyingUpdate.current || playerInstalling || download.active || gameRunning || launchRequestPending.current) {
+      throw new Error("Finish the active download or game session before updating.");
+    }
+    applyingUpdate.current = true;
+    setInstallingPlayerLink(review.playerUrl);
+    const play = playAfterReview?.id === id ? playAfterReview : null;
+    try {
+      await invoke<string>("update_followed_pack", {instanceId: id, reviewToken: review.reviewToken});
+      followChecks.invalidate(id);
+      const library = await refreshInstances();
+      await followChecks.check(id).catch(() => {});
+      const updated = library?.find(item => item.id === id);
+      if (updated) for (const category of ["mods", "resourcepacks", "shaderpacks"] as const) {
+        void refreshInstalledContent(updated, category, true);
+      }
+      // Refreshing the workspace may remount the review. Read the player's current intent first.
+      const continuePlaying = stillHere();
+      window.dispatchEvent(new CustomEvent("workspace-follow-updated", {detail: {instanceId: id}}));
+      void modMaintenance.check(id, true);
+      if (continuePlaying && play && updated) {
+        applyingUpdate.current = false;
+        setPlayAfterReview(null);
+        await launch(updated, play.target, true);
+      }
+    } catch (reason) {
+      if (!stillHere()) showToolMessage(userError(reason), "error");
+      throw reason;
+    } finally {
+      applyingUpdate.current = false;
+      setInstallingPlayerLink(null);
+    }
+  };
+  const repairFollowUpdate = async (id: string, review: FollowUpdate) => {
+    if (applyingUpdate.current || playerInstalling || download.active || gameRunning || launchRequestPending.current) {
+      throw new Error("Finish the active download or game session before repairing.");
+    }
+    applyingUpdate.current = true;
+    setInstallingPlayerLink(review.playerUrl);
+    try {
+      const repaired = await invoke<FollowRepair>("repair_followed_pack", {instanceId: id});
+      const restored = instances.find(instance => instance.id === id);
+      if (restored) for (const category of ["mods", "resourcepacks", "shaderpacks"] as const) {
+        void refreshInstalledContent(restored, category, true);
+      }
+      followChecks.invalidate(id);
+      await followChecks.check(id).catch(() => {});
+      void modMaintenance.check(id, true);
+      return repaired;
+    } finally {
+      applyingUpdate.current = false;
+      setInstallingPlayerLink(null);
+    }
   };
   const handleInstanceClick = (event: MouseEvent<HTMLElement>, instance: InstanceDraft) => {
     if (!settings.doubleClickToPlay || event.detail === 0) { openInstancePage(instance); return; }
@@ -3459,7 +3877,9 @@ export function App() {
     toolToastTimer.current = window.setTimeout(() => setToast(""), 4000);
   };
   const contentTransfer = useContentTransferController(instances, (targetId, category, message) => {
-    instanceContentMemoryCache.delete(instanceContentCacheKey(targetId, category));
+    const target = instances.find(instance => instance.id === targetId);
+    if (target) void refreshInstalledContent(target, category, true);
+    if (category === "mods") void modMaintenance.check(targetId, true);
     showToolMessage(message);
   });
   const openGameFolder = () => void invoke("open_game_folder").catch(error => showToolMessage(String(error), "error"));
@@ -3486,11 +3906,62 @@ export function App() {
     ...instances.map(instance => ({ id: `instance:${instance.id}`, label: instance.name, detail: `${instance.version} · ${instance.loader}`, kind: "instance" as const, run: () => openInstancePage(instance) })),
     ...([ ["Home", "home"], ["Instances", "instances"], ["Locker", "locker"], ["Social", "social"], ["Alula", "alula"], ["Screenshots", "screenshots"], ["Utilities", "utilities"], ["Portal", "portal"], ["Downloads", "downloads"], ["Logs", "logs"], ["New instance", "new-instance"] ] as const).map(([label, destination]) => ({ id: `page:${destination}`, label, detail: "Page", kind: "page" as const, run: () => setPage(destination) })),
     ...settingTabs.map(([, label]) => ({ id: `setting:${label}`, label: settingsLabel(label), detail: "Settings", keywords: ({ Appearance: "theme accent color animations", Background: "wallpaper image blur frosted tint opacity", General: "right sidebar download queue image friends hide", Performance: "memory ram java arguments", Minecraft: "version loader", "My Profile": "account login avatar", Cache: "storage disk" } as Record<string, string>)[label], kind: "setting" as const, run: () => openSettings(label) })),
+    ...(import.meta.env.DEV ? [
+      { id: "dev:mock-update", label: "/mock update", detail: "Preview a launcher update", kind: "page" as const,
+        run: () => { if (!updateInFlight.current) setMockUpdateActive(true); } },
+      { id: "dev:mock-redeem", label: "/mock redeem", detail: "Preview a cosmetic unlock", kind: "page" as const, run: previewCosmeticUnlock },
+    ] : []),
   ];
   useEffect(() => { if (page !== "social") setSocialDestination(undefined); }, [page]);
   const activeNavPage = page === "instance" || page === "new-instance" ? "instances" : page;
   const [lockerSection, setLockerSection] = useState<LockerSection>("Equipped look");
-  useEffect(() => { if (page !== "locker") setLockerSection("Equipped look"); }, [page]);
+  const [cosmeticUnlock, setCosmeticUnlock] = useState<DesktopCosmeticUnlock>();
+  const [cloakSelection, setCloakSelection] = useState<DesktopCosmeticUnlock>();
+  const cosmeticSequence = useRef(0);
+  const activeCosmeticAccount = useRef(profile?.id);
+  activeCosmeticAccount.current = profile?.id;
+  const cosmeticAccountId = import.meta.env.DEV ? profile?.id ?? "" : profile?.id;
+  const dismissCosmeticUnlock = useCallback((sequence: number) => {
+    setCosmeticUnlock(current => current?.sequence === sequence ? undefined : current);
+  }, []);
+  const celebrateCosmeticUnlock = (item: CosmeticUnlock) => {
+    if (item.accountId !== activeCosmeticAccount.current) return;
+    setCosmeticUnlock({ ...item, sequence: ++cosmeticSequence.current, receivedAt: Date.now() });
+  };
+  function previewCosmeticUnlock() {
+    if (!import.meta.env.DEV) return;
+    const account = activeCosmeticAccount.current;
+    const sequence = ++cosmeticSequence.current;
+    void import("./services/dev-island-preview")
+      .then(({ previewCapeArtwork }) => previewCapeArtwork())
+      .catch(() => undefined)
+      .then(textureUrl => {
+        if (activeCosmeticAccount.current !== account || cosmeticSequence.current !== sequence) return;
+        const preview: DesktopCosmeticUnlock = {
+          accountId: account ?? "", id: "dev-island-cape", name: "Christmas Delight cape", textureUrl,
+          sequence, receivedAt: Date.now(), preview: true,
+        };
+        setCosmeticUnlock(current => current && !current.preview ? current : preview);
+      });
+  }
+  const openUnlockedCloak = (item: DesktopCosmeticUnlock) => {
+    const account = activeCosmeticAccount.current;
+    if (item.accountId !== (import.meta.env.DEV ? account ?? "" : account)) return;
+    dismissCosmeticUnlock(item.sequence);
+    setCloakSelection(import.meta.env.DEV && item.preview ? undefined : item);
+    setLockerSection("Cloaks");
+    setPage("locker");
+  };
+  useEffect(() => {
+    if (page !== "locker") {
+      setLockerSection("Equipped look");
+      setCloakSelection(undefined);
+    }
+  }, [page]);
+  useEffect(() => {
+    setCosmeticUnlock(current => current?.accountId === cosmeticAccountId ? current : undefined);
+    setCloakSelection(current => current?.accountId === profile?.id ? current : undefined);
+  }, [profile?.id, cosmeticAccountId]);
   const [portalSection, setPortalSection] = useState<"All" | "Servers" | "Worlds">("All");
   const [shotLibrary, setShotLibrary] = useState("");
   const shotFilter = instances.some(item => item.id === shotLibrary) ? shotLibrary : "";
@@ -3521,6 +3992,8 @@ export function App() {
     { label: "File", items: [
       { label: "New instance", run: () => setPage("new-instance") },
       { label: "Import modpack", run: importModpack },
+      { label: "Open player link", run: () => setPage("new-instance", "player-link") },
+      { label: "Open invite link", run: () => setPage("new-instance", "invite") },
       { label: "Open game folder", run: openGameFolder },
     ] },
     { label: "Edit", items: [
@@ -3531,6 +4004,7 @@ export function App() {
       ...primaryNavigation.map(([, label, , run]) => ({ label, run })),
       ...nav.slice(2).filter(([, , destination]) => destination !== "screenshots" && destination !== "portal" && destination !== "utilities" && destination !== "locker" && destination !== "social").map(([, label, destination]) => ({ label, run: () => setPage(destination) })),
       { label: "Logs", run: () => setPage("logs") },
+      { label: "Notifications", run: () => setNotificationRequest(request => request + 1) },
       ...(canCollapseContext && !contextCollapsed ? [{ label: "Collapse sidebar", run: () => {
         setSidebarCollapsed(true);
         localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "true");
@@ -3581,6 +4055,15 @@ export function App() {
   }
   return (
     <ShortcutContext.Provider value={settings.shortcuts}><ContentTransferContext.Provider value={contentTransfer.controls}>
+    <FollowUpdateContext.Provider value={{reviews: followChecks.reviews, check: followChecks.check, busy: playerInstalling || download.active || gameRunning || Boolean(modMaintenance.active),
+      apply: applyFollowUpdate, repair: repairFollowUpdate, playRequested: id => playAfterReview?.id === id,
+      playInstalled: id => {
+        const instance = instances.find(item => item.id === id);
+        if (instance && playAfterReview?.id === id) {
+          setPlayAfterReview(null);
+          void launch(instance, playAfterReview.target, true);
+        }
+      }}}>
     <div
       className="app-shell desktop-redesign"
       data-wallpaper={showWallpaper || undefined}
@@ -3601,7 +4084,24 @@ export function App() {
       tabIndex={-1}
     >
       <QuickSwitcher targets={switchTargets} />
-      <DesktopTitleBar menus={applicationMenus} onHome={() => setPage("home")} onExpand={contextCollapsed ? () => { setSidebarCollapsed(false); localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "false"); } : undefined} />
+      <DesktopTitleBar menus={applicationMenus} onHome={() => setPage("home")} onExpand={contextCollapsed ? () => { setSidebarCollapsed(false); localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, "false"); } : undefined}
+        launchProgress={titleBarLaunch.progress} motion={settings.animations && !settings.ultraPerformance}
+        onCancelLaunch={cancellableLaunchId ? () => {
+          void invoke("cancel_titlebar_launch", { launchId: cancellableLaunchId })
+            .catch(error => showToolMessage(String(error), "error"));
+        } : undefined}
+        nowPlaying={nowPlaying.displayed} nowPlayingVolume={nowPlaying.volume}
+        onNowPlayingControl={(sessionId, action) => void nowPlaying.control(sessionId, action)}
+        onNowPlayingDetailsChange={nowPlaying.setDetails} onNowPlayingVolumeChange={nowPlaying.changeVolume}
+        notificationRequest={notificationRequest} clientNotice={clientNotice}
+        cosmeticUnlock={cosmeticUnlock?.accountId === cosmeticAccountId ? cosmeticUnlock : undefined}
+        onDismissCosmeticUnlock={dismissCosmeticUnlock} onOpenUnlockedCloak={openUnlockedCloak}
+        launcherUpdate={displayedUpdateVersion ? { version: displayedUpdateVersion,
+          phase: updatePhase, progress: updateProgress, error: updateError, blockedReason: updateNeedsCheck ? undefined : updateBlockedReason,
+          checking: updateChecking, needsCheck: updateNeedsCheck, request: updateRequest,
+          onAction: updateNeedsCheck ? () => { void checkForUpdates(true, true); } : installUpdate } : undefined}
+        notificationCenter={{ items: notifications.items, loadError: notifications.loadError, onShow: notifications.refresh, onRetry: notifications.refresh,
+          onOpenItem: openNotification, onMarkAllRead: () => notifications.markRead() }} />
       <div className="desktop-rail"><div className="rail-scroll"><nav className="rail-destinations" aria-label="Main navigation">
         {primaryNavigation.map(([Icon, label, destination, action]) => (
           <button key={destination} title={label} aria-label={label}
@@ -3619,8 +4119,6 @@ export function App() {
         </nav>}
         </div>
         <div className="rail-account">
-          {displayedUpdateVersion && <button className="rail-update-trigger" aria-label="Launcher update available" title="Launcher update available"
-            aria-haspopup="dialog" onClick={() => setUpdatePanelOpen(true)}><Download size={20} aria-hidden="true" /></button>}
           {profile ? (
             <>
               <div className="rail-account-anchor">
@@ -3680,12 +4178,14 @@ export function App() {
           )}
         </div>
       </div>
-      <aside className="sidebar desktop-context" aria-label="Page navigation">
+      <aside ref={contextSidebar} className="sidebar desktop-context" aria-label="Page navigation">
       {page === "settings" && <header className="settings-workspace-bar"><h1>Settings</h1>
         <label><Search size={16} /><input type="search" aria-label="Search settings" placeholder="Search…" value={settingsQuery} onChange={event => setSettingsQuery(event.target.value)} /></label>
       </header>}
         <div className="desktop-context-body">
-          {page === "alula" ? <div className="alula-sidebar" ref={setAlulaSidebar} /> : page === "social" ? <div className="social-sidebar-shell"><h1>Social</h1><div className="social-sidebar-host" ref={setSocialSidebar} /></div> : page === "settings" ? <nav className="desktop-context-links" aria-label="Settings sections">
+          {workspaceInstance ? <PackWorkspaceSidebar instances={instances} instance={workspaceInstance} SelectControl={Select} sidebarRef={contextSidebar}
+            page={activeWorkspacePage} destinations={sharing.destinations} onNavigate={setWorkspacePage}
+            onSelect={setWorkspaceInstanceId} onBack={() => setWorkspaceInstanceId(null)} /> : page === "alula" ? <div className="alula-sidebar" ref={setAlulaSidebar} /> : page === "social" ? <div className="social-sidebar-shell"><h1>Social</h1><div className="social-sidebar-host" ref={setSocialSidebar} /></div> : page === "settings" ? <nav className="desktop-context-links" aria-label="Settings sections">
           {settingsGroups.map(group => <section className="settings-nav-group" key={group.title}>
             <h2>{group.title}</h2>
             {group.sections.map(name => sectionButton(settingTabs.find(([, label]) => label === name)!))}
@@ -3717,7 +4217,7 @@ export function App() {
           {instances.map(item => <button key={item.id} className="shot-instance" aria-current={shotFilter === item.id ? "page" : undefined} onClick={() => setShotLibrary(item.id)}>
             <CatalogArtwork source={item.icon} fallback={<Cuboid size={29} aria-hidden="true" />} /><span>{item.name}{instances.some(other => other.id !== item.id && other.name === item.name) ? ` · ${item.id}` : ""}</span>
           </button>)}
-        </nav> : !wideWorkspace && <InstanceSidebar key={instanceNavigationKey} instances={instances} selectedId={page === "instance" ? selectedInstance?.id : undefined}
+        </nav> : !wideWorkspace && <InstanceSidebar folderCache={folderCache} instances={instances} selectedId={page === "instance" ? selectedInstance?.id : undefined}
           activity={gameDownload} onCancelLaunch={() => void invoke("cancel_minecraft_launch").catch(error => showToolMessage(String(error), "error"))} transferring={!!contentTransfer.dragging} onCreate={() => setPage("new-instance")}
           onOpen={openInstancePage} />}
         </div>
@@ -3726,9 +4226,13 @@ export function App() {
             <button onClick={() => void openUrl("mailto:support@bloomclient.org").catch(error => showToolMessage(String(error), "error"))}><CircleHelp size={17}/>Help &amp; feedback<ExternalLink size={12}/></button>
           </nav>}
       </aside>
-      <main ref={workspace} data-desktop-page={page} className={`content ${page === "social" ? "social-content" : ""}`}>
+      <main ref={workspace} data-desktop-page={workspaceInstance ? "pack-workspace" : page} className={`content ${page === "social" ? "social-content" : ""}`}>
         {page === "alula" ? null : page === "instance" && selectedInstance ? (
-          <InstancePage contentTasks={contentDownloads.tasks} floating={floatingInstanceId === selectedInstance.id} onPopOut={() => setFloatingInstanceId(current => current === selectedInstance.id ? null : selectedInstance.id)} onMessage={showToolMessage} key={`${selectedInstance.id}:${instanceDestination}:${instanceNavigationKey}`} instance={selectedInstance} groupRole={packMemberships.get(selectedInstance.id)} busy={download.active || gameRunning} initialTab={instanceDestination === "view" || instanceDestination === "add-mods" ? "mods" : instanceDestination} initialCatalog={instanceDestination === "add-mods"} onPlay={target => void launch(selectedInstance, target)} onRename={name => renameClientInstance(selectedInstance, name)} onExport={() => exportClientInstance(selectedInstance)} onShare={() => setShareInstance(selectedInstance)} onDuplicate={() => duplicateClientInstance(selectedInstance)} onDelete={() => deleteClientInstance(selectedInstance)} onInstallContent={(item, category) => installContent(selectedInstance, item, category)} onChanged={(changed) => setInstances(current => current.map(instance => instance.id === changed.id ? changed : instance))} />
+          <>
+            {workspaceInstance && <SharedPackOverview key={workspaceInstance.id} instance={workspaceInstance} page={activeWorkspacePage}
+              sharing={sharing} onNavigate={setWorkspacePage} SelectControl={Select} onOpenLatest={openLatestWorkspaceCopy} />}
+            <InstancePage maintenance={modMaintenance} duplicateTarget={duplicateDestination?.instanceId === selectedInstance.id ? duplicateDestination.modId : undefined} workspaceOpen={Boolean(workspaceInstance)} onOpenWorkspace={() => { setWorkspacePage("overview"); setWorkspaceInstanceId(selectedInstance.id); }} contentTasks={contentDownloads.tasks} floating={floatingInstanceId === selectedInstance.id} onPopOut={() => setFloatingInstanceId(current => current === selectedInstance.id ? null : selectedInstance.id)} onMessage={showToolMessage} key={`${selectedInstance.id}:${instanceDestination}:${instanceNavigationKey}`} instance={selectedInstance} groupRole={packMemberships.get(selectedInstance.id)} busy={download.active || gameRunning || playerInstalling || Boolean(modMaintenance.active)} initialTab={instanceDestination === "view" || instanceDestination === "add-mods" ? "mods" : instanceDestination} initialCatalog={instanceDestination === "add-mods"} onPlay={target => void launch(selectedInstance, target)} onRename={name => renameClientInstance(selectedInstance, name)} onExport={() => exportClientInstance(selectedInstance)} onDuplicate={() => duplicateClientInstance(selectedInstance)} onDelete={() => deleteClientInstance(selectedInstance)} onInstallContent={(item, category) => installContent(selectedInstance, item, category)} onChanged={changed => setInstances(current => current.some(instance => instance.id === changed.id) ? current.map(instance => instance.id === changed.id ? changed : instance) : [...current, changed])} />
+          </>
         ) : page === "logs" ? (
           <LogsPage onShare={failure ? previewFailure : undefined} entries={logs} running={gameRunning || download.state === "launching"} onClear={() => setLogs([])} />
         ) : activeNavPage === "utilities" ? (
@@ -3754,12 +4258,40 @@ export function App() {
             setCompletedDownloads(remaining);
           }} onCancel={() => void invoke("cancel_minecraft_launch")} onDismissMissing={() => setSharedPackMissingMods([])} />
         ) : page === "locker" ? (
-          <Locker section={lockerSection} onSection={setLockerSection} profile={profile} motion={settings.animations && !settings.ultraPerformance} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />
+          <Locker section={lockerSection} onSection={setLockerSection} profile={profile} motion={settings.animations && !settings.ultraPerformance}
+            onCosmeticUnlock={celebrateCosmeticUnlock} cloakSelection={cloakSelection}
+            onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />
         ) : page === "settings" ? (
-          <SettingsPage resolvedTheme={resolvedTheme} settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} sidebarImage={sidebarImage} wallpaper={wallpaper} initialTab={settingsTarget} query={settingsQuery} onNavigate={openSettings} addAccount={addAccount} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={displayedUpdateVersion || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={() => setUpdatePanelOpen(true)} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} />
+          <SettingsPage resolvedTheme={resolvedTheme} settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} sidebarImage={sidebarImage} wallpaper={wallpaper} initialTab={settingsTarget} query={settingsQuery} onNavigate={openSettings} addAccount={addAccount} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={displayedUpdateVersion || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={openUpdateConfirmation} modMaintenance={<ModMaintenanceSettings maintenance={modMaintenance}
+            instances={instances} libraryReady={libraryState === "ready"} followUpdates={followChecks.reviews} onOpenInstance={(id, release) => {
+              const instance = instances.find(item => item.id === id);
+              if (instance) {
+                if (release) openFollowReleases(instance);
+                else {
+                  openInstancePage(instance);
+                  setInstanceDestination("mods");
+                }
+              }
+            }} />} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} />
         ) : page === "new-instance" ? (
-          <NewInstancePage key={creationEntry.revision} initialStep={creationEntry.step}
+          creationEntry.step === "player-link" ? <PlayerLinkPage key={creationEntry.revision} initialLink={creationEntry.link} instances={instances}
+            otherInstallActive={playerInstalling} onInstallLinkChange={setInstallingPlayerLink}
+            onInviteLink={link => setPage("new-instance", "invite", link)}
+            onOpenEditor={openWorkspaceEditor}
+            onBack={() => setPage("new-instance")} onOpen={async (id, stillHere, showUpdate) => {
+              const library = await refreshInstances();
+              const followed = library?.find(item => item.id === id);
+              if (!followed) throw new Error("Couldn’t open the followed instance. Refresh your library and try again.");
+              if (stillHere()) {
+                if (showUpdate) openFollowReleases(followed);
+                else openInstancePage(followed);
+              }
+            }} /> : creationEntry.step === "invite" ? <WorkspaceInvitation key={creationEntry.revision} initialLink={creationEntry.link}
+              busy={playerInstalling || download.active || gameRunning} onBack={() => setPage("new-instance")}
+              onPlayerLink={link => setPage("new-instance", "player-link", link)} onDownload={setInstallingPlayerLink}
+              onOpen={openWorkspaceEditor} /> : <NewInstancePage key={creationEntry.revision} initialStep={creationEntry.step}
             defaults={settings}
+            onPlayerLink={() => setPage("new-instance", "player-link")}
             onCancel={() => setPage(instances.length ? "instances" : "home")}
             onCreated={(destination) => {
               void refreshInstances();
@@ -3866,29 +4398,11 @@ export function App() {
         setPage("social");
       }} />}
       {floatingInstance && <FloatingInstancePlayer instance={floatingInstance} busy={download.active || gameRunning} onPlay={() => void launch(floatingInstance)} onClose={() => { setFloatingInstanceId(null); document.querySelector<HTMLButtonElement>(".instance-more")?.focus(); }} />}
-      {shareInstance && <ShareInstanceDialog instance={shareInstance} onClose={() => setShareInstance(null)} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />}
-      {updatePanelOpen && <dialog ref={updateDialog} className="launcher-update-dialog" aria-labelledby="update-title"
-        onCancel={event => { event.preventDefault(); closeUpdateDialog(); }}>
-        <h2 id="update-title">{updatePhase === "error" ? "Update interrupted" : updateBusy ? "Updating Delight Client" : "Update available"}</h2>
-        <p className="update-versions">Delight Client {currentVersion} → {displayedUpdateVersion}</p>
-        {updatePhase === "ready" && <>
-          {updateNotes && <div className="update-notes">{updateNotes}</div>}
-          <p>Delight will restart after installation.</p>
-        </>}
-        {updateBusy && <div role="status">
-          <p>{updatePhase === "installing" ? "Installing and restarting…" : updateProgress === undefined ? "Downloading…" : `Downloading · ${Math.round(updateProgress)}%`}</p>
-          <progress aria-label="Update progress" max={100} value={updateProgress} />
-        </div>}
-        {updatePhase === "error" && <p role="alert">{updateError}</p>}
-        {!updateBusy && <footer>
-          <button autoFocus onClick={closeUpdateDialog}>Later</button>
-          <button onClick={() => void installUpdate()}>{updatePhase === "error" ? "Try again" : "Install and restart"}</button>
-        </footer>}
-      </dialog>}
       {crashPreview && <CrashDetails {...crashPreview} close={() => setCrashPreview(undefined)} />}
       {toast && <div className={`launch-toast ${toastKind}`} role={toastKind === "error" ? "alert" : "status"} aria-live={toastKind === "error" ? "assertive" : "polite"}><span>{toast}</span>{toastKind === "error" && failure && userError(failure.message) === toast && <button className="share-crash" onClick={previewFailure}>Share crash details</button>}</div>}
+      <PlayerInstallBar link={installingPlayerLink} />
     </div>
     {contentTransfer.overlay}
-    </ContentTransferContext.Provider></ShortcutContext.Provider>
+    </FollowUpdateContext.Provider></ContentTransferContext.Provider></ShortcutContext.Provider>
   );
 }

@@ -3,6 +3,7 @@ import https from "node:https";
 import fs from "node:fs";
 import { initializeCosmetics } from "./cosmetics/readiness.mjs";
 import { sharingFromEnvironment } from "./sharing/api.mjs";
+import { workspacePacksFromEnvironment } from "./sharing/workspace-packs.mjs";
 import { authFromEnvironment, createAccountApi } from "./auth/auth.mjs";
 import { createSocialApi } from "./social/api.mjs";
 import { attachEmoteRelay } from "./emotes/relay.mjs";
@@ -19,6 +20,7 @@ let sharing;
 const social = createSocialApi({ ...accountRuntime, onInstanceInviteClosed: code => sharing?.invalidateInvite(code) });
 sharing = sharingFromEnvironment(process.env, { onInviteInvalidated: code => social.invalidateInstanceInviteByShareCode(code) });
 sharing.checkReadiness();
+const workspacePacks = workspacePacksFromEnvironment(social.workspacePublisher, process.env, social.workspaceAuthorProfile);
 const capabilities = Object.freeze({ catalog: true, modrinth: true, curseforge: false, modpacks: true, cosmetics: cosmetics.enabled, emotes: cosmetics.enabled, emoteProtocol: 1, packSharing: true, packChannels: true, accounts: true, social: true });
 const cache = new Map();
 
@@ -157,6 +159,7 @@ const requestHandler = async (request, response) => {
     if (await social.handle(request, response, pathname, url)) return;
     if (await cosmetics.handle(request, response, pathname, url)) return;
     if (await sharing.handle(request, response, pathname, url)) return;
+    if (await workspacePacks.handle(request, response, pathname)) return;
     if (request.method !== "GET") {
       response.setHeader("allow", "GET");
       return sendJson(response, 405, { error: "method_not_allowed" });

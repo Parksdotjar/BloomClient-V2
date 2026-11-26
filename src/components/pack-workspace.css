@@ -1,0 +1,108 @@
+.pack-workspace-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 3px;
+}
+
+.desktop-redesign .pack-workspace-back {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 39px;
+  padding: 7px 32px;
+  border: 1px dashed color-mix(in srgb, var(--theme-danger-ink, #e78389) 68%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pack-workspace-back > svg { position: absolute; inset-inline-start: 11px; }
+.desktop-redesign .pack-workspace-back:hover {
+  background: color-mix(in srgb, var(--theme-danger-ink, #e78389) 9%, transparent);
+}
+.desktop-redesign .pack-workspace-sidebar :is(button, .select-trigger):focus-visible {
+  outline: 2px solid var(--accent-ink, var(--accent));
+  outline-offset: 1px;
+}
+
+.pack-workspace-sidebar .select-wrap { width: 100%; min-width: 0; }
+.desktop-redesign .pack-workspace-sidebar .select-wrap .select-trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 15px;
+  gap: 5px;
+  min-height: 50px;
+  height: auto;
+  padding: 8px;
+  text-align: start;
+}
+.pack-workspace-sidebar .select-trigger > svg { position: static; }
+.pack-workspace-sidebar .select-value { display: block; min-width: 0; }
+.pack-workspace-choice { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pack-workspace-art {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 31px;
+  height: 31px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--control);
+  color: var(--muted);
+}
+.pack-workspace-art img { width: 100%; height: 100%; object-fit: cover; }
+.pack-workspace-art svg { width: 65%; height: 65%; }
+.pack-workspace-sidebar .pack-workspace-art svg { position: static; }
+.pack-workspace-choice-text { display: grid; gap: 2px; min-width: 0; }
+.pack-workspace-choice-text > :is(b, small) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+.pack-workspace-choice-text b { color: var(--text); font-size: 13px; font-weight: 600; }
+.pack-workspace-choice-text small { color: var(--muted); font-size: 11px; }
+.select-menu[data-content-filter-owner="pack-workspace"] button { min-height: 44px; }
+.select-menu[data-content-filter-owner="pack-workspace"] button > span { min-width: 0; }
+.pack-workspace-nav { --child-height: 30px; margin-top: 5px; }
+.desktop-redesign .pack-workspace-nav button {
+  width: 100%; min-width: 0; padding: 0 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); font: inherit; text-align: start;
+}
+.desktop-redesign .pack-workspace-nav .pack-workspace-group {
+  display: grid; grid-template-columns: 16px 1fr 14px; align-items: center; gap: 9px;
+  min-height: 36px; color: var(--text); font-size: 14px; font-weight: 600;
+}
+.pack-workspace-group[aria-expanded="false"] > svg:last-child { transform: rotate(-90deg); }
+.pack-workspace-nav ul { position: relative; margin: 0; padding: 0 0 0 33px; list-style: none; }
+.pack-workspace-nav ul::before {
+  content: ""; position: absolute; left: 17.5px; top: -6px; bottom: calc(var(--child-height) / 2);
+  width: 11px; pointer-events: none; border-left: 1px solid var(--launcher-menu-line);
+  border-bottom: 1px solid var(--launcher-menu-line); border-bottom-left-radius: 6px;
+}
+.desktop-redesign .pack-workspace-nav li > button { min-height: var(--child-height); font-size: 13px; }
+.desktop-redesign .pack-workspace-nav button:hover { color: var(--text); background: var(--launcher-menu-hover); }
+.desktop-redesign .pack-workspace-nav button[aria-current="page"] { background: var(--desktop-selection); color: var(--text); }
+
+/* Use the desktop instance header, artwork scale and action placement. */
+.desktop-redesign > .content[data-desktop-page="pack-workspace"] { padding-top: 8px; }
+.pack-workspace-overview .instance-identity > .pack-workspace-art {
+  width: 64px; height: 64px; border-radius: 8px;
+}
+.pack-workspace-overview .instance-identity h1 { overflow-wrap: anywhere; }
+.desktop-redesign .pack-workspace-overview .instance-hero-main { flex-wrap: wrap; }
+.pack-workspace-overview .instance-hero-actions:empty { display: none; }
+.desktop-redesign .pack-workspace-overview .instance-hero-actions .pack-workspace-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-width: 164px; padding-inline: 14px;
+}
+.pack-workspace-status { margin: 20px 0 0; color: var(--muted); font-size: 14px; }
+.pack-workspace-status p { margin: 0 0 10px; }
+@media (max-width: 1000px) {
+  .pack-workspace-sidebar .pack-workspace-choice { gap: 6px; }
+  .pack-workspace-sidebar .pack-workspace-art { width: 25px; height: 25px; }
+}

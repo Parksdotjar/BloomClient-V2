@@ -1,0 +1,23 @@
+.followed-releases { margin-top: 20px; }
+.follow-release-summary, .follow-release-actions, .follow-release-version {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.follow-release-summary { justify-content: space-between; gap: 12px; }
+.follow-release-version { margin: 0; font-weight: 650; color: var(--text); }
+.follow-release-policy { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.follow-backup-path { display: block; margin-top: 4px; font-size: 13px; overflow-wrap: anywhere; user-select: text; }
+.follow-release-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.follow-release-note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.follow-release-diff { padding: 0; margin: 14px 0 22px; list-style: none; }
+.follow-release-diff li { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 8px 12px; border-bottom: 1px solid var(--desktop-line); }
+.follow-release-diff li > div { min-width: 0; overflow-wrap: anywhere; }
+.follow-release-diff strong { font-size: 14px; font-weight: 600; }
+.follow-release-diff strong svg { vertical-align: middle; }
+.follow-release-diff small, .follow-release-diff li > span { display: block; color: var(--muted); font-size: 12px; }
+.followed-releases .player-link-error { color: var(--theme-danger-ink); }
+.follow-history-disclosure { margin-top: 20px; }
+.follow-history-disclosure summary { width: fit-content; cursor: pointer; font-size: 14px; }

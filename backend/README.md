@@ -15,6 +15,10 @@ Current routes:
 - `GET /health`
 - `POST /v1/packs`
 - `GET /v1/packs/{code}`
+- `POST /v1/workspace-packs` publishes through the existing authenticated Delight account.
+- `GET /v1/workspace-packs/{code}` reads a published release. `GET /share/pack/{code}` opens its HTTPS player page.
+
+Pack Workspace stores its releases, invitations, and drafts in `workspace-packs.sqlite` under `BLOOM_SHARE_DATA_DIR`. Keep that mount persistent and include the database in SQLite online backups. A service rollback can restore the previous image without deleting the Workspace database.
 
 Pack sharing stores manifests—not mod binaries—in `shares.sqlite` beneath `BLOOM_SHARE_DATA_DIR`. Production must mount that directory persistently and set `BLOOM_SHARE_PUBLIC_URL` to the public `/minecraft` base. See [`../MODPACK_SHARING.md`](../MODPACK_SHARING.md).
 

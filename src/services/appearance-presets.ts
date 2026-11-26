@@ -1,9 +1,12 @@
 import { normalizeAccent } from "./accent-preferences";
 import type { SettingsState } from '../main';
 
-export const appearanceKeys = ['theme', 'oledBackground', 'oledForeground', 'lightBackground', 'lightForeground', 'interfaceFont', 'interfaceSize', 'spacing', 'accent', 'customAccent', 'lastCustomAccent', 'oledSidebar', 'lightSidebar', 'oledPanel', 'lightPanel', 'dividerStrength'] as const;
+export const appearanceKeys = ['theme', 'oledBackground', 'oledForeground', 'lightBackground', 'lightForeground', 'interfaceFont', 'interfaceSize', 'spacing', 'accent', 'customAccent', 'lastCustomAccent', 'oledSidebar', 'lightSidebar', 'oledPanel', 'lightPanel', 'oledIsland', 'lightIsland', 'dividerStrength'] as const;
 export type Appearance = Pick<SettingsState, typeof appearanceKeys[number]>;
 export type AppearancePreset = { id: string; name: string; appearance: Appearance; created: number };
+export function normalizeIslandColor(value: unknown) {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "";
+}
 export function captureAppearance(settings: SettingsState): Appearance {
   return structuredClone(Object.fromEntries(appearanceKeys.map(key => [key, settings[key]]))) as Appearance;
 }
@@ -40,6 +43,9 @@ export async function readPresets() {
   const presets = await transact<AppearancePreset[]>('readonly', store => store.getAll());
   return presets.map(({ id, name, created, appearance }) => {
     const normalized = normalizeAccent(appearance);
+    for (const key of ["oledIsland", "lightIsland"] as const) {
+      if (key in normalized) normalized[key] = normalizeIslandColor(normalized[key]);
+    }
     // Older presets can omit newer controls. Apply only supported keys they contain.
     const supported = appearanceKeys.filter(key => key in normalized);
     return { id, name, created, appearance: Object.fromEntries(supported.map(key => [key, normalized[key]])) as Appearance };

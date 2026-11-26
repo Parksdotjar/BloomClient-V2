@@ -1,10 +1,17 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Copy, Minus, PanelLeftOpen, Square, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "../services/invoke";
+import { DesktopNotificationCenter, type DesktopNotifications } from "./DesktopNotificationCenter";
+import type { DesktopCosmeticUnlock } from "./DesktopCosmeticUnlock";
+import type { DesktopLauncherUpdate } from "./DesktopIslandUpdate";
+import type { TitleBarLaunchProgress } from "../services/use-titlebar-launch-progress";
+import type { ClientNotice } from "../services/client-notice";
+import type { DesktopNowPlaying, NowPlayingAction, NowPlayingVolume } from "../services/now-playing";
 
 type MenuItem = { label: string; run: () => void };
 export type DesktopMenu = { label: string; items: MenuItem[] };
+export type { DesktopLauncherUpdate } from "./DesktopIslandUpdate";
 
 function ApplicationMenus({ menus }: { menus: DesktopMenu[] }) {
   const [open, setOpen] = useState<number | null>(null);
@@ -80,8 +87,53 @@ function ApplicationMenus({ menus }: { menus: DesktopMenu[] }) {
   </div>;
 }
 
-export function DesktopTitleBar({ onHome, onExpand, menus }: { onHome: () => void; onExpand?: () => void; menus: DesktopMenu[] }) {
+export function DesktopTitleBar({
+  onHome, onExpand, menus, notificationCenter, notificationRequest, launcherUpdate, clientNotice,
+  cosmeticUnlock, onDismissCosmeticUnlock, onOpenUnlockedCloak,
+  launchProgress, onCancelLaunch, nowPlaying, nowPlayingVolume, onNowPlayingControl,
+  onNowPlayingDetailsChange, onNowPlayingVolumeChange, motion = true,
+}: {
+  onHome: () => void;
+  onExpand?: () => void;
+  menus: DesktopMenu[];
+  notificationCenter?: DesktopNotifications;
+  notificationRequest?: number;
+  launcherUpdate?: DesktopLauncherUpdate;
+  clientNotice?: ClientNotice | null;
+  cosmeticUnlock?: DesktopCosmeticUnlock;
+  onDismissCosmeticUnlock?: (sequence: number) => void;
+  onOpenUnlockedCloak?: (item: DesktopCosmeticUnlock) => void;
+  launchProgress?: TitleBarLaunchProgress;
+  onCancelLaunch?: () => void;
+  nowPlaying?: DesktopNowPlaying;
+  nowPlayingVolume?: NowPlayingVolume | null;
+  onNowPlayingControl?: (sessionId: string, action: NowPlayingAction) => void;
+  onNowPlayingDetailsChange?: (sessionId: string | null) => void;
+  onNowPlayingVolumeChange?: (sessionId: string, level: number) => void;
+  motion?: boolean;
+}) {
   const [maximized, setMaximized] = useState(false);
+  const header = useRef<HTMLElement>(null);
+  const start = useRef<HTMLDivElement>(null);
+  const end = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const bar = header.current;
+    const left = start.current;
+    const right = end.current;
+    if (!bar || !left || !right) return;
+    const measure = () => {
+      const leftWidth = left.offsetWidth;
+      const rightWidth = right.offsetWidth;
+      const centerWidth = Math.max(0, bar.clientWidth - 2 * (Math.max(leftWidth, rightWidth) + 12));
+      bar.style.setProperty("--desktop-title-start-width", `${leftWidth}px`);
+      bar.style.setProperty("--desktop-title-end-width", `${rightWidth}px`);
+      bar.style.setProperty("--desktop-island-fit", `${centerWidth}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    [bar, left, right].forEach(element => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const win = getCurrentWindow();
     let active = true;
@@ -90,17 +142,26 @@ export function DesktopTitleBar({ onHome, onExpand, menus }: { onHome: () => voi
     window.addEventListener("resize", refresh);
     return () => { active = false; window.removeEventListener("resize", refresh); };
   }, []);
-  return <header className="desktop-titlebar">
-    <button className="desktop-title-brand" onClick={onHome} aria-label="Delight home" title="Home">
-      <img src={new URL("delight-logo.png", document.baseURI).href} alt="" />
-    </button>
-    <ApplicationMenus menus={menus} />
+  return <header className="desktop-titlebar" ref={header}>
+    <div className="desktop-title-start" ref={start}>
+      <button className="desktop-title-brand" onClick={onHome} aria-label="Delight home" title="Home">
+        <img src={new URL("delight-logo.png", document.baseURI).href} alt="" />
+      </button>
+      <ApplicationMenus menus={menus} />
+    </div>
     <div className="desktop-title-drag" data-tauri-drag-region />
-    {onExpand && <button className="desktop-frame-control" onClick={onExpand} aria-label="Expand sidebar" title="Expand sidebar"><PanelLeftOpen size={16} /></button>}
-    <div className="desktop-frame-controls" role="group" aria-label="Window controls">
-      <button className="desktop-frame-control" aria-label="Minimize Delight Client" title="Minimize" onClick={() => void getCurrentWindow().minimize()}><Minus /></button>
-      <button className="desktop-frame-control" aria-label="Maximize or restore Delight Client" title={maximized ? "Restore" : "Maximize"} onClick={() => void getCurrentWindow().toggleMaximize()}>{maximized ? <Copy /> : <Square />}</button>
-      <button className="desktop-frame-control frame-close" aria-label="Close Delight Client" title="Close" onClick={() => void invoke("exit_application")}><X /></button>
+    {notificationCenter && <DesktopNotificationCenter center={notificationCenter} notificationRequest={notificationRequest}
+      launcherUpdate={launcherUpdate} clientNotice={clientNotice} launchProgress={launchProgress} onCancelLaunch={onCancelLaunch}
+      cosmeticUnlock={cosmeticUnlock} onDismissCosmeticUnlock={onDismissCosmeticUnlock} onOpenUnlockedCloak={onOpenUnlockedCloak}
+      nowPlaying={nowPlaying} nowPlayingVolume={nowPlayingVolume} onNowPlayingControl={onNowPlayingControl}
+      onNowPlayingDetailsChange={onNowPlayingDetailsChange} onNowPlayingVolumeChange={onNowPlayingVolumeChange} motion={motion} />}
+    <div className="desktop-title-end" ref={end}>
+      {onExpand && <button className="desktop-frame-control" onClick={onExpand} aria-label="Expand sidebar" title="Expand sidebar"><PanelLeftOpen size={16} /></button>}
+      <div className="desktop-frame-controls" role="group" aria-label="Window controls">
+        <button className="desktop-frame-control" aria-label="Minimize Delight Client" title="Minimize" onClick={() => void getCurrentWindow().minimize()}><Minus /></button>
+        <button className="desktop-frame-control" aria-label="Maximize or restore Delight Client" title={maximized ? "Restore" : "Maximize"} onClick={() => void getCurrentWindow().toggleMaximize()}>{maximized ? <Copy /> : <Square />}</button>
+        <button className="desktop-frame-control frame-close" aria-label="Close Delight Client" title="Close" onClick={() => void invoke("exit_application")}><X /></button>
+      </div>
     </div>
   </header>;
 }

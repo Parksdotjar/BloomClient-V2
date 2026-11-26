@@ -1,110 +1,51 @@
-/* Shared action material, audited across the client. Colors, geometry and handlers
-   belong to each control; this layer survives its hover/back/cancel state.
-   Home Play already owns its pixel-reveal bevel and is deliberately not doubled. */
+/* Shared ceramic finish for colored actions. Secondary controls keep their
+   flat theme surfaces and outlines. Home Play owns its pixel-reveal bevel. */
 :root {
   --launcher-bevel: inset 1px 2px 2px var(--theme-highlight, #ffffff42),
     inset -1px -2px 3px var(--theme-shadow-soft, #0005);
   --ceramic-action-depth: inset 1px 2px 5px -3px color-mix(in srgb, var(--theme-highlight, #ffffff42) 36%, transparent),
     0 4px 10px -5px color-mix(in srgb, var(--theme-shadow, #000b) 55%, transparent);
-  --ceramic-compact-depth: inset 1px 2px 4px -3px color-mix(in srgb, var(--theme-highlight, #ffffff42) 28%, transparent),
-    0 3px 8px -5px color-mix(in srgb, var(--theme-shadow, #000b) 40%, transparent);
+  --ceramic-sheen: linear-gradient(160deg,
+    color-mix(in srgb, var(--theme-highlight, #ffffff42) 18%, transparent),
+    transparent 52%,
+    color-mix(in srgb, var(--theme-shadow-soft, #0005) 22%, transparent));
 }
 :root :is(
   .ceramic-action,
-
   .instances-create,
-  .instances-create-folder,
   .create-instance-action,
-  .add-instance,
-  .sidebar-empty-instance,
-  .instance-folder-dialog footer button,
   .instance-folder-primary,
   .play-instance,
   .library-play,
   .floating-player-play.instance-play,
   .catalog-install:where(:not(.catalog-result-add)),
-  .import-pack-action,
+  .import-pack-action:where(:not(.secondary-import)),
   .modrinth-version-import,
-  .mod-detail-footer > button,
-  .content-transfer-panel footer button,
-  .secondary-action,
-  .instance-section-add > span,
-  .library-folder,
-  .library-more,
-  .instance-more,
-  .content-dots,
-  .filter-select.filtered .select-trigger,
-  .filter-select .select-trigger[aria-expanded="true"],
-
+  .mod-detail-footer > button:where(:not(.is-installed)),
   .microsoft-button,
   .onboarding-primary,
   .account-confirm,
-  .profile-switch-confirm button,
+  .profile-switch-confirm button:first-of-type,
   .profile-add-account,
-  .settings-update-button,
-  .cache-location-row button,
-  .cache-actions button,
-  .directory-setting,
-  .restart-onboarding-button,
-  .fabric-loader-error button,
-  .managed-java-control button,
+  .settings-update-button.available,
   .settings-card .danger-button,
-  .appearance-preset-editor button,
-  .accent-picker-actions button,
+  .appearance-preset-save,
   .fill-checkbox.checked,
-  .device-code > button,
-
   .hero-card button,
   .hero-recent-instance button,
-
   .share-next,
-  .share-back,
-  .share-mode-step > button.selected,
-
   .utility-card-footer button,
   .utility-apply,
-  .utility-confirmation button,
-  .utility-back,
-  .pack-console-actions > button:hover,
-  .pack-share-result button:hover,
-  .create-editor-code,
-  .pack-flow-choices > button:hover,
-  .group-update-ready,
-  .benchmark-start button,
-  .benchmark-consent button,
-  .benchmark-result-actions button,
-  .minecraft-benchmark-permission > button,
-  .benchmark-ready > button,
-  .minecraft-result-footer button,
-  .tuner-empty button,
-  .tuner-summary button,
-  .apply-action > button,
-  .apply-confirm > button
+  .utility-confirmation button:last-child,
+  .group-update-ready
 ) {
-  background-image: linear-gradient(160deg,
-    color-mix(in srgb, var(--theme-highlight, #ffffff42) var(--ceramic-action-shine, 18%), transparent),
-    transparent 52%,
-    color-mix(in srgb, var(--theme-shadow-soft, #0005) 22%, transparent)) !important;
+  background-image: var(--accent-action-sheen, var(--ceramic-sheen)) !important;
   border-color: transparent !important;
   box-shadow: var(--ceramic-action-depth) !important;
 }
-/* Keep white labels readable on red surfaces, including Light theme. */
-.settings-card .danger-button, .catalog-close { --ceramic-action-shine: 14%; }
-/* Small utility controls catch light only at the upper left, without a surrounding rim. */
-:root :is(.library-folder, .library-more, .instance-more, .content-dots) {
-  --ceramic-action-shine: 10%;
-  --ceramic-action-depth: var(--ceramic-compact-depth);
-  background-color: color-mix(in srgb, var(--control) 94%, var(--theme-base, #000));
-}
-:root :is(.library-folder, .library-more, .instance-more, .content-dots):is(:hover, :focus-visible):not(:disabled) {
-  background-color: color-mix(in srgb, var(--control) 96%, var(--theme-ink, #fff));
-  color: var(--text);
-}
-@media (prefers-reduced-motion: no-preference) {
-  :root:not([data-animations="off"]):not([data-performance="ultra"])
-    :is(.library-folder, .library-more, .instance-more, .content-dots) {
-    transition: background-color 200ms ease, color 200ms ease;
-  }
-}
+/* The red Settings actions and green Mods action have their own color. */
+:root .settings-card .danger-button { --accent-action-sheen: var(--ceramic-sheen); }
+:root[data-dark-neutral-accent] { --accent-action-sheen: none; }
+
 /* Static material adds no motion or extra press transform. Low-end mode removes depth. */
-:root[data-performance="ultra"] { --ceramic-action-depth: none; --ceramic-compact-depth: none; }
+:root[data-performance="ultra"] { --ceramic-action-depth: none; }

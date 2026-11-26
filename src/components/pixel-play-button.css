@@ -8,14 +8,14 @@
   transform: scale(1);
   transition: transform 680ms cubic-bezier(.45, 0, .2, 1);
 }
-/* Local ceramic preview: the same diagonal face on the accent and revealed fill. */
-.spotlight-play.pixel-play,
-.pixel-play .pixel-play-fill {
+/* The accent face carries the ceramic finish. */
+.spotlight-play.pixel-play {
   background-image: linear-gradient(160deg,
     color-mix(in srgb, var(--theme-highlight, #ffffff42) 40%, transparent),
     transparent 44%,
     color-mix(in srgb, var(--theme-shadow-soft, #0005) 40%, transparent));
 }
+:root[data-dark-neutral-accent] .spotlight-play.pixel-play { background-image: none; }
 /* One bevel above both faces keeps the rim continuous as the pixels spread. */
 .spotlight-play.pixel-play::after {
   content: "";

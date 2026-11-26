@@ -531,6 +531,15 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
   return {
     database,
     purgeExpiredData,
+    workspacePublisher(request) {
+      const session = bearerSession(request);
+      return session ? { id: session.user_id, username: session.username } : null;
+    },
+    workspaceAuthorProfile(id) {
+      const user = findUser.get(id);
+      return user ? { displayName: user.display_name || user.username, avatarUrl: user.avatar_url,
+        minecraftUuid: user.minecraft_uuid || null } : null;
+    },
     invalidateInstanceInviteByShareCode(code) {
       const invites = database.prepare("SELECT sender_id,recipient_id FROM social_instance_invites WHERE share_code=? AND status IN ('pending','installing')").all(code);
       if (!invites.length) return false;
