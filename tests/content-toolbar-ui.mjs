@@ -35,7 +35,7 @@ await page.addInitScript(() => {
       if (command === "get_saved_minecraft_profile") return null;
       if (command === "get_minecraft_process_running" || command === "plugin:window|is_maximized") return false;
       if (command === "get_minecraft_launch_status") return { active: false, progress: 0, state: "idle", message: "" };
-      if (["list_pack_channel_memberships", "reconcile_cosmetics", "list_cached_screenshots"].includes(command)) return [];
+      if (["list_instance_folders", "list_pack_channel_memberships", "reconcile_cosmetics", "list_cached_screenshots"].includes(command)) return [];
       if (command === "plugin:event|listen") return next++;
       if (command === "plugin:app|version") return "1.1.8";
       if (command === "get_client_cache_settings") return { enabled: true, maxBytes: 3e9 };
@@ -46,9 +46,8 @@ await page.addInitScript(() => {
 const shots = process.env.TOOLBAR_SCREENSHOTS;
 if (shots) await mkdir(shots, { recursive: true });
 const shot = async name => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
-const readout = page.locator(".content-toolbar-readout");
-const filterTrigger = page.locator(".content-filter-trigger");
-const drawer = page.locator(".launcher-filter-menu:not(.filter-choice-menu)");
+const readout = page.locator('.content-toolbar-readout[aria-hidden="false"]');
+const toolbar = page.locator(".content-toolbar");
 const rows = page.locator(".installed-content-item");
 const search = page.locator(".content-search input");
 const settle = () => page.waitForTimeout(380);
@@ -99,49 +98,25 @@ try {
   assert.equal(await page.locator('[role="tablist"][aria-label="Instance content"] [role="tab"] > svg[aria-hidden="true"]').count(), 5);
   await shot("installed");
   const dock = await search.boundingBox();
-  const filterBox = await filterTrigger.boundingBox();
   const add = page.getByRole("button", { name: "Add Mods", exact: true });
-  assert.ok(dock.x + dock.width <= filterBox.x && filterBox.x + filterBox.width <= (await add.boundingBox()).x);
+  assert.equal(await toolbar.getByRole("button", { name: /filter/i }).count(), 0);
+  assert.ok(dock.x + dock.width <= (await add.boundingBox()).x);
   assert.deepEqual(await add.evaluate(node => {
     const style = getComputedStyle(node);
-    return [style.borderTopStyle, style.borderTopColor, style.borderTopLeftRadius];
-  }), ["dashed", "rgb(104, 104, 104)", "7px"]);
-  const initialY = (await rows.first().boundingBox()).y;
-  await filterTrigger.click();
-  await settle();
-  assert.equal(await filterTrigger.getAttribute("aria-expanded"), "true");
-  assert.equal(await drawer.getAttribute("inert"), null);
-  assert.ok(Math.abs((await search.boundingBox()).y - dock.y) < 1, "Filter drawer must not move search dock");
-  assert.equal((await rows.first().boundingBox()).y, initialY, "Filters leave the result list in place");
-  assert.equal(await drawer.getAttribute("role"), "menu");
-  await shot("filters");
+    return [style.borderTopStyle, style.borderTopLeftRadius];
+  }), ["dashed", "7px"]);
   if (shots) await page.locator(".content-toolbar").screenshot({ path: `${shots}/toolbar-detail.png` });
-  await drawer.getByRole("menuitem",{name:"Show",exact:true}).click();
-  await page.getByRole("menuitemradio", { name: "Disabled", exact: true }).click();
-  assert.equal(await rows.count(), 8);
-  await filterTrigger.click(); await drawer.getByRole("menuitem",{name:"Sort by"}).click();
-  await page.getByRole("menuitemradio", { name: "Size", exact: true }).click();
-  assert.match(await rows.first().textContent(), /Mod 79/);
-  await page.keyboard.press("Escape");
-  await settle();
-  assert.equal(await filterTrigger.evaluate(el => el === document.activeElement), true);
-  assert.equal(await drawer.count(), 0);
   await search.fill("Mod 78");
   await page.waitForFunction(() => document.querySelectorAll(".installed-content-item").length === 1);
   await search.fill("");
-  await filterTrigger.click();
-  await page.getByRole("menuitem", { name: "Reset", exact: true }).click();
   assert.equal(await readout.count(), 0);
-  await filterTrigger.click();
-  await page.locator(".desktop-breadcrumb").click();
-  assert.equal(await filterTrigger.getAttribute("aria-expanded"), "false", "Outside click closes drawer");
   await rows.first().locator(".toggle").click();
   assert.equal(await readout.count(), 0);
   assert.equal(await page.evaluate(() => window.toolbarTest.calls.filter(c => c.command === "toggle_instance_content").length), 1);
   await page.getByRole("button", { name: "Add Mods", exact: true }).click();
   await page.locator(".catalog-item").first().waitFor();
   assert.equal(await readout.textContent(), "Minecraft 1.21.1 · Fabric");
-  assert.equal(await drawer.count(), 0);
+  assert.equal(await toolbar.getByRole("button", { name: /filter/i }).count(), 0);
   await settle();
   await shot("catalog");
   await search.fill("sample");
@@ -153,7 +128,9 @@ try {
       document.documentElement.style.setProperty("--accent", accent);
     }, [theme, accent]);
     await back.hover();
-    assert.deepEqual(await back.evaluate(el => [getComputedStyle(el).borderStyle, getComputedStyle(el).borderColor]), ["dashed", "rgb(212, 84, 84)"]);
+    await settle();
+    const color = theme === "light" ? "rgb(163, 41, 58)" : "rgb(212, 84, 84)";
+    assert.deepEqual(await back.evaluate(el => [getComputedStyle(el).borderStyle, getComputedStyle(el).borderColor]), ["dashed", color]);
   }
   await page.evaluate(() => document.documentElement.style.removeProperty("--accent"));
   await back.click();
@@ -162,21 +139,21 @@ try {
   assert.equal(await page.getByRole("button", { name: "Add Mods", exact: true }).evaluate(el => el === document.activeElement), true, "Mode change preserves action focus");
   for (const theme of ["light", "oled"]) {
     await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
-    await filterTrigger.click(); await settle(); await shot(`${theme}-filters`);
-    await page.keyboard.press("Escape"); await settle();
+    await add.click(); await settle(); await shot(`${theme}-catalog`);
+    await back.click(); await settle();
   }
   await page.setViewportSize({ width: 900, height: 900 });
-  await filterTrigger.click(); await settle(); await shot("compact");
-  const bounds = await drawer.boundingBox();
-  const reset = await page.getByRole("menuitem", { name: "Reset", exact: true }).boundingBox();
-  assert.ok(reset.y + reset.height <= bounds.y + bounds.height + 1, "Compact controls fit drawer");
-  await page.keyboard.press("Escape");
+  await add.click(); await settle(); await shot("compact");
+  const bounds = await toolbar.boundingBox();
+  const action = await back.boundingBox();
+  assert.ok(action.x + action.width <= bounds.x + bounds.width + 1, "Compact action fits the toolbar");
+  await back.click(); await settle();
   for (const mode of ["off", "ultra", "reduced"]) {
     await page.evaluate(mode => { document.documentElement.dataset.animations = mode === "off" ? "off" : "on"; document.documentElement.dataset.performance = mode === "ultra" ? "ultra" : "normal"; }, mode);
     await page.emulateMedia({ reducedMotion: mode === "reduced" ? "reduce" : "no-preference" });
-    await filterTrigger.click();
-    assert.equal(await drawer.evaluate(el => getComputedStyle(el).transitionDuration), "0s");
-    await page.keyboard.press("Escape");
+    await add.click();
+    assert.ok(await back.evaluate(el => parseFloat(getComputedStyle(el).transitionDuration) <= 0.000001));
+    await back.click();
   }
   await page.locator(".desktop-instance-link").getByRole("button", { name: "Vanilla", exact: true }).click();
   await page.getByRole("button", { name: "Add Mods", exact: true }).click();
@@ -202,5 +179,5 @@ try {
     assert.notEqual(await installed.evaluate(el => getComputedStyle(el).backgroundColor), await available.evaluate(el => getComputedStyle(el).backgroundColor));
   }
   assert.deepEqual(errors, []);
-  console.log("Passed: tab icons, compact installed toolbar, toggle, live filtering/sort/reset/search, cascading menu placement and focus, catalog/back and compatibility gate, both themes, compact layout and all motion overrides. Native calls simulated.");
+  console.log("Passed: tab icons, toolbar without search-adjacent Filter buttons, installed toggle and search, catalog/back and compatibility gate, focus, red outline in both themes, compact layout and all motion overrides. Native calls simulated.");
 } finally { await browser.close(); }

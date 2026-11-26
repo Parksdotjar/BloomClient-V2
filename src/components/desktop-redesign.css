@@ -3,6 +3,7 @@
   --desktop-rail-width: 52px;
   --desktop-title-height: 36px;
   --desktop-inner-radius: 12px;
+  --desktop-trailing-edge: 6px;
   --desktop-context-width: clamp(166px, 15vw, 228px);
   --app-sidebar-width: calc(var(--desktop-rail-width) + var(--desktop-context-width));
   --desktop-line: color-mix(in srgb, var(--text) var(--divider-strength, 13%), transparent);
@@ -302,10 +303,6 @@
 .desktop-redesign .content-search .content-search-clear { width: 25px; height: 25px; padding: 0; border: 0; animation: none; }
 .desktop-redesign .content-search:focus-within .content-search-mark > svg { transform: none; transition: none; }
 .desktop-redesign .content-toolbar h2 { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
-.desktop-redesign .content-toolbar .content-toolbar-readout {
-  margin: 12px 0 0;
-  font-size: 13px;
-}
 .desktop-redesign .desktop-content-columns {
   order: 1;
   display: flex;
@@ -404,11 +401,7 @@
 }
 .desktop-redesign .instance-workspace .instance-manager { margin-top: 14px; }
 .desktop-redesign .content-toolbar-face > .content-search { order: 0; }
-.desktop-redesign .content-toolbar .manager-tools { display: contents; }
-.desktop-redesign .content-toolbar .content-toolbar-filter-slot { order: 1; }
-.desktop-redesign .content-toolbar .content-toolbar-action { order: 2; margin-inline-start: auto; }
 .desktop-redesign .content-toolbar .content-search,
-.desktop-redesign .content-toolbar .content-filter-trigger,
 .desktop-redesign .content-toolbar .content-toolbar-action {
   background: color-mix(in srgb, var(--text) 4%, transparent);
   color: var(--text);
@@ -418,7 +411,7 @@
   font-size: 14px;
   font-weight: 400;
 }
-.desktop-redesign .content-toolbar :is(.content-filter-trigger, .content-toolbar-action) {
+.desktop-redesign .content-toolbar .content-toolbar-action {
   width: auto;
   height: 37px;
   min-height: 37px;
@@ -428,18 +421,16 @@
   justify-content: center;
   gap: 8px;
   white-space: nowrap;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--text) 42%, var(--page));
 }
-.desktop-redesign .content-toolbar[data-mode="catalog"]:not([data-catalog-filters="true"]) .content-toolbar-filter-slot {
-  display: none;
+.desktop-redesign .content-toolbar[data-mode="catalog"] .content-toolbar-action {
+  border-color: var(--theme-danger-ink, #d45454);
 }
-.desktop-redesign .content-toolbar :is(.content-filter-trigger, .content-toolbar-action):hover,
-.desktop-redesign .content-toolbar .content-filter-trigger[aria-expanded="true"] {
+.desktop-redesign .content-toolbar .content-toolbar-action:hover {
   color: var(--text);
   background: var(--desktop-selection);
 }
-.desktop-redesign .content-toolbar-readout > span,
-.desktop-redesign .content-toolbar-action-label { animation: none; font-weight: 400; }
-.desktop-redesign .content-toolbar .content-toolbar-readout { font-size: 14px; }
 .desktop-redesign .instance-content-list-shell .content-detail-hitarea { gap: var(--content-row-art-gap); padding-block: 5px; }
 .desktop-redesign .instance-list-row .content-name b { font-size: 15px; font-weight: 650; }
 .desktop-redesign .instance-list-row .content-name small { color: var(--muted); font-size: 13px; }
@@ -470,6 +461,10 @@
 .desktop-redesign .instance-workspace .instance-list-row {
   min-height: 60px;
   padding: 3px var(--content-row-end) 3px var(--content-row-start);
+}
+.desktop-redesign .instance-workspace [data-mods-content] .instance-list-row {
+  height: 60px;
+  margin: 0 0 3px;
 }
 .desktop-redesign .instance-content-list-shell .content-row-actions {
   gap: 12px;
@@ -519,12 +514,6 @@
 }
 .desktop-redesign .content-toolbar .content-search:focus-within { outline: 1px solid var(--muted); }
 .desktop-redesign .content-toolbar .content-search-mark { color: var(--muted); }
-.desktop-redesign .content-toolbar .add-content {
-  border: 1px dashed #686868 !important;
-}
-.desktop-redesign .content-toolbar .catalog-close {
-  border: 1px dashed #d45454 !important;
-}
 .desktop-redesign:where(:not([data-wallpaper])) .content-toolbar .content-toolbar-action {
   background: transparent !important; color: var(--text); box-shadow: none !important;
 }
@@ -601,10 +590,11 @@
 }
 .desktop-redesign .downloads-page, .desktop-redesign .home-stories { container-type: inline-size; }
 
-/* The title strip and narrow rail form one continuous frame around the work area. */
+/* The title strip, left rail and slim trailing edges frame the work area. */
 .app-shell.desktop-redesign {
   --desktop-frame: color-mix(in srgb, var(--page) 93%, var(--text));
   --desktop-canvas: var(--page);
+  padding-right: var(--desktop-trailing-edge);
   background: var(--desktop-frame);
 }
 :root[data-theme="oled"] .app-shell.desktop-redesign {
@@ -710,10 +700,11 @@
 .desktop-redesign .rail-destinations > button:active {
   background: color-mix(in srgb, var(--text) 15%, var(--desktop-frame));
 }
-.app-shell.desktop-redesign > :is(.desktop-context, .content) {
+.app-shell.desktop-redesign > :is(.desktop-context, .content, .workspace-rail) {
   margin-top: var(--desktop-title-height);
-  height: calc(100dvh - var(--desktop-title-height));
+  height: calc(100dvh - var(--desktop-title-height) - var(--desktop-trailing-edge));
   border-top: 1px solid var(--desktop-line);
+  border-bottom: 1px solid var(--desktop-line);
   box-shadow: none;
 }
 .app-shell.desktop-redesign > :is(.desktop-context, .content) {
@@ -723,7 +714,19 @@
 .app-shell.desktop-redesign:is([data-wide-workspace], [data-desktop-context-collapsed="true"]) > .content {
   border-left: 1px solid var(--desktop-line);
   border-top-left-radius: var(--desktop-inner-radius);
+  border-bottom-left-radius: var(--desktop-inner-radius);
 }
+.app-shell.desktop-redesign:not(:has(> .workspace-rail)) > .content,
+.app-shell.desktop-redesign > .workspace-rail {
+  border-right: 1px solid var(--desktop-line);
+  border-top-right-radius: var(--desktop-inner-radius);
+  border-bottom-right-radius: var(--desktop-inner-radius);
+}
+.app-shell.desktop-redesign > .workspace-rail {
+  padding-top: 1px;
+  overflow: clip;
+}
+.app-shell.desktop-redesign > .workspace-rail-image { padding-top: 0; }
 .app-shell.desktop-redesign > .desktop-context {
   padding: 16px 12px 10px;
   border-right: 1px solid var(--desktop-line);
@@ -812,7 +815,7 @@
 }
 
 /* Modrinth results share columns, including the state of a queued or installed file. */
-.catalog-manager .catalog-result {
+.instance-manager .catalog-result {
   display: flex;
   align-items: center;
   gap: 12px;

@@ -3,6 +3,9 @@ import { KeyboardShortcuts } from "./components/KeyboardShortcuts";
 import { ShortcutContext, binding, shortcuts, chord, recording, shortcutMatches, type Bindings } from "./services/shortcuts";
 import { fitFloatingMenu, type FloatingMenuPosition } from "./services/menu-position";
 import "./components/winter-launch-scene.css";
+import { LauncherSnowfall } from "./components/LauncherSnowfall";
+import { formatStorageSize, StorageBreakdown } from "./components/StorageBreakdown";
+import { readSnowfall, snowfallDefaults, snowfallLimits, type SnowfallSettings } from "./services/snowfall-settings";
 import { HomeStories } from "./components/HomeStories";
 import { CatalogArtwork, CatalogFeedRow } from "./components/CatalogFeedRow";
 import { useContentDownloads, contentPending, contentKind, type ContentDownload } from "./services/use-content-downloads";
@@ -229,6 +232,8 @@ export type SettingsState = AccentPreferences & {
   animations: boolean;
   showNowPlaying: boolean;
   buttonPressDuration: number;
+  snowfall: boolean;
+  snowfallOptions: SnowfallSettings;
   ultraPerformance: boolean;
   tray: boolean;
   updates: boolean;
@@ -267,6 +272,8 @@ const defaults: SettingsState = {
   animations: true,
   showNowPlaying: false,
   buttonPressDuration: 750,
+  snowfall: false,
+  snowfallOptions: snowfallDefaults,
   ultraPerformance: false,
   tray: true,
   updates: true,
@@ -291,7 +298,8 @@ const defaults: SettingsState = {
   gameDirectory: ".minecraft/instances/",
 };
 function resetLauncherAppearance(settings: SettingsState): SettingsState {
-  return { ...settings, ...captureAppearance(defaults), animations: defaults.animations, buttonPressDuration: defaults.buttonPressDuration };
+  return { ...settings, ...captureAppearance(defaults), animations: defaults.animations, snowfall: defaults.snowfall,
+    snowfallOptions: snowfallDefaults, buttonPressDuration: defaults.buttonPressDuration };
 }
 const spotlightDefaultMigrationKey = "bloom-home-layout-spotlight-v1";
 const nav = [
@@ -548,10 +556,16 @@ function CommitSlider({ value, minimum, maximum, step, unit, label, disabled, on
   </div>;
 }
 
-function PaginationControls({ page, pages, onPage, busy = false }: {
+type PaginationProps = {
   page: number; pages: number; onPage: (page: number) => void; busy?: boolean;
-}) {
-  const numbers = [...new Set([1, page - 1, page, page + 1, pages])].filter(n => n >= 1 && n <= pages).sort((a, b) => a - b);
+};
+
+function paginationNumbers(page: number, pages: number) {
+  return [...new Set([1, page - 1, page, page + 1, pages])].filter(n => n >= 1 && n <= pages).sort((a, b) => a - b);
+}
+
+function PaginationControls({ page, pages, onPage, busy = false }: PaginationProps) {
+  const numbers = paginationNumbers(page, pages);
   return <nav className="content-pagination page-navigation" aria-label="Pagination">
     <button disabled={busy || page === 1} aria-label="Previous page" onClick={() => onPage(page - 1)}><ChevronLeft size={16} /></button>
     {numbers.map((number, index) => <Fragment key={number}>
@@ -560,6 +574,50 @@ function PaginationControls({ page, pages, onPage, busy = false }: {
     </Fragment>)}
     <button disabled={busy || page === pages} aria-label="Next page" onClick={() => onPage(page + 1)}><ChevronRight size={16} /></button>
   </nav>;
+}
+
+function InstancePagination({ page, pages, onPage, busy }: PaginationProps) {
+  const [range, setRange] = useState(() => ({ page, pages }));
+  const [previous, setPrevious] = useState<typeof range | null>(null);
+  const incoming = useRef<HTMLDivElement>(null);
+  const outgoing = useRef<HTMLDivElement>(null);
+  // An unresolved catalog request may clear its result count before the new range arrives.
+  const next = busy && pages <= 1 ? range : { page, pages };
+  const signature = paginationNumbers(next.page, next.pages).join(",");
+  if (range.page !== next.page || range.pages !== next.pages) {
+    if (paginationNumbers(range.page, range.pages).join(",") !== signature) setPrevious(range);
+    setRange(next);
+  }
+
+  useLayoutEffect(() => {
+    if (!previous) return;
+    const { animations, performance } = document.documentElement.dataset;
+    if (animations !== "on" || performance === "ultra" || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setPrevious(null);
+      return;
+    }
+    const timing: KeyframeAnimationOptions = { duration: 260, easing: "cubic-bezier(.22, .61, .36, 1)", fill: "both" };
+    const motions = [
+      incoming.current?.animate([{ opacity: 0, translate: "8px 0" }, { opacity: 1, translate: "0 0" }], timing),
+      outgoing.current?.animate([{ opacity: 1, translate: "0 0" }, { opacity: 0, translate: "-8px 0" }], timing),
+    ].filter(animation => animation !== undefined);
+    let mounted = true;
+    void Promise.allSettled(motions.map(animation => animation.finished)).then(() => {
+      if (mounted) setPrevious(null);
+    });
+    return () => { mounted = false; motions.forEach(animation => animation.cancel()); };
+  }, [signature, previous]);
+
+  return <div className="instance-pagination" data-has-pages={next.pages > 1}>
+    <div className="instance-pagination-clip">
+      <div className="instance-pagination-stage">
+        {next.pages > 1 && <div ref={incoming}><PaginationControls {...next} onPage={onPage} busy={busy} /></div>}
+        {previous && previous.pages > 1 && <div ref={outgoing} className="instance-pagination-outgoing" inert aria-hidden="true">
+          <PaginationControls {...previous} onPage={onPage} />
+        </div>}
+      </div>
+    </div>
+  </div>;
 }
 
 function SettingsHeading({ title, description, children }: { title: string; description: string; children?: ReactNode }) {
@@ -615,9 +673,9 @@ function ManagedJavaControl() {
 }
 
 type ClientCacheStatus = { directory: string; capacityBytes: number; usedBytes: number; itemCount: number };
-const formatCacheUsage = (bytes: number) => bytes >= 10_737_418 ? `${(bytes / 1073741824).toFixed(2)} GB` : bytes >= 1_048_576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(0, bytes / 1024).toFixed(1)} KB`;
 
 function ClientCacheControl({ active }: { active: boolean }) {
+  const [cacheRevision, setCacheRevision] = useState(0);
   const [status, setStatus] = useState<ClientCacheStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -648,7 +706,7 @@ function ClientCacheControl({ active }: { active: boolean }) {
     setMessage("");
     try {
       const next = await operation();
-      if (next) { setStatus(next); setMessage(success); }
+      if (next) { setStatus(next); setMessage(success); setCacheRevision(value => value + 1); }
     } catch (error) { setMessage(String(error)); }
     finally { setBusy(false); }
   };
@@ -656,12 +714,13 @@ function ClientCacheControl({ active }: { active: boolean }) {
   const capacity = status ? status.capacityBytes / 1073741824 : 2;
   const usedRatio = status ? Math.min(1, status.usedBytes / Math.max(1, status.capacityBytes)) : 0;
   return <div className="storage-settings">
+    <StorageBreakdown active={active} cacheRevision={cacheRevision} />
     <div className="storage-overview">
       <span className="storage-label">Cache usage</span>
-      <div className="storage-amount"><strong>{status ? formatCacheUsage(status.usedBytes) : "—"}</strong>
+      <div className="storage-amount"><strong>{status ? formatStorageSize(status.usedBytes) : "—"}</strong>
         {status && <span>of {capacity} GB</span>}</div>
       <div className="storage-meter" role="progressbar" aria-label="Client cache usage" aria-valuemin={0}
-        aria-valuemax={status?.capacityBytes || 1} aria-valuenow={status?.usedBytes}><i style={{ width: usedRatio * 100 + "%" }} /></div>
+        aria-valuemax={status?.capacityBytes || 1} aria-valuenow={status?.usedBytes}><i className="storage-meter-fill" style={{ width: usedRatio * 100 + "%" }} /></div>
       <small>{status ? `${status.itemCount.toLocaleString()} cached ${status.itemCount === 1 ? "item" : "items"}` : "Reading cache…"}</small>
     </div>
     <div className="settings-card">
@@ -913,6 +972,8 @@ function SettingsPage({
   const backdrop = settings.backdrop;
   const changeBackdrop = (patch: Partial<BackgroundSettings>) =>
     setSettings(current => ({ ...current, backdrop: { ...current.backdrop, ...patch } }));
+  const changeSnowfall = (patch: Partial<SnowfallSettings>) =>
+    setSettings(current => ({ ...current, snowfallOptions: { ...current.snowfallOptions, ...patch } }));
   const saveWallpaper = async (file: File | null) => {
     if (await wallpaper.save(file)) changeBackdrop({ source: file ? "Image" : "Solid color" });
   };
@@ -1076,6 +1137,20 @@ function SettingsPage({
               <SettingsRow title="Reduce motion" description="Use fewer animations throughout the launcher.">
                 <Toggle label="Reduce motion" value={!settings.animations} onChange={value => update("animations", !value)} />
               </SettingsRow>
+              <SettingsRow title="Snowfall" description="Let snowflakes fall across the launcher workspace.">
+                <Toggle label="Snowfall" value={settings.snowfall === true} onChange={value => update("snowfall", value)} />
+              </SettingsRow>
+              {settings.snowfall === true && <div className="snowfall-settings-panel" role="group" aria-label="Snowfall customization">
+                <SettingsRow title="Flake count" description="How many flakes are visible at once.">
+                  <PercentSlider label="Flake count" value={settings.snowfallOptions.count} {...snowfallLimits.count} unit="" onChange={count => changeSnowfall({ count })} />
+                </SettingsRow>
+                <SettingsRow title="Speed" description="How quickly flakes fall and drift.">
+                  <PercentSlider label="Snowfall speed" value={settings.snowfallOptions.speed} {...snowfallLimits.speed} step={5} onChange={speed => changeSnowfall({ speed })} />
+                </SettingsRow>
+                <SettingsRow title="Size" description="Scale the flakes while keeping their size variation.">
+                  <PercentSlider label="Snowflake size" value={settings.snowfallOptions.size} {...snowfallLimits.size} step={5} onChange={size => changeSnowfall({ size })} />
+                </SettingsRow>
+              </div>}
               {supportsNowPlaying && <SettingsRow title="Show Now Playing" description="Show media from supported Windows apps in the top bar.">
                 <Toggle label="Show Now Playing" value={settings.showNowPlaying} onChange={value => update("showNowPlaying", value)} />
               </SettingsRow>}
@@ -1195,7 +1270,7 @@ function SettingsPage({
             </div>
           </div>
           <div className="settings-section" {...section("Cache")}>
-            <SettingsHeading title="Storage" description="Manage the space Delight uses for cached content." />
+            <SettingsHeading title="Storage" description="See disk usage across instances, shared downloads, and the launcher cache." />
             <ClientCacheControl active={activeTab === "Cache"} />
           </div>
           <div className="settings-section" {...section("Minecraft")}>
@@ -1978,8 +2053,6 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
   const { items, ready: contentReady, hasInventory, error: contentError, refresh: loadContent } =
     useInstalledContent(instance, tab === "settings" || workspaceOpen || worldsOpen ? null : tab);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("Name");
-  const [filter, setFilter] = useState("All");
   const packArtwork = usePackArtwork(instance.id, tab, contentReady ? items : undefined);
   const [duplicateReport, setDuplicateReport] = useState<ModDuplicateReport>();
   const [duplicateChoice, setDuplicateChoice] = useState<DuplicateChoice>();
@@ -2017,6 +2090,13 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
   const [catalogFilters, setCatalogFilters] = useState(defaultCatalogFilters);
   const [catalogVersion, setCatalogVersion] = useState(instance.version);
   const catalogFiltered = catalogFiltersChanged(catalogFilters, catalogVersion, instance.version);
+  const showCatalogFilters = browsingCatalog && tab === "mods";
+  const [installedRowsAtEntry, setInstalledRowsAtEntry] = useState<InstanceContentItem[]>([]);
+  const [waitingForCatalogEntry, setWaitingForCatalogEntry] = useState(false);
+  const catalogLayerVisible = browsingCatalog && (!waitingForCatalogEntry || !catalogLoading);
+  useEffect(() => {
+    if (!catalogLoading) setWaitingForCatalogEntry(false);
+  }, [catalogLoading]);
   const activeCatalogFilters = tab === "mods" && catalogFiltered ? catalogFilters : undefined;
   const catalogGameVersion = tab === "mods" ? catalogVersion : instance.version;
   const [catalogError, setCatalogError] = useState("");
@@ -2096,9 +2176,9 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
   useEffect(() => { if (!menuOpen) setConfirmInstanceDelete(false); }, [menuOpen]);
   useEffect(() => {
     if (preserveInitialCatalog.current) { preserveInitialCatalog.current = false; return; }
-    setBrowsingCatalog(false); setSearch("");
+    setWaitingForCatalogEntry(false); setBrowsingCatalog(false); setSearch("");
   }, [tab]);
-  useEffect(() => { setContentPage(1); }, [tab, search, filter, sort, instance.id]);
+  useEffect(() => { setContentPage(1); }, [tab, search, instance.id]);
   useEffect(() => {
     setRenderedItemCount(10);
     if (contentListRef.current) contentListRef.current.scrollTop = 0;
@@ -2227,7 +2307,7 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
   };
   const conflictByFile = new Map(duplicateReport?.conflicts.flatMap(group => group.candidates.map(file => [file.fileName, group] as const)));
   const shownGroups = new Set<string>();
-  const visibleItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()) && (filter === "All" || (filter === "Enabled" ? item.enabled : !item.enabled)))
+  const visibleItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
     .filter(item => {
       const group = conflictByFile.get(item.fileName);
       if (!group) return true;
@@ -2237,13 +2317,14 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
     }).sort((a, b) => {
       const first = Number(!!duplicateTarget && conflictByFile.get(b.fileName)?.modId === duplicateTarget) -
         Number(!!duplicateTarget && conflictByFile.get(a.fileName)?.modId === duplicateTarget);
-      return first || (sort === "Size" ? b.size - a.size : a.name.localeCompare(b.name));
+      return first || a.name.localeCompare(b.name);
     });
   const pageCount = Math.max(1, Math.ceil(visibleItems.length / 50));
   const safePage = Math.min(contentPage, pageCount);
   const pagedItems = visibleItems.slice((safePage - 1) * 50, safePage * 50);
   const renderedInstalledItems = tab === "mods" ? pagedItems.slice(0, renderedItemCount) : pagedItems;
   const renderedCatalogItems = tab === "mods" ? catalog.items.slice(0, renderedItemCount) : catalog.items;
+  const displayedInstalledItems = showCatalogFilters ? installedRowsAtEntry : renderedInstalledItems;
   const catalogPages = Math.max(1, Math.ceil(catalog.total / Math.max(1, catalog.limit)));
   const updateListFade = (node: HTMLDivElement) => {
     const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
@@ -2272,7 +2353,7 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
     const observer = new ResizeObserver(fillViewport);
     observer.observe(list);
     return () => observer.disconnect();
-  }, [workspaceOpen, tab, worldsOpen, renderedItemCount, totalOnPage, browsingCatalog, catalogLoading, contentReady, contentPage, instance.id, search, filter]);
+  }, [workspaceOpen, tab, worldsOpen, renderedItemCount, totalOnPage, browsingCatalog, catalogLoading, contentReady, contentPage, instance.id, search]);
   const changeCatalogPage = (nextPage: number) => {
     if (tab === "settings") return;
     const cached = catalogMemoryCache.get(catalogCacheKey(tab, catalogGameVersion, search, nextPage, activeCatalogFilters));
@@ -2287,9 +2368,16 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
     if (tab === "mods" && !instance.loader.toLowerCase().includes("fabric")) { onMessage("The built-in mod catalog currently supports Fabric instances only."); return; }
     const cached = tab === "settings" ? undefined : catalogMemoryCache.get(catalogCacheKey(tab, catalogGameVersion, "", 1, activeCatalogFilters));
     if (cached) { setCatalog(cached); setCatalogLoading(false); } else setCatalogLoading(true);
+    setInstalledRowsAtEntry(tab === "mods" ? renderedInstalledItems : []);
+    const { animations, performance } = document.documentElement.dataset;
+    const animate = animations === "on" && performance !== "ultra" && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setWaitingForCatalogEntry(tab === "mods" && animate && !cached && renderedInstalledItems.length > 0);
     setSearch(""); setContentPage(1); setBrowsingCatalog(true);
   };
-  const closeCatalog = () => { setBrowsingCatalog(false); setSearch(""); setContentPage(1);  void loadContent(); };
+  const closeCatalog = () => {
+    setWaitingForCatalogEntry(false);
+    setBrowsingCatalog(false); setSearch(""); setContentPage(1); void loadContent();
+  };
   const resetCatalogFilters = () => {
     setCatalogFilters(defaultCatalogFilters());
     setCatalogVersion(instance.version);
@@ -2438,16 +2526,10 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
           }} />
       </div>
     ) : (
-      <section className={`instance-manager ${browsingCatalog ? "catalog-manager" : ""}`}>
-        <ContentToolbar key={`${instance.id}:${tab}`} category={categoryLabel}
+      <section className={`instance-manager ${browsingCatalog ? "catalog-manager" : ""}`}
+        data-mods-content={tab === "mods" || undefined} data-filter-sidebar-open={showCatalogFilters || undefined}>
+        <ContentToolbar key={`toolbar:${instance.id}:${tab}`} category={categoryLabel}
           browsing={browsingCatalog}
-          version={instance.version} loader={instance.loader} sort={sort} filter={filter}
-          onSortChange={value => { setSort(value); setContentPage(1); }}
-          onFilterChange={value => { setFilter(value); setContentPage(1); }}
-          catalogFiltered={catalogFiltered}
-          catalogControls={tab === "mods" ? <CatalogFilterControls value={catalogFilters} version={catalogVersion} instanceVersion={instance.version} changed={catalogFiltered}
-            onChange={value => { setCatalogFilters(value); setContentPage(1); }} onVersion={value => { setCatalogVersion(value); setContentPage(1); }}
-            onReset={resetCatalogFilters} /> : undefined}
           searchField={<div
             className={`content-search ${search ? "has-query" : ""}`}
             role="search"
@@ -2455,43 +2537,68 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
             <span className="content-search-mark" aria-hidden="true">
               <Search size={27} />
             </span>
-            <input
-              value={search}
-              aria-label={browsingCatalog ? `Search Modrinth ${categoryLabel.toLowerCase()}` : `Search installed ${categoryLabel.toLowerCase()}`}
-              onChange={event => updateContentSearch(event.target.value)}
-              placeholder={browsingCatalog ? `Search Modrinth ${categoryLabel.toLowerCase()}...` : `Search ${categoryLabel.toLowerCase()}...`}
-            />
+            <span className="content-search-input">
+              <input
+                value={search}
+                aria-label={browsingCatalog ? `Search Modrinth ${categoryLabel.toLowerCase()}` : `Search installed ${categoryLabel.toLowerCase()}`}
+                onChange={event => updateContentSearch(event.target.value)}
+                placeholder={browsingCatalog ? `Search Modrinth ${categoryLabel.toLowerCase()}...` : `Search ${categoryLabel.toLowerCase()}...`}
+              />
+              <span className="content-search-hint" aria-hidden="true">
+                <span className="content-mode-copy" data-content-copy="installed">Search {categoryLabel.toLowerCase()}...</span>
+                <span className="content-mode-copy" data-content-copy="catalog">Search Modrinth {categoryLabel.toLowerCase()}...</span>
+              </span>
+            </span>
             {search && <button type="button" className="content-search-clear" aria-label="Clear search" title="Clear search" onClick={() => updateContentSearch("")}><CloseIcon size={17} /></button>}
           </div>}
           installedAction={tab === "mods" ? <ModMaintenanceIssues entry={maintenanceEntry} hasDuplicates={duplicateReport ? duplicateReport.conflicts.length > 0 : undefined}
             retry={() => void maintenance.recheck(instance.id)} /> : undefined}
           onAdd={openCatalog} onBack={closeCatalog} />
-        {!browsingCatalog && tab === "mods" && <>
-          {(modImport.pending || modImport.error) && <div className="mod-maintenance-notice">
-            {modImport.pending && <p role="status">Importing mods…</p>}
-            {modImport.replacement ? <>
-              <InstanceContentIssue title="Replace installed mod?" details={modImport.error?.replace("Replace installed mod: ", "")} />
-              <button type="button" className="settings-action" onClick={() => setModImport({})}>Keep current</button>
-              <button type="button" className="instance-play ceramic-action" disabled={busy} onClick={() => {
-                const paths = modImport.replacement;
-                setModImport({ pending: true });
-                void invoke("import_instance_mod_files", { instanceId: instance.id, paths, replaceExisting: true }).then(() => {
-                  setModImport({});
-                  void loadContent(true);
-                  void maintenance.check(instance.id, true);
-                }).catch(error => setModImport({ error: userError(error) }));
-              }}>Replace</button>
-            </> : modImport.error && <InstanceContentIssue title={modImport.error === "Already installed." ? modImport.error : "Couldn’t import mods."}
-              details={modImport.error === "Already installed." ? undefined : modImport.error} />}
-          </div>}
-        </>}
-        {!browsingCatalog && contentError && <InstanceContentIssue
-          title={`Couldn’t ${hasInventory ? "refresh" : "load"} installed ${categoryLabel.toLowerCase()}.`}
-          details={contentError} onRetry={() => void loadContent(true)} />}
-        {!browsingCatalog && contentReady && visibleItems.length > 0 && <div className="desktop-content-columns" aria-hidden="true"><span>{categoryLabel}</span><span>Enabled</span></div>}
+        <div className="instance-content-top">
+          {!browsingCatalog && tab === "mods" && <>
+            {(modImport.pending || modImport.error) && <div className="mod-maintenance-notice">
+              {modImport.pending && <p role="status">Importing mods…</p>}
+              {modImport.replacement ? <>
+                <InstanceContentIssue title="Replace installed mod?" details={modImport.error?.replace("Replace installed mod: ", "")} />
+                <button type="button" className="settings-action" onClick={() => setModImport({})}>Keep current</button>
+                <button type="button" className="instance-play ceramic-action" disabled={busy} onClick={() => {
+                  const paths = modImport.replacement;
+                  setModImport({ pending: true });
+                  void invoke("import_instance_mod_files", { instanceId: instance.id, paths, replaceExisting: true }).then(() => {
+                    setModImport({});
+                    void loadContent(true);
+                    void maintenance.check(instance.id, true);
+                  }).catch(error => setModImport({ error: userError(error) }));
+                }}>Replace</button>
+              </> : modImport.error && <InstanceContentIssue title={modImport.error === "Already installed." ? modImport.error : "Couldn’t import mods."}
+                details={modImport.error === "Already installed." ? undefined : modImport.error} />}
+            </div>}
+          </>}
+          {!browsingCatalog && contentError && <InstanceContentIssue
+            title={`Couldn’t ${hasInventory ? "refresh" : "load"} installed ${categoryLabel.toLowerCase()}.`}
+            details={contentError} onRetry={() => void loadContent(true)} />}
+          <div className="instance-content-context" data-mode={browsingCatalog ? "catalog" : "installed"}
+            data-installed-readout={contentReady && visibleItems.length > 0}>
+            <div className="desktop-content-columns content-mode-copy" data-content-copy="installed" aria-hidden="true"><span>{categoryLabel}</span><span>Enabled</span></div>
+            <div className="content-toolbar-readout content-mode-copy" data-content-copy="catalog" aria-hidden={!browsingCatalog}>Minecraft {instance.version} · {instance.loader}</div>
+          </div>
+        </div>
+        {tab === "mods" && <div className="catalog-filter-rail" inert={!showCatalogFilters}>
+          <aside className="catalog-filter-sidebar" aria-label="Modrinth filters">
+            <CatalogFilterControls active={showCatalogFilters} SelectControl={Select} value={catalogFilters} version={catalogVersion} instanceVersion={instance.version} changed={catalogFiltered}
+              onChange={value => { setCatalogFilters(value); setContentPage(1); }} onVersion={value => { setCatalogVersion(value); setContentPage(1); }}
+              onReset={resetCatalogFilters} />
+          </aside>
+        </div>}
         <div className="instance-content-list-shell">
-          <div ref={contentListRef} className="content-list" onScroll={event => revealMoreContent(event.currentTarget)}>
-          {browsingCatalog ? (
+          {(tab === "mods" ? [false, true] : [browsingCatalog]).map(isCatalog => {
+            const active = isCatalog === browsingCatalog;
+            const visible = isCatalog === catalogLayerVisible;
+            return <div key={isCatalog ? "catalog" : "installed"} className="content-list"
+              data-mods-layer={tab === "mods" ? (isCatalog ? "catalog" : "installed") : undefined}
+              data-layer-visible={tab === "mods" ? visible : undefined} inert={!active || !visible}
+              ref={active ? contentListRef : undefined} onScroll={active ? event => revealMoreContent(event.currentTarget) : undefined}>
+          {isCatalog ? (
             catalogLoading ? <CatalogLoadingState label={search ? "Searching Modrinth" : `Loading featured ${categoryLabel.toLowerCase()}`} /> : catalogError ? <ContentEmptyState title="Couldn’t load Modrinth results." description={catalogError} actions={<button onClick={() => setCatalogRetry(value => value + 1)}>Try again</button>} /> : catalog.items.length ? renderedCatalogItems.map(item => {
               const installed = catalogItemInstalled(item);
               const pending = pendingCatalogItems.has(catalogKey(item));
@@ -2504,7 +2611,7 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
                 {activeCatalogFilters && <button onClick={resetCatalogFilters}>Reset filters</button>}
               </>}
             />
-          ) : !contentReady ? <CatalogLoadingState label={`Loading ${categoryLabel.toLowerCase()}`} /> : contentError && !hasInventory ? null : visibleItems.length ? renderedInstalledItems.map(item => {
+          ) : !contentReady ? <CatalogLoadingState label={`Loading ${categoryLabel.toLowerCase()}`} /> : contentError && !hasInventory ? null : displayedInstalledItems.length ? displayedInstalledItems.map(item => {
             const conflict = tab === "mods" ? conflictByFile.get(item.fileName) : undefined;
             if (conflict) return <InstalledContentRow key={conflict.modId} category="mods" loader={instance.loader}
               item={{ ...item, version: "Multiple versions" }}>
@@ -2541,11 +2648,8 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
               } : undefined} />
           </InstalledContentRow>;
           }) : items.length ? <ContentEmptyState
-            title={search ? `No ${categoryLabel.toLowerCase()} match “${search}”.` : `No ${filter.toLowerCase()} ${categoryLabel.toLowerCase()}.`}
-            actions={<>
-              {search && <button onClick={() => updateContentSearch("")}>Clear search</button>}
-              {filter !== "All" && <button onClick={() => { setFilter("All"); setContentPage(1); }}>Reset filters</button>}
-            </>}
+            title={`No ${categoryLabel.toLowerCase()} match “${search}”.`}
+            actions={<button onClick={() => updateContentSearch("")}>Clear search</button>}
           /> : <ContentEmptyState
             title={`No ${categoryLabel.toLowerCase()} yet.`}
             description={tab !== "mods" ? "Drop a ZIP file here to add it." : instance.loader.toLowerCase() === "fabric" ? "Drop a mod JAR here to add it." : undefined}
@@ -2554,11 +2658,12 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
               <button onClick={() => void invoke("open_instance_folder", { instanceId: instance.id, category: tab }).catch(error => onMessage(String(error), "error"))}><FolderOpen size={15} />Open folder</button>
             </>}
           />}
-          </div>
+            </div>;
+          })}
         </div>
-        {browsingCatalog
-          ? catalog.total > catalog.limit && <PaginationControls page={contentPage} pages={catalogPages} busy={catalogLoading} onPage={changeCatalogPage} />
-          : visibleItems.length > 50 && <PaginationControls page={safePage} pages={pageCount} onPage={setContentPage} />}
+        <InstancePagination key={`pagination:${instance.id}:${tab}`} page={browsingCatalog ? contentPage : safePage}
+          pages={browsingCatalog ? catalogPages : pageCount} busy={browsingCatalog && catalogLoading}
+          onPage={browsingCatalog ? changeCatalogPage : setContentPage} />
 
 
         {modDrawer && <ModDetailDrawer
@@ -3096,6 +3201,7 @@ export function App() {
       delete (loaded as SettingsState & { interactionSounds?: unknown }).interactionSounds;
       delete (loaded as SettingsState & { recentModSearches?: unknown }).recentModSearches;
       delete (loaded as SettingsState & { finish?: unknown }).finish;
+      loaded.snowfallOptions = readSnowfall(stored.snowfallOptions);
       localStorage.setItem("bloom-settings", JSON.stringify(loaded));
       return loaded;
     } catch {
@@ -4401,6 +4507,7 @@ export function App() {
       {crashPreview && <CrashDetails {...crashPreview} close={() => setCrashPreview(undefined)} />}
       {toast && <div className={`launch-toast ${toastKind}`} role={toastKind === "error" ? "alert" : "status"} aria-live={toastKind === "error" ? "assertive" : "polite"}><span>{toast}</span>{toastKind === "error" && failure && userError(failure.message) === toast && <button className="share-crash" onClick={previewFailure}>Share crash details</button>}</div>}
       <PlayerInstallBar link={installingPlayerLink} />
+      {settings.snowfall === true && settings.animations && !settings.ultraPerformance && <LauncherSnowfall light={resolvedTheme === "light"} settings={settings.snowfallOptions} />}
     </div>
     {contentTransfer.overlay}
     </FollowUpdateContext.Provider></ContentTransferContext.Provider></ShortcutContext.Provider>

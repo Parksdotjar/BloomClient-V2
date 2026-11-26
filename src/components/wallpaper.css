@@ -11,7 +11,7 @@
 
 :root[data-theme] .app-shell.desktop-redesign[data-wallpaper] > main.content { background: transparent; }
 
-/* Frost the title strip, icon rail and outside of the workspace curve in one pass. */
+/* Frost the entire frame, including the space outside each canvas corner, in one pass. */
 .app-shell.desktop-redesign[data-wallpaper]::before {
   content: "";
   position: absolute;
@@ -22,8 +22,16 @@
   mask:
     linear-gradient(black, black) top left / 100% var(--desktop-title-height) no-repeat,
     linear-gradient(black, black) top left / var(--desktop-rail-width) 100% no-repeat,
+    linear-gradient(black, black) right top / var(--desktop-trailing-edge) 100% no-repeat,
+    linear-gradient(black, black) left bottom / 100% var(--desktop-trailing-edge) no-repeat,
     radial-gradient(circle at right bottom, transparent calc(var(--desktop-inner-radius) - .5px), black calc(var(--desktop-inner-radius) + .5px))
-      var(--desktop-rail-width) var(--desktop-title-height) / var(--desktop-inner-radius) var(--desktop-inner-radius) no-repeat;
+      var(--desktop-rail-width) var(--desktop-title-height) / var(--desktop-inner-radius) var(--desktop-inner-radius) no-repeat,
+    radial-gradient(circle at left bottom, transparent calc(var(--desktop-inner-radius) - .5px), black calc(var(--desktop-inner-radius) + .5px))
+      right var(--desktop-trailing-edge) top var(--desktop-title-height) / var(--desktop-inner-radius) var(--desktop-inner-radius) no-repeat,
+    radial-gradient(circle at right top, transparent calc(var(--desktop-inner-radius) - .5px), black calc(var(--desktop-inner-radius) + .5px))
+      left var(--desktop-rail-width) bottom var(--desktop-trailing-edge) / var(--desktop-inner-radius) var(--desktop-inner-radius) no-repeat,
+    radial-gradient(circle at left top, transparent calc(var(--desktop-inner-radius) - .5px), black calc(var(--desktop-inner-radius) + .5px))
+      right var(--desktop-trailing-edge) bottom var(--desktop-trailing-edge) / var(--desktop-inner-radius) var(--desktop-inner-radius) no-repeat;
 }
 :root[data-theme] .app-shell.desktop-redesign[data-wallpaper] > :is(.desktop-rail,.desktop-titlebar) {
   background: transparent;

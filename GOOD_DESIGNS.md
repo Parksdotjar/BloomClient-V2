@@ -113,15 +113,15 @@ The same fixed-width button starts selection, shows `Compare (0/2)` through `Com
 
 ![Approved instance content toolbar with its filter drawer open](design-references/content-toolbar-approved-2026-10-20.png)
 
-The screenshot records the approved composition with fixture data. Its red accent and example counts are not fixed product requirements.
+The screenshot records the historical October 20 toolbar with fixture data. Its red accent and example counts are not fixed product requirements.
 
 ### What makes it work
 
-- The raised category header and recessed tools feel like parts of one workspace. Filter reveals a full-width attached drawer instead of spawning the old small popup.
+- The raised category header and recessed tools feel like parts of one workspace. The attached drawer shown in the screenshot belongs to the original toolbar.
 - The boxed `80` badge is replaced by a quiet second line such as `80 installed · 72 enabled`. Searching or filtering changes that line to matching versus total counts; catalog mode identifies the instance's Minecraft version and loader. Every number comes from real current state.
 - Motion explains the interaction: the drawer reveals, neutral selection surfaces slide between Show/Sort choices, and the header copy and Add/Back icon transition when entering or leaving the catalog. Filtering and navigation do not wait for animation to finish.
 - Add and Back remain the same mounted, focusable action. The workspace changes context without making the user relocate the way back.
-- Opening tools borrows height from the list viewport. Results remain below the drawer, while the bottom search dock and pagination stay anchored. Compact windows use two rows of tools.
+- The catalog sidebar shares horizontal space with the list. Compact windows stack the sidebar above results.
 - Flat action buttons, restrained borders, existing typography and theme-aware depth give the interaction its character. There are no ornamental counters, glows, fading underlines or thick button rims.
 
 ### Reuse this pattern for
@@ -142,11 +142,11 @@ The screenshot records the approved composition with fixture data. Its red accen
 
 ### Regression checklist
 
-- **Requested reuse, November 12:** After rejecting the Add Mods filter sidebar, Parks requested this same slide-down pattern for catalog filters, with one button beside the existing return action and slightly styled dropdowns. Full-width rows, search and the rest of the page stay as they were. The new dropdown styling awaits review; approval belongs to the original toolbar pattern.
-- Show, Sort and Reset update actual results and reset pagination correctly; search and enable/disable changes update the readout from confirmed state.
+- **Add Mods, November 26:** Parks approved moving the existing catalog filters into a left sidebar with titled dropdowns and requested direct opening without a Filter button. He rejected the apparent resizing and abrupt list swap. The revised transition uses horizontally sliding, overlapping lists with matching row heights and a crossfade. Parks approved the list slide and requested that the sidebar move and fade with it like a drawer, with shared speed, spacing, and bounded travel. The approved list transition is the reference. The drawer revision awaits visual review. Parks retired the historical installed filter menu from the Mods, Resource Packs and Shaders toolbars. He approved the Add and Back icon spin and asked to animate the width, label fade, subtle scale and red outline. The revised button awaits visual review.
+- Catalog dropdowns and Reset update real results and reset pagination. Installed search matches enabled and disabled files.
 - Add/Back preserve real catalog compatibility checks, caching, loading, installation and return behavior. A blocked catalog action must not falsely transition the header.
-- Escape closes the drawer and restores trigger focus; outside clicks dismiss it; hidden controls cannot receive focus or clicks.
-- Drawer opening and count changes do not move the bottom search dock or pagination or cover the first result.
+- Escape closes an open catalog dropdown and restores its trigger focus. Back to installed hides the sidebar and keeps focus on the same action.
+- Search stays anchored as Add and Back change width. Crossfade the empty search hint and the category or Minecraft readout on mode changes. Page ranges crossfade with short horizontal movement and retain their right alignment. The drawer and lists keep their gap and row alignment throughout travel.
 - OLED, Light, custom accents/backgrounds and compact windows retain readable controls. Reduced Motion, Show Animations off and Ultra Performance remove decorative motion without removing functionality.
 
 ## Focused choice dialog with consistent cards

@@ -24,6 +24,7 @@ use std::sync::{
 };
 use tauri::{Emitter, Manager};
 mod cache;
+mod storage_usage;
 mod cosmetics;
 mod modpack_sharing;
 mod pack_compatibility;
@@ -4680,6 +4681,8 @@ pub fn run() {
             screenshots::save_screenshot_comparison,
             get_backend_status,
             cache::get_client_cache_status,
+            storage_usage::get_storage_usage,
+            storage_usage::clean_reviewed_storage,
             cache::choose_client_cache_directory,
             cache::save_client_cache_settings,
             cache::clear_client_cache,

@@ -1,0 +1,110 @@
+.storage-breakdown {
+  display: grid;
+  gap: 14px;
+  padding-block: 12px 18px;
+  border-bottom: 1px solid var(--settings-row-line);
+}
+.storage-breakdown-heading,
+.storage-cleanup-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+}
+.storage-breakdown-total { display: grid; gap: 4px; }
+.storage-breakdown-total .storage-amount { margin: 0; font-variant-numeric: tabular-nums; }
+.storage-breakdown-total > span,
+.storage-breakdown p,
+.storage-breakdown small,
+.storage-cleanup-actions > span { color: var(--muted); font-size: 13px; }
+.storage-breakdown :is(p, h3, dl, dd, ul) { margin: 0; }
+.storage-usage-chart {
+  --storage-worlds: #65c99c;
+  --storage-packs: #b591ee;
+  --storage-screenshots: #ed91ad;
+  --storage-logs: #e6ae64;
+  --storage-other: #8b91a0;
+  --storage-minecraft: #5fbecb;
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+:root[data-theme="light"] .storage-usage-chart {
+  --storage-worlds: #288761;
+  --storage-packs: #825ac4;
+  --storage-screenshots: #c45880;
+  --storage-logs: #ae731e;
+  --storage-other: #697487;
+  --storage-minecraft: #258498;
+}
+.storage-usage-chart [data-storage-category="worlds"] { --storage-fill-color: var(--storage-worlds); }
+.storage-usage-chart [data-storage-category="packs"] { --storage-fill-color: var(--storage-packs); }
+.storage-usage-chart [data-storage-category="screenshots"] { --storage-fill-color: var(--storage-screenshots); }
+.storage-usage-chart [data-storage-category="logs"] { --storage-fill-color: var(--storage-logs); }
+.storage-usage-chart [data-storage-category="other"] { --storage-fill-color: var(--storage-other); }
+.storage-usage-chart [data-storage-category="minecraft"] { --storage-fill-color: var(--storage-minecraft); }
+.storage-usage-bar {
+  display: flex;
+  margin-bottom: 0;
+}
+.storage-usage-bar > span {
+  flex: 0 0 0;
+  min-width: 0;
+}
+.storage-usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 0;
+  list-style: none;
+}
+.storage-usage-legend > li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.storage-usage-swatch {
+  flex: 0 0 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.storage-usage-legend small { white-space: nowrap; }
+.storage-breakdown h3 { margin-bottom: 6px; font-size: 14px; }
+.storage-breakdown-detail { border-top: 1px solid var(--settings-row-line); }
+.storage-breakdown-detail > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  min-height: 40px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.storage-breakdown-detail > summary::-webkit-details-marker { display: none; }
+.storage-breakdown-detail[open] > summary > svg { rotate: 180deg; }
+.storage-breakdown-detail > summary > span,
+.storage-cleanup-files strong { overflow-wrap: anywhere; }
+.storage-breakdown-detail-body { display: grid; justify-items: start; gap: 10px; padding: 4px 0 12px; }
+.storage-breakdown-detail-body > :is(dl, ul, .storage-cleanup-actions) { width: 100%; }
+.storage-breakdown-detail-body dl { color: var(--muted); font-size: 13px; }
+.storage-breakdown dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding-block: 4px;
+}
+.storage-breakdown :is(dd, small, .storage-cleanup-actions > span) { font-variant-numeric: tabular-nums; }
+.storage-cleanup-files { max-height: 250px; overflow: auto; list-style: none; padding: 0; }
+.storage-cleanup-files label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--settings-row-line);
+  padding: 6px 2px;
+}
+.storage-cleanup-files label > span { display: grid; gap: 2px; }
+.storage-cleanup-files input { accent-color: var(--accent); }

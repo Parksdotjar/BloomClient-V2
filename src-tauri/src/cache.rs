@@ -65,7 +65,7 @@ fn cache_root() -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn validate_cache_directory(path: &Path) -> Result<(), String> {
+pub(super) fn validate_cache_directory(path: &Path) -> Result<(), String> {
     let allowed_name = path
         .file_name()
         .and_then(|value| value.to_str())

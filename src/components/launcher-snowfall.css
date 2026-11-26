@@ -1,0 +1,21 @@
+.desktop-redesign > .launcher-snowfall {
+  --snowfall-start: calc(var(--desktop-rail-width) + var(--desktop-context-width));
+  --snowfall-end: calc(var(--workspace-rail-width, 0px) + var(--desktop-trailing-edge));
+  position: absolute;
+  z-index: 1;
+  top: var(--desktop-title-height);
+  left: var(--snowfall-start);
+  width: calc(100% - var(--snowfall-start) - var(--snowfall-end));
+  height: calc(100% - var(--desktop-title-height) - var(--desktop-trailing-edge));
+  pointer-events: none;
+}
+.desktop-redesign:is([data-wide-workspace], [data-desktop-context-collapsed="true"]) > .launcher-snowfall {
+  border-top-left-radius: var(--desktop-inner-radius);
+  border-bottom-left-radius: var(--desktop-inner-radius);
+}
+.desktop-redesign[data-workspace-rail="off"] > .launcher-snowfall {
+  border-top-right-radius: var(--desktop-inner-radius);
+  border-bottom-right-radius: var(--desktop-inner-radius);
+}
+
+.snowfall-settings-panel { padding-inline-start: 12px; }
