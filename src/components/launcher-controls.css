@@ -187,7 +187,14 @@
 .storage-amount { display: flex; align-items: baseline; gap: 10px; margin: 8px 0 14px; }
 .storage-amount span, .storage-overview small, .account-signin p, .settings-inline-status { font-size: 14px; color: var(--muted); }
 .storage-meter { height: 6px; overflow: hidden; border-radius: 6px; background: var(--desktop-selection); margin-bottom: 8px; }
-.storage-meter i { display: block; height: 100%; border-radius: inherit; background: var(--launcher-mark); }
+.storage-meter-fill {
+  --storage-fill: var(--storage-fill-color, var(--launcher-mark));
+  background: linear-gradient(105deg,
+    color-mix(in srgb, var(--storage-fill) 58%, var(--theme-hover-ink, var(--text))),
+    var(--storage-fill) 54%,
+    color-mix(in srgb, var(--storage-fill) 78%, var(--page)));
+}
+.storage-overview .storage-meter-fill { display: block; height: 100%; border-radius: inherit; }
 .desktop-redesign .storage-settings .settings-card { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .storage-settings .setting-commit-slider { width: min(100%, 320px); }
 .storage-settings output { min-width: 60px; font-size: 14px; font-variant-numeric: tabular-nums; text-align: end; }

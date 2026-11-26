@@ -1,3 +1,13 @@
+## November 26, 2026 — Show storage in a segmented bar
+
+Parks replaced the plain storage summary with a bar whose colored segments represent each category's share of measured bytes. The legend below pairs circular swatches with category labels and sizes. Launcher cache uses the same color as its capacity meter.
+
+Parks rejected the first bar’s thicker track and flat fills. Both meters now share the slim rounded track and the same gradient treatment. The category gradients carry through to the legend dots, and both usage totals use the existing gradient typography.
+
+## November 26, 2026 — Add a storage breakdown and cleanup review
+
+Settings → Storage shows instance files by category, shared Minecraft downloads, and the launcher cache. Instance rows expand in place and include Open folder. Refresh scans in the background. Cleanup lists archived logs and regenerable cache files older than 30 days for explicit selection and reports how much was removed. The existing cache controls remain below the breakdown.
+
 ## November 26, 2026 — Integrate launcher refinements with v1.3.3
 
 The Add Mods sidebar and transitions, wrapped workspace frame, and optional Canvas Snowfall now share the v1.3.3 launcher with the Dynamic Island. Keep the active mod maintenance action and duplicate review on the installed Mods page. Preserve Show Now Playing below Snowfall in Appearance.

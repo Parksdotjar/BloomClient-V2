@@ -5,6 +5,14 @@
   "client": [
     "AbstractClientPlayerEntityMixin",
     "CapeLayerMixin",
+    "TweaksMouseMixin",
+    "TweaksFovMixin",
+    "TweaksCrosshairMixin",
+    "TweaksScreenshotMixin",
+    "TweaksChatMixin",
+    "TweaksBlockBreakMixin",
+    "TweaksBlockOutlineMixin",
+    "TweaksOptionsMixin",
     "BloomNametagMixin"
   ],
   "injectors": {

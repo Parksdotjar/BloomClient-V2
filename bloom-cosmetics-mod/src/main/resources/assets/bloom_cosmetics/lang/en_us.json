@@ -1,4 +1,9 @@
 {
+  "key.category.bloom_cosmetics.tweaks": "Delight Tweaks",
+  "key.delight_tweaks.menu": "Open Delight Tweaks",
+  "key.delight_tweaks.zoom": "Zoom",
+  "key.delight_tweaks.screenshot": "Take a clean screenshot",
+  "key.delight_tweaks.inventory_preview": "Hold to preview inventory",
   "key.bloom_cosmetics.emotes": "Open emote wheel",
   "key.category.bloom_cosmetics.controls": "Delight Cosmetics"
 }

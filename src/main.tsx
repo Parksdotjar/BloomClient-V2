@@ -4,6 +4,7 @@ import { ShortcutContext, binding, shortcuts, chord, recording, shortcutMatches,
 import { fitFloatingMenu, type FloatingMenuPosition } from "./services/menu-position";
 import "./components/winter-launch-scene.css";
 import { LauncherSnowfall } from "./components/LauncherSnowfall";
+import { formatStorageSize, StorageBreakdown } from "./components/StorageBreakdown";
 import { readSnowfall, snowfallDefaults, snowfallLimits, type SnowfallSettings } from "./services/snowfall-settings";
 import { HomeStories } from "./components/HomeStories";
 import { CatalogArtwork, CatalogFeedRow } from "./components/CatalogFeedRow";
@@ -672,9 +673,9 @@ function ManagedJavaControl() {
 }
 
 type ClientCacheStatus = { directory: string; capacityBytes: number; usedBytes: number; itemCount: number };
-const formatCacheUsage = (bytes: number) => bytes >= 10_737_418 ? `${(bytes / 1073741824).toFixed(2)} GB` : bytes >= 1_048_576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(0, bytes / 1024).toFixed(1)} KB`;
 
 function ClientCacheControl({ active }: { active: boolean }) {
+  const [cacheRevision, setCacheRevision] = useState(0);
   const [status, setStatus] = useState<ClientCacheStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -705,7 +706,7 @@ function ClientCacheControl({ active }: { active: boolean }) {
     setMessage("");
     try {
       const next = await operation();
-      if (next) { setStatus(next); setMessage(success); }
+      if (next) { setStatus(next); setMessage(success); setCacheRevision(value => value + 1); }
     } catch (error) { setMessage(String(error)); }
     finally { setBusy(false); }
   };
@@ -713,12 +714,13 @@ function ClientCacheControl({ active }: { active: boolean }) {
   const capacity = status ? status.capacityBytes / 1073741824 : 2;
   const usedRatio = status ? Math.min(1, status.usedBytes / Math.max(1, status.capacityBytes)) : 0;
   return <div className="storage-settings">
+    <StorageBreakdown active={active} cacheRevision={cacheRevision} />
     <div className="storage-overview">
       <span className="storage-label">Cache usage</span>
-      <div className="storage-amount"><strong>{status ? formatCacheUsage(status.usedBytes) : "—"}</strong>
+      <div className="storage-amount"><strong>{status ? formatStorageSize(status.usedBytes) : "—"}</strong>
         {status && <span>of {capacity} GB</span>}</div>
       <div className="storage-meter" role="progressbar" aria-label="Client cache usage" aria-valuemin={0}
-        aria-valuemax={status?.capacityBytes || 1} aria-valuenow={status?.usedBytes}><i style={{ width: usedRatio * 100 + "%" }} /></div>
+        aria-valuemax={status?.capacityBytes || 1} aria-valuenow={status?.usedBytes}><i className="storage-meter-fill" style={{ width: usedRatio * 100 + "%" }} /></div>
       <small>{status ? `${status.itemCount.toLocaleString()} cached ${status.itemCount === 1 ? "item" : "items"}` : "Reading cache…"}</small>
     </div>
     <div className="settings-card">
@@ -1268,7 +1270,7 @@ function SettingsPage({
             </div>
           </div>
           <div className="settings-section" {...section("Cache")}>
-            <SettingsHeading title="Storage" description="Manage the space Delight uses for cached content." />
+            <SettingsHeading title="Storage" description="See disk usage across instances, shared downloads, and the launcher cache." />
             <ClientCacheControl active={activeTab === "Cache"} />
           </div>
           <div className="settings-section" {...section("Minecraft")}>

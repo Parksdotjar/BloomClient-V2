@@ -6,6 +6,10 @@ The title strip and narrow left rail belong to a continuous workspace frame. Ext
 
 Order the Appearance motion controls as Reduce motion, Snowfall, then the remaining controls and More appearance options. Turning Snowfall on reveals flake count, speed, and size directly below the toggle. Snow falls across the full workspace on the pointer-transparent Canvas. Keep the flakes faint in each theme, cap them at 48, size at 250%, and drawing at 30 fps. Stop the loop when the launcher is hidden, minimized, or motion is disabled. Applying an appearance preset preserves Snowfall and its options. Reset appearance restores their defaults.
 
+## Storage settings
+
+Show measured usage in Settings → Storage. Use the same slim, rounded track for the segmented bar and cache meter. Apply the shared gradient to both fills and to the legend’s circular swatches. Match the Launcher cache segment to the cache meter’s accent. Give each segment its proportional width and place category names and sizes in the legend underneath. Order instances by size and reveal categories within each instance row. Keep the cache capacity and folder controls below the breakdown. Scan on opening or refreshing and show when the total is partial. Cleanup starts with an unchecked list of archived logs and regenerable cache files. Show the selected size and the actual result after removal.
+
 ## Pack Workspace navigation
 
 Use the current Delight instance page for the breadcrumb, full-width identity header, action placement and content tabs. The workspace is scoped to the selected instance and can host independent tools. Sharing owns its pack-specific pages and permissions.

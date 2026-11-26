@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "bloom_cosmetics",
   "version": "${version}",
-  "name": "Delight Cosmetics",
+  "name": "Delight Cosmetics & Tweaks",
   "icon": "assets/bloom_cosmetics/icon.png",
-  "description": "Delight capes, nametag badges, and multiplayer emotes. Press B for the emote wheel. Client-side, for Fabric Minecraft ${minecraft}.",
+  "description": "Delight cosmetics, emotes and in-game tweaks. Open Delight Tweaks from Options or press Right Shift in a world. Client-side, for Fabric Minecraft ${minecraft}.",
   "authors": ["Delight Client"],
   "contact": {
     "homepage": "https://delightproductions.org",
@@ -13,7 +13,7 @@
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
-    "client": ["org.bloomclient.cosmetics.BloomCosmeticsClient"]
+    "client": ["org.bloomclient.cosmetics.BloomCosmeticsClient", "org.bloomclient.cosmetics.tweaks.DelightTweaks"]
   },
   "mixins": [
     {
