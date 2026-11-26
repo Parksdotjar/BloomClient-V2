@@ -1,3 +1,59 @@
+## November 26, 2026 — Integrate launcher refinements with v1.3.3
+
+The Add Mods sidebar and transitions, wrapped workspace frame, and optional Canvas Snowfall now share the v1.3.3 launcher with the Dynamic Island. Keep the active mod maintenance action and duplicate review on the installed Mods page. Preserve Show Now Playing below Snowfall in Appearance.
+
+## November 26, 2026 — Reveal Snowfall controls from the toggle
+
+Parks removed the gear and Coverage control, requested full-workspace snowfall, and raised the limits to 48 flakes and 250% size. The toggle reveals count, speed and size directly below it. Appearance orders Reduce motion, Snowfall, and More appearance options.
+
+## November 26, 2026 — Add Snowfall customization
+
+Parks requested a gear next to Snowfall so the user can customize count, coverage, speed, and size. Added an inline disclosure with saved options that update the existing Canvas effect. The flake pool and draw cap continue to bound the rendering work.
+
+## November 26, 2026 — Add optional Canvas snowfall
+
+Parks approved one Snowfall toggle in Appearance, off by default, and specified a lightweight Canvas effect. The workspace layer draws up to 24 flakes at 30 fps with a capped backing surface. It pauses when hidden or minimized and follows the existing motion preferences. The Home string lights are independent.
+
+## November 26, 2026 — Wrap the workspace with a thinner bottom and right rail
+
+Parks used the installed Mods screenshot to identify the existing title and left edge rail as the reference. Added 6 px trailing edges and matching 12 px inner corners around the launcher workspace. Wallpaper uses one frost pass around the full perimeter. The added edges await visual review.
+
+## November 26, 2026 — Crossfade the instance search hint, readout and page range
+
+Parks asked for smooth changes to the empty search hint, the Mods or Minecraft version and loader line above the rows and filter drawer, and the page range. Both text treatments crossfade while the search field and context row stay in place. Page ranges overlap briefly and move horizontally with only the current controls active. A pending catalog request keeps the last visible range disabled until its result count arrives.
+
+## November 26, 2026 — Simplify the installed content toolbar and animate Add and Back
+
+Parks asked to remove the search-adjacent Filter button from installed content. Search now shows both enabled and disabled files in default name order. Add and Back to installed share one right-anchored action whose width, scale, labels and red outline transition in place. The existing icon spin remains the approved part of the motion. Catalog filters stay in the Add Mods drawer.
+
+## November 26, 2026 — Move the filter sidebar with the Add Mods lists
+
+Parks requested that the filter sidebar slide and fade as a drawer at the same speed as the approved list transition. The drawer uses the list timing and easing, keeps the list gap throughout travel, and clips at its rail edge. The compact stacked rail fades in place. Parks also requested hearing stronger design ideas before implementation.
+
+## November 26, 2026 — Start the sidebar fade on Add Mods activation
+
+Parks asked to bring sidebar entry forward by half a second. Removed the 260 ms desktop entry wait so the 140 ms fade begins on click. The 80 ms exit fade, approved list timing, and compact cold-load behavior keep their existing timing.
+
+## November 26, 2026 — Retiming the Add Mods sidebar fade
+
+Parks said the sidebar appeared while rows still occupied its space. Sidebar entry now waits for the approved list slide to clear the rail, and exit starts immediately with a shorter fade. Compact entry waits for the installed-list crossfade when results are loading. The approved list timing and geometry are preserved.
+
+## November 26, 2026 — Approve the Add Mods slide
+
+Parks said the list slide looks perfect and described the filter sidebar as weird. Preserve the horizontal list transition and matching rows. Sidebar details are pending.
+
+## November 26, 2026 — Crossfade the Add Mods and installed lists
+
+Parks rejected the apparent scaling and abrupt list replacement. Both lists slide horizontally in separate layers and crossfade while keeping their row dimensions and vertical placement. Matched row height and spacing, kept outgoing installed rows visible through cold catalog requests, and crossfaded the fixed stacked layout in narrow windows.
+
+## November 26, 2026 — Animate the Add Mods sidebar with the rows
+
+Parks asked to remove the separate Filter button from Add Mods and have the full-width rows narrow as the sidebar fades in. Back to installed reverses both motions. The right edge stays fixed. Outgoing rows remain visible during the resize while the destination loads. Narrow windows reveal the same controls above results. Motion preferences skip the transitions. The installed-content Filter button keeps its menu.
+
+## November 26, 2026 — Move Add Mods filters into the left sidebar
+
+Parks asked to move the existing catalog controls into one column of titles and dropdowns, then approved implementing the layout. Filter beside search opens the in-page rail. Choices and reset still use the existing search and pagination behavior. The rail stays open during selection, collapses to restore full-width results, and stacks above results in narrow workspaces. This replaces the November 12 catalog presentation. The installed-content filter menu keeps its existing interaction. Visual review is pending.
+
 ## November 25, 2026 — Updates settings layout
 
 Parks approved the revised Updates page on November 25, 2026, calling it “INFINITLY BETTER.” Use this page as the reference for grouping each settings action with its status and for left-aligned, actionable instance results.
