@@ -26,7 +26,7 @@ function initializeLibrary(options) {
   let next = 1;
   const callbacks = new Map();
   const events = new Map();
-  const playerUrl = "https://api.north.bloomclient.org/minecraft/share/pack/PNHLW234";
+  const playerUrl = "https://delightproductions.org/share/pack/PNHLW234";
   const followedId = "followed-pine-hollow";
   const playerFile = (category, fileName, enabled, size) => ({ category, fileName, enabled, size, source: "modrinth",
     projectId: category === "mods" ? "project-ferritecore" : "project-stonework",
@@ -1289,7 +1289,7 @@ async function checkPlayerLink(theme, viewport) {
   await page.route("**/*", route => new URL(route.request().url()).origin === new URL(url).origin ? route.continue() : route.abort());
   await page.addInitScript(initializeLibrary, {theme, animations});
   const snap = async name => { if (screenshots) await page.screenshot({path: join(screenshots, theme + "-player-" + name + ".png")}); };
-  const canonical = "https://api.north.bloomclient.org/minecraft/share/pack/PNHLW234";
+  const canonical = "https://delightproductions.org/share/pack/PNHLW234";
   const panel = page.getByRole("region", {name:"Open player link", exact:true});
   const input = panel.getByRole("textbox", {name:"Player link"});
   const button = name => panel.getByRole("button",{name, exact:true});

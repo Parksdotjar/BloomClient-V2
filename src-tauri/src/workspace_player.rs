@@ -8,6 +8,7 @@ const MAX_SAFE_INTEGER: u64 = (1 << 53) - 1;
 const URI_PREFIX: &str = "delight://pack/";
 const PLAYER_PATH: &str = "/share/pack/";
 const LEGACY_PLAYER_PATH: &str = "/p/";
+const PLAYER_WEBSITE: &str = "https://delightproductions.org/share/pack/";
 const INVALID_LINK: &str = "Enter a Delight player link from the pack’s sharing page.";
 const INVALID_RELEASE: &str = "This player link returned an incomplete or unsupported release.";
 
@@ -41,6 +42,11 @@ impl PlayerLink {
         let input = input.trim();
         let code = input.strip_prefix(URI_PREFIX)
             .or_else(|| {
+                (base == crate::workspace_publication::PRODUCTION)
+                    .then(|| input.strip_prefix(PLAYER_WEBSITE))
+                    .flatten()
+            })
+            .or_else(|| {
                 let path = input.strip_prefix(&base)?;
                 path.strip_prefix(PLAYER_PATH).or_else(|| path.strip_prefix(LEGACY_PLAYER_PATH))
             })
@@ -55,6 +61,9 @@ impl PlayerLink {
     }
 
     pub(crate) fn display_url(&self) -> String {
+        if self.base == crate::workspace_publication::PRODUCTION {
+            return format!("{PLAYER_WEBSITE}{}", self.code);
+        }
         if self.base.starts_with("http://") {
             return format!("{URI_PREFIX}{}", self.code);
         }
@@ -462,9 +471,11 @@ mod tests {
     fn public_links_and_protocol_links_share_one_configured_identity() {
         let canonical = link().url();
         let display = format!("{BASE}/share/pack/PACK2345");
+        let branded = "https://delightproductions.org/share/pack/PACK2345";
         for value in [
             &canonical,
             &display,
+            branded,
             " delight://pack/pack2345 ",
             &format!("{BASE}/p/pack2345/"),
         ] {
@@ -473,7 +484,7 @@ mod tests {
                 canonical
             );
         }
-        assert_eq!(link().display_url(), display);
+        assert_eq!(link().display_url(), branded);
         assert!(link().accepts_web_url(&canonical));
         assert!(link().accepts_web_url(&display));
         assert!(!link().accepts_web_url("delight://pack/PACK2345"));
@@ -501,6 +512,8 @@ mod tests {
             "https://api.north.bloomclient.org/p/PACK2345",
             "https://api.north.bloomclient.org/minecraft.evil.test/share/pack/PACK2345",
             "https://api.north.bloomclient.org/minecraft/share/pack/PACK2345#draft",
+            "https://delightproductions.org.evil.test/share/pack/PACK2345",
+            "https://delightproductions.org/share/pack/PACK2345?draft=1",
             "delight://pack/PACK2345?draft=1",
             "delight://pack/PACK2345#settings",
             "delight://pack/PACK2345/settings",
@@ -515,6 +528,7 @@ mod tests {
             );
         }
         assert!(PlayerLink::from_base(&local, "http://127.0.0.1:49171".into()).is_err());
+        assert!(PlayerLink::from_base(branded, dev.into()).is_err());
     }
 
     #[test]

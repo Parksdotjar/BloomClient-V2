@@ -81,7 +81,7 @@ function renderPage(title, content) {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
 <title>${escapeHtml(title)} · Delight Client</title><link rel="icon" href="${icon}"><style>${styles}</style></head>
-<body><header class="frame"><div class="bar"><a class="brand" href="https://bloomclient.org/"><img src="${icon}" alt="">Delight Client</a></div></header>
+<body><header class="frame"><div class="bar"><a class="brand" href="https://delightproductions.org/"><img src="${icon}" alt="">Delight Client</a></div></header>
 <main>${content}</main></body></html>`;
 }
 
@@ -95,7 +95,7 @@ export function renderWorkspacePreview({ code, manifest, revision, creator, rele
   const policy = required ? "Required" : minimumPlayableRevision > 1 ? "Optional from version " + minimumPlayableRevision : "Optional";
   return renderPage(name, `<h1>${escapeHtml(name)}</h1><p class="byline">Shared by ${escapeHtml(creator)}</p>
 <div class="open-pack"><a href="delight://pack/${encodeURIComponent(code)}">Open in Delight</a>
-<p>Or paste this page’s address in Delight under File → Open player link.</p></div>
+<p>You can also copy the Open in Delight link and paste it under File → Open player link.</p></div>
 <dl class="facts"><div><dt>Release</dt><dd>Version ${escapeHtml(revision)}</dd></div>
 ${revision > 1 ? '<div><dt>Update</dt><dd>' + escapeHtml(policy) + '</dd></div>' : ''}
 <div><dt>Minecraft</dt><dd>${escapeHtml(minecraftVersion)}</dd></div>

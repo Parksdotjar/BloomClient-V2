@@ -270,7 +270,8 @@ test("publishes an exact immutable Version 1 with durable, owner-scoped recovery
   assert.match(landing.headers.get("content-security-policy"), /frame-ancestors 'none'/);
   const html = await landing.text();
   assert.match(html, /Meadow &amp; Grove/);
-    assert.ok(html.includes(`href="delight://pack/${receipt.code}">Open in Delight</a>`));
+  assert.ok(html.includes(`href="delight://pack/${receipt.code}">Open in Delight</a>`));
+  assert.ok(html.includes('class="brand" href="https://delightproductions.org/"'));
   assert.match(html, /paint.zip.disabled/);
   assert.ok(!html.includes(input.publicationId));
   assert.equal(await fetch(svc.base + "/p/" + receipt.code).then(r => r.text()), html);

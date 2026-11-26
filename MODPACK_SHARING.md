@@ -12,7 +12,7 @@ The review flags active files that declare the same Fabric mod ID. **Choose vers
 
 If Modrinth returns no match for an exact mod file, the creator can check **Keep local** and apply their choices. Delight matches each choice to the reviewed filename and SHA-512. The creator keeps the file in their instance, and the shared manifest contains only the deliverable files. The same check applies to first releases, updates and editor drafts. The creator’s review lists the omitted files before publishing.
 
-The service uses the existing `BLOOM_SHARE_DATA_DIR` volume and `BLOOM_SHARE_PUBLIC_URL` base. Requests use `POST /v1/workspace-packs`, owner-scoped recovery at `GET /v1/workspace-publications/:publicationId`, latest manifest reads at `GET /v1/workspace-packs/:code`, and the HTTPS player page at `GET /share/pack/:code`. Production serves these paths under `/minecraft`. Earlier `/p/:code` links remain supported.
+The service uses the existing `BLOOM_SHARE_DATA_DIR` volume and `BLOOM_SHARE_PUBLIC_URL` base. Requests use `POST /v1/workspace-packs`, owner-scoped recovery at `GET /v1/workspace-publications/:publicationId`, and latest manifest reads at `GET /v1/workspace-packs/:code`. Those APIs remain under the existing `/minecraft` service base. Public pages use `https://delightproductions.org/share/pack/:code`. The website proxies the same pack code to the sharing service. Both earlier browser URL formats redirect to Delight Productions. Saved launcher records and release fingerprints retain their existing internal identity.
 
 ### Install & follow
 
