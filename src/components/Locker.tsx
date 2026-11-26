@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Shirt, RotateCw, Layers, PersonStanding, Fla
 import { CapePreview, type CapeAnimation } from "./CapePreview";
 import { CapeDisplay } from "./CapeDisplay";
 import "./locker.css";
-import { CapeRedemption } from "./CapeRedemption";
+import { CapeRedemption, type CosmeticUnlock } from "./CapeRedemption";
 import "./connected-toolbar.css";
 import { MinecraftWardrobe, type Wardrobe } from "./MinecraftWardrobe";
 import { CosmeticsShop } from "./CosmeticsShop";
@@ -13,12 +13,29 @@ import { WingPreview } from "./WingPreview";
 import { installedWings, wingRequest, type WingCatalog, type WingRevision, type WingColors } from "../services/delight-wings";
 import { WingsShelf } from "./WingsShelf";
 
+export type { CosmeticUnlock } from "./CapeRedemption";
 export type LockerCloak = { id: string; name: string; textureUrl: string; textureRevision: string; animation?: CapeAnimation | null };
 type Profile = { id: string; name: string };
 type Me = { capeId: string | null; badgeVisible: boolean };
 const api = <T,>(method: string, path: string, accountId?: string, body?: unknown) => invoke<T>("cosmetics_request", { method, path, body: body ?? null, accountId: accountId ?? null });
 const cloakCatalogMemoryCache = new Map<string, LockerCloak[]>();
-window.addEventListener("bloom-clear-transient-caches", () => { cloakCatalogMemoryCache.clear(); });
+const claimedCatalogRequests = new Map<string, Promise<{ items: LockerCloak[] }>>();
+window.addEventListener("bloom-clear-transient-caches", () => {
+  cloakCatalogMemoryCache.clear();
+  claimedCatalogRequests.clear();
+});
+
+function fetchCloakCatalog(accountId: string) {
+  return api<{ items: LockerCloak[] }>("GET", "/v1/capes/locker", accountId);
+}
+
+function refreshClaimedCloakCatalog(accountId: string) {
+  const request = fetchCloakCatalog(accountId).finally(() => {
+    if (claimedCatalogRequests.get(accountId) === request) claimedCatalogRequests.delete(accountId);
+  });
+  claimedCatalogRequests.set(accountId, request);
+  return request;
+}
 
 function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId, heading, onBrowse }: { heading: ReactNode; onBrowse: () => void; catalogRevision: number; claimedId?: string; profile: Profile | null; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void }) {
   const cacheKey = profile?.id || "public";
@@ -62,7 +79,9 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
     if (!cloakCatalogMemoryCache.has(cacheKey)) setLoading(true);
     setRefreshing(true); setError("");
     void (async () => {
-      const catalog = profile ? await api<{ items: LockerCloak[] }>("GET", "/v1/capes/locker", profile.id) : {items: []};
+      const catalog = profile
+        ? await (claimedCatalogRequests.get(profile.id) ?? fetchCloakCatalog(profile.id))
+        : { items: [] };
       if (stopped) return;
       cloakCatalogMemoryCache.set(cacheKey, catalog.items);
       setItems(catalog.items);
@@ -158,7 +177,7 @@ export async function getEquippedCloak(accountId: string) {
   if (!slot.choice) return undefined;
   const cached = cloakCatalogMemoryCache.get(accountId)?.find(item => item.id === slot.choice);
   if (cached) return cached;
-  const catalog = await api<{items: LockerCloak[]}>("GET", "/v1/capes/locker", accountId);
+  const catalog = await (claimedCatalogRequests.get(accountId) ?? fetchCloakCatalog(accountId));
   cloakCatalogMemoryCache.set(accountId, catalog.items);
   return catalog.items.find(item => item.id === slot.choice);
 }
@@ -199,17 +218,45 @@ function EquippedLook({ accountId, motion, onSection }: { accountId: string; mot
   </div>;
 }
 
-export function Locker(props: { section: LockerSection; onSection: (section: LockerSection) => void; profile: Profile | null; motion: boolean; onNotify: (message: string, kind?: "success" | "error") => void }) {
-  const { section, onSection, profile } = props;
+export function Locker(props: {
+  section: LockerSection; onSection: (section: LockerSection) => void; profile: Profile | null; motion: boolean;
+  onNotify: (message: string, kind?: "success" | "error") => void;
+  onCosmeticUnlock?: (item: CosmeticUnlock) => void;
+  cloakSelection?: { accountId: string; id: string; sequence: number };
+}) {
+  const { section, onSection, profile, onCosmeticUnlock, cloakSelection } = props;
   const [claim, setClaim] = useState<{id: string; account?: string; sequence: number}>({id: "", sequence: 0});
   const [shopCategory, setShopCategory] = useState<"Cloaks" | "Wings">("Cloaks");
   const [wing, setWing] = useState<{ id: string; account?: string }>();
+  const mounted = useRef(true);
+  const activeAccount = useRef(profile?.id);
+  activeAccount.current = profile?.id;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const recordClaim = (id: string) => setClaim(previous => ({id, account: profile?.id, sequence: previous.sequence + 1}));
+  useEffect(() => {
+    if (!cloakSelection || cloakSelection.accountId !== profile?.id) return;
+    setClaim(previous => ({ id: cloakSelection.id, account: cloakSelection.accountId, sequence: previous.sequence + 1 }));
+  }, [cloakSelection, profile?.id]);
+
+  async function celebrateClaim(item: CosmeticUnlock) {
+    if (mounted.current && activeAccount.current !== item.accountId) return;
+    const catalog = refreshClaimedCloakCatalog(item.accountId);
+    if (mounted.current) recordClaim(item.id);
+
+    // The redemption field can report success immediately. Give owned artwork a short head start.
+    let timer: number | undefined;
+    const artwork = catalog.then(result => result.items.find(cloak => cloak.id === item.id)?.textureUrl).catch(() => undefined);
+    const timeout = new Promise<undefined>(resolve => { timer = window.setTimeout(resolve, 1200); });
+    const textureUrl = await Promise.race([artwork, timeout]);
+    window.clearTimeout(timer);
+    if (!mounted.current || activeAccount.current === item.accountId) onCosmeticUnlock?.({ ...item, textureUrl });
+  }
   const openLocker = (id: string) => { recordClaim(id); onSection("Cloaks"); };
   const openWings = (id: string) => { setWing({ id, account: profile?.id }); onSection("Wings"); };
   const wingShelf = { accountId: profile?.id, motion: props.motion, onNotify: props.onNotify, onOpenLocker: openWings };
   return <section className="locker-workspace desktop-locker">
-    <header className="look-heading"><h1>{section}</h1><CapeRedemption key={profile?.id || "guest"} accountId={profile?.id} onNotify={props.onNotify} onClaim={openLocker}/></header>
+    <header className="look-heading"><h1>{section}</h1><CapeRedemption key={profile?.id || "guest"} accountId={profile?.id} onNotify={props.onNotify} onClaim={openLocker}
+      onCosmeticUnlock={onCosmeticUnlock ? item => void celebrateClaim(item) : undefined}/></header>
     {section === "Shop" ? <>
       <div className="shop-cosmetic-categories" role="group" aria-label="Shop categories">
         {(["Cloaks", "Wings"] as const).map(category => <button key={category} aria-pressed={shopCategory === category} onClick={() => setShopCategory(category)}>{category}</button>)}

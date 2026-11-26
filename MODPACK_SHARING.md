@@ -1,10 +1,60 @@
-# Bloom Modpack Sharing
+# Delight Client modpack sharing
+
+## Pack Workspace player links
+
+Open an instance’s **Pack Workspace** and choose **Create shared pack** to review its installed files. **Publish version 1** creates a release for the signed-in Delight publisher. The final review shows the game, Fabric loader, file versions, enabled states and explicitly excluded folders. The creator can add a release note. After publication, **Copy player link** is available on that instance’s Overview.
+
+The native client rechecks the review fingerprint before sending a manifest. The sharing service authenticates the publisher, verifies the Fabric target and exact Modrinth files and dependencies, then records the immutable first release in SQLite. Launcher-managed cosmetics carry a checksum and use Delight as their source. A local publication ID lets the client recover the same link after an interrupted request. Anyone with the player link can view the release without signing in.
+
+The review flags active files that declare the same Fabric mod ID. **Choose version** shows the files and lets the creator confirm which one stays enabled. Delight rechecks the group against the reviewed files before changing enabled state and refreshes sharing compatibility afterward.
+
+**Review dependencies** groups missing required mods by Modrinth source and shows the exact compatible downloads and disabled copies it can enable. An installed provider in a duplicate group still satisfies matching requirements in the warning list. Its conflict remains blocking. The dependency installer verifies the reviewed inventory and pins before staging actions, refuses replacements and duplicate active Fabric IDs, and applies an independently safe set when some other requirements cannot be resolved.
+
+If Modrinth returns no match for an exact mod file, the creator can check **Keep local** and apply their choices. Delight matches each choice to the reviewed filename and SHA-512. The creator keeps the file in their instance, and the shared manifest contains only the deliverable files. The same check applies to first releases, updates and editor drafts. The creator’s review lists the omitted files before publishing.
+
+The service uses the existing `BLOOM_SHARE_DATA_DIR` volume and `BLOOM_SHARE_PUBLIC_URL` base. Requests use `POST /v1/workspace-packs`, owner-scoped recovery at `GET /v1/workspace-publications/:publicationId`, latest manifest reads at `GET /v1/workspace-packs/:code`, and the HTTPS player page at `GET /share/pack/:code`. Production serves these paths under `/minecraft`. Earlier `/p/:code` links remain supported.
+
+### Install & follow
+
+Choose **Open in Delight** on the player page, or paste the web address in the launcher under **File → Open player link** or **New instance → Open player link**. Each entry opens the same review. It shows the pack name, creator, release note, Minecraft and Fabric versions, published files, enabled states and any folder exclusions. The download estimate covers pack files fetched from Modrinth. Minecraft and Fabric may require additional downloads.
+
+**Install & follow** creates a separate instance and opens it in the library. Delight uses `GET /v1/workspace-packs/:code/install` for new preview and install admission, checks the release against the preview, downloads into staging and verifies each file’s SHA-512 checksum and size. A launcher-managed file must match the bundled version. The installer prepares the pinned runtime and checks admission and release freshness again before registering the instance. A failed download can be retried. If the release changes before installation, review it again.
+
+Delight records the canonical player link, installed release and new instance ID together. A same-name local instance keeps its own files. Reopening the link offers **Open instance** or **View update**. The saved release can still open offline after a local rename.
+
+### Publish and apply an update
+
+The creator opens **Sharing → Changes**, reviews the difference against the last published version, chooses the update policy and publishes the next version. Required updates need a reason. The service checks the publisher and base revision again and appends an immutable release. The player URL remains stable. **Releases** shows the history. The service exposes summaries at `GET /v1/workspace-packs/:code/releases` and a specific manifest at `GET /v1/workspace-packs/:code/releases/:revision`.
+
+The owner can select an older release in **Releases**, compare it to the current head, and choose **Restore as new release**. The review uses the usual policy and note fields and starts on Optional. `POST /v1/workspace-packs/:code/restore` revalidates the historical snapshot and its pinned sources, checks ownership and the expected head, then appends a new immutable revision. A request ID makes a retry idempotent. Optional restores retain the current minimum playable revision.
+
+The follower opens **Sharing → Releases** to compare their installed version directly with the latest and choose **Update instance**. Play also checks for updates. An optional update offers **Play current version** or **Update & play**. A required release advances the minimum playable revision. A later optional release retains that minimum, including when the client has learned it and subsequently goes offline.
+
+An update stages and verifies changed content before activating it in the existing game directory. Delight tracks ownership by its saved release, keeps personal files and saves in place, and preserves the instance ID and local name. Changed managed files and destination collisions identify the file that needs attention. A local journal restores an interrupted activation. The activation currently needs a filesystem that supports hard links. A followed game started by this client retains a process guard across launcher restarts. Updates become available again after the game exits.
+
+**Repair pack files** checks the files managed by the installed release and restores missing or modified files from its verified snapshot. Altered managed files are backed up before replacement. Personal files outside the installed manifest stay in place. Delight also saves a separate copy of the instance’s worlds before activating a Minecraft version change. The update stops if that backup fails.
+
+The web preview, desktop protocol handler and installer work together in the local development build. Community use requires a backend deployment and a client release that registers `delight://`. Isolated development profiles copy `delight://` links for their fixture service. Production invitation links use `/share/invite#<token>` so the secret stays out of HTTP request URLs. Older invitation paths remain supported.
+
+### Collaborator access
+
+Pack owners manage View and Edit invites under **Sharing → Access**. Invitations can expire and can have a maximum number of successful grants. Recipients preview the invitation and sign in to accept it. Redemption checks limits and writes the account grant in one transaction. The service returns the link once and stores its token hash.
+
+**Revoke link** stops new grants. **Remove access** removes a person’s grant and prevents them from using links issued before removal. A fresh grant retains that cutoff, including when a removed editor rejoins as a viewer. An editor can open a verified working copy independently of their followed instance. **Can publish** allows a named editor to append optional releases. Required releases and access management belong to the original owner. The backend checks the current grant again in the publication transaction.
+
+Under **Player link**, the owner can **Pause sharing** or **Resume sharing**. Pause disables the player page, new Delight installs, and new invitation grants. Existing followers can update, existing collaborators keep their permissions, and the owner can revoke invitations while paused. Resume reopens the same links subject to their existing expiry, use and revocation rules. The manifest and release history endpoints remain available for followers.
+
+### Draft review
+
+Editors save a verified snapshot private to their account with `POST /v1/workspace-packs/:code/drafts`. A draft captures the manifest, base release and editor note. Submission gives the owner access to that version. Return and withdrawal restore editing. Owner publication resolves the submitted files again, then checks the exact draft version, current release and editor access inside the same SQLite transaction as the new release. The owner reviews the stored snapshot in the client. Stale working copies and submissions remain available for review against a newer release.
+
+## Legacy Social instance sharing
 
 Bloom Modpack Sharing creates a short code for an existing Fabric instance and imports that code through the normal verified Modrinth pack pipeline.
 
 ## User flow
 
-Modpack Sharing does not appear in Utilities. Sharing starts from `Share instance` in an instance's three-dot menu and uses a compact three-step flow: choose a standalone copy or a synced pack, choose accepted Social friends, then optionally add a short message and send. The recipient receives a gift-style card inside the matching direct conversation, using the shared instance artwork, sender, instance name, Minecraft version, loader, an Accept action, and a compact X decline action. Pack invitations do not appear as administrative Inbox rows. Capability codes remain internal and are never shown in this Social flow.
+The instance’s three-dot menu now opens Pack Workspace for sharing. Legacy invitations already delivered in Social retain their gift-style card, instance artwork, sender, instance name, Minecraft version, loader, Accept action and compact decline action. Capability codes stay internal.
 
 ## Group packs
 

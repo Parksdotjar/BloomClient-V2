@@ -1,3 +1,216 @@
+## November 25, 2026 — Updates settings layout
+
+Parks approved the revised Updates page on November 25, 2026, calling it “INFINITLY BETTER.” Use this page as the reference for grouping each settings action with its status and for left-aligned, actionable instance results.
+
+Parks flagged the Updates page with separate version/status rows, a tight section break and generic centered result buttons. In **Settings → Updates**, put the installed launcher version beside its update action. Separate launcher and mod checks. Give check results the instance artwork, left-aligned name and runtime, a short status and a trailing arrow. Keep the result list with the action that produced it and route each result to its relevant Mods or release view. Local results needing attention sort first. Duplicate cleanup is separate from check results and retains its existing action. TypeScript, the production build, locked Cargo check and the mod-maintenance browser tests passed. The tests covered row alignment, direct Mods navigation, startup options and manual checks in OLED and compact Light.
+
+## November 25, 2026 — Align the Shop wing preview navigation arrow
+
+Parks flagged the inline chevron on Eclipse Angel Wings in Shop. In the Shop wing preview, center the **In Locker** label independently of the navigation glyph. Use the existing right-arrow icon at the trailing edge, vertically centered, with muted resting color and normal text color on hover or keyboard focus. The Wings renderer regression verified the label center, arrow inset and navigation into Locker. TypeScript, the production build, and locked Cargo check passed.
+
+## November 25, 2026 — Align notification feed text
+
+Parks approved the compact notification feed and bell-row action and asked to left-align the row text. Set the notification row's content column to fill its track, so every title and detail starts at the same edge beside its icon. Keep the short timestamp alongside the title.
+
+## November 25, 2026 — Compact Notification Center history
+
+Parks wanted less space above the list and clearer notification rows. The Mark all as read icon shares the existing bell row. The history uses compact timestamps, fine dividers, and an unread dot. Retain wrapping details and accessible names.
+
+## November 25, 2026 — Keep Mod updates going when a dependency blocks one update
+
+Parks reported repeated aggregate failures for mod dependency conflicts. **Update all** now keeps the installed versions when the staged Fabric metadata blocks a proposed update and applies compatible changes. The skipped reason stays on the affected mod row. The orange issue summary remains reserved for installed problems and failed checks or operations.
+
+## November 25, 2026 — Now Playing prefers the matching Windows mixer
+
+Parks reported that Zen showed PC volume despite having a mixer in Windows. Delight now resolves the registered desktop executable before choosing a fallback. With a matching mixer, the slider controls the app and keeps the same inline treatment. The labeled PC slider remains available when no app mixer can be matched.
+
+## November 25, 2026 — Fabric API version compatibility
+
+The Mods chooser now applies Fabric's prerelease-aware lower bound before matching the major or minor version. SMP can recognize Fabric API's `~26.3-` requirement on Minecraft 26.3. The chooser still checks installed dependencies before archiving other copies.
+
+## November 25, 2026 — Direct mod updates
+
+Parks replaced the combined picker and update review with one current-runtime action. **Update all** in the instance menu now starts compatible mod and dependency updates directly or queues while the game runs. The previous version and dependency review for routine updates were removed. The independent Minecraft version and recovery UI moved into Instance settings.
+
+## November 25, 2026 — Quieter Mods warnings
+
+Parks flagged an orange panel that listed every duplicate mod ID, an unsupported catalog label and an optional skipped update equally. A read-only SMP audit confirmed the extra JARs and showed Fabric had selected a version per group in its latest run. The popover now has one duplicate entry and focuses on installed problems or a failed check. Catalog and optional update notices use neutral row text.
+
+## November 25, 2026 — Duplicate mod rows and notifications
+
+Parks asked to prevent duplicate enabled JARs, bring affected players straight to the chooser, and choose the newest safe version automatically from Settings. Group known conflicts into one Mods row. Focus **Choose version** from **Attention needed**. Keep both backup and safety checks in the native apply path.
+
+## November 25, 2026 — Version updates and a shorter publish review
+
+Parks moved **Update all** into the instance three-dot menu and requested that it handle Minecraft upgrades for the existing pack. The in-page review uses the current version by default, names removals, and keeps the orange issue summary beside **Add mods** with the warning on its affected row. Pack Workspace opens a clean check directly to Publish and lists optional local omissions there. Added the Fabric metadata regression, reused checks and native recovery. The revised controls await hands-on visual approval.
+
+
+## November 25, 2026 — Horizontal launcher update confirmation and progress
+
+Parks rejected the downward update menu and required the full **Update available** label. The centered pill now expands sideways for **Update and restart** and an X. After confirmation it uses the launch-style track and the download percentage when reported. Download, install, restart and retry share the title-bar row. Parks approved the transition from **Update available** and inline confirmation into the launch-style progress bar on November 25, 2026.
+
+## November 25, 2026 — Balanced compact launcher update face
+
+Parks flagged **Update available** sitting to the right inside an oversized pill. The compact update face now measures its caption and arrow with balanced side padding. The review grows beneath the same centered trigger.
+
+## November 25, 2026 — Cosmetic unlock celebration
+
+Parks approved a separate Cosmetic unlocked face with artwork and an Equip shortcut to the claimed cloak. Added a short, falling and fading burst just under the pill after a fresh redemption. Reduced motion skips the particles. Equip selects the cloak and the existing Wear action applies it. The face expires or yields to active launch, installer progress and Admin notices.
+
+## November 25, 2026 — Longer Admin notice preview and slower opening
+
+Parks asked to see about 10–12 words before the ellipsis. Fixed the short-text clipping by deriving the width from the preview, icon and padding together. Display up to 12 words in the compact pill and keep the available title-bar width as a fallback. Opening uses a slower eased transition. The icon travels to the center while the full message glides down from the top.
+
+## November 25, 2026 — Client-wide Admin notice
+
+Parks requested an orange warning triangle, configurable lifetime and a compact preview that grows for reading. The active notice takes one island slot, preserves in-progress launch and updater controls, and clears at the shared expiration or when ended. Clicking shows the full plain-text message over the fixed workspace.
+
+## November 25, 2026 — Suppress the tooltip over open notification history
+
+Parks still saw Notifications after the heading was removed. The bell inherited its native hover tooltip into the open state. Hide that tooltip while history is open and restore it on the compact bell. The panel and bell retain their accessible names.
+
+## November 25, 2026 — Remove the visible notification heading
+
+Parks asked to remove the redundant Notifications text from the open island. The named region starts with Mark all as read when entries are unread. Otherwise, it starts with the history or empty state.
+
+## November 25, 2026 — Keep the island face visible during transitions
+
+Parks reported a blank bell and media content shifted out of the pill. The island surface now clips without scrolling, so focus and retained detail content cannot leave hidden scroll offsets on the compact face. Added coverage for the dismissed Notifications view and long media metadata.
+
+## November 25, 2026 — Genuine Now Playing logos and readable notifications
+
+Parks asked for authentic app icons, starting with Spotify’s full green disk and dark waves. He also reduced the idle bell to a short pill and asked the history to use the available text width. The Notification Center can grow wider on open while keeping the window chrome and workspace in place. Parks identified Spotify’s Windows mixer slider as the desired target and allowed a labeled PC output fallback when the app mixer is unavailable.
+
+## November 25, 2026 — Now Playing row and horizontal app volume
+
+Parks approved a persistent single media row with circular app icon, title, optional dimmed credit, three transport actions and Volume. Volume expands the pill horizontally while retaining its height and radius. Its slider reads the selected app’s Windows mixer and updates during drag. This supersedes the unfinished elapsed-time and cover design. Verified the horizontal reveal and live input through development and production renderer tests, and verified native mixer reads and writes in an isolated silent session.
+
+## November 25, 2026 — Earlier Now Playing artwork and click expansion draft
+
+Parks approved the horizontal launch X. He requested elapsed time in the compact media pill, with artwork, track, artist and transport on click, plus a smoothly adaptive width for short and long titles. Clicked island details widen slightly and open mainly downward over the stationary workspace.
+
+## November 25, 2026 — Horizontal launch cancellation
+
+Parks requested a horizontal launch cancel action inside the title bar. The progress pill itself receives hover and keyboard focus and keeps its flat fill. Its width grows around the window center while a right-side **Cancel launch** X fades in and turns red on hover. The title bar and workspace stay fixed. Renderer checks verified eased width, X opacity, mouse and keyboard behavior and the scoped cancellation command.
+
+## November 25, 2026 — Dark pill for Top Bar Island
+
+Parks requested a dark pill across the island’s activity states after providing two shape references. The pill uses more horizontal than vertical spacing and eases to half-radius corners as details open over the stationary workspace. He explicitly removed the visible perimeter and requested an Island color picker with the other Appearance panel colors. The default fill is darker than the default title bar and rail. TypeScript, the production build and locked Cargo check passed. The renderer checks verified the shape, stationary overlay and theme-specific color persistence.
+
+## November 25, 2026 — Top Bar Island overlay correction
+
+Parks rejected the title bar growing to hold detail panels because it moved the entire workspace. He requested a single outlined island that eases wider from the window center and downward over the existing page. Compact faces fit inside the normal bar. Notifications, update review, Now Playing and launch cancellation share the anchored overlay. An intermediate interpretation of a follow-up screenshot placed the outline below the bell and hid the trigger tooltip. Parks clarified that the full outline includes the bell area. The top edge stays visible in front of the trigger highlight during hover and press. The original tooltip behavior was restored. The title bar, rail, workspace margins and scroll position stay in place. Parks approved the corrected overlay and outline on November 25, 2026.
+
+## November 25, 2026 — Centered Top Bar Island
+
+Parks authorized the island and clarified that its full width should remain centered as it changes. Notifications, launcher updates, launch progress and opted-in Windows media share the same slot. Active launch keeps its compact track and percentage. A hover or keyboard-focus extension reveals **Cancel launch** over the work area. Explicit Notifications, update and media details expand into the header. The launcher remembers confirmed updates and suppresses Now Playing while they are pending.
+
+## November 25, 2026 — Top-bar launcher update cycle
+
+Parks approved the Notification Center and launch pill, then moved launcher update availability into the same slot. **Update available** extends left and replaces the bell with a download arrow at its fixed anchor. The shared panel shows versions, optional notes, explicit update consent, progress and retry. Notifications remain reachable inside the panel. The verified download and installer handoff use the existing signed updater.
+
+## November 25, 2026 — Notification Center and title-bar launch progress
+
+Implemented the flat top-bar bell, unread dot and activity panel with locally saved history. The bell expands to reveal native launch progress, with a fixed percentage beside the filling track. A confirmed game-ready event compacts the track to **Launched** and then restores the bell. Failure and cancellation restore the bell. Window controls stay in place and reduced motion uses immediate transitions.
+
+## November 25, 2026 — Simpler Mods update state
+
+Parks asked to remove the second progress line and standalone dependency button from ordinary Mods. **Update all** now applies eligible updates or verified dependency repairs, with **Updating…** on the same green button through the recheck. The in-page approval is used only when the proposed update needs to enable an explicitly disabled mod.
+
+## November 25, 2026 — Mod maintenance and neutral action buttons
+
+Parks approved implementing the mod maintenance plan with a green ceramic **Update all** and in-page dependency fixes. Added startup and manual checks under Settings → Updates, Mods toolbar and dependency review actions, and inline import and enable failures. Ordinary mod installs share native dependency validation and verified staging with maintenance.
+
+During review, Parks pointed to the two check buttons in Settings and explicitly rejected black-gradient button faces everywhere in the client. The flat neutral button rule supersedes the earlier dark ceramic treatment. Colored ceramic actions retain their emphasis.
+
+Parks requested cached mod rows, a scoped check under Instance Settings, and intentional inline error placement. The cache keeps rows visible during refresh and discards removed entries. Instance Settings runs the check for that instance and offers **View Mods** when needed. Compact in-page errors group a short message, retry and collapsed technical details.
+
+## November 25, 2026 — Pack reviews in the workspace
+
+Parks rejected the revised modal itself, including the black Cancel button and corner X. **Choose version** and **Review dependencies** now open as views within the existing Pack Workspace instance frame. They use normal file rows, the header’s **Back to contents** action, and ceramic confirmation buttons. Returning preserves the inventory tab and originating focus. A confirmed operation reruns the sharing check.
+
+## November 25, 2026 — Current pack dialogs and dependency review
+
+Parks rejected the legacy transfer styling on **Choose version**. Both that picker and **Review dependencies** now use the current folder-dialog shell, inset rows, and ceramic actions. The picker shows exact filenames and enabled outcomes. Dependency review identifies each proposed download or enable action and explains remaining requirements before confirmation.
+
+In SMP, 35 of 37 dependency-warning rows pointed to installed Fabric API versions already flagged as a duplicate group. The check now treats a matching installed provider as present while its duplicate group remains blocking. The native dependency planner deduplicates required files, preserves exact pins, and stages verified files before writing.
+
+Verified the two dialogs in OLED and Light and passed 15 native compatibility and installer checks. Left the rebuilt native preview open with its populated review copy.
+
+## November 25, 2026 — Pack Workspace file warnings and local mods
+
+Parks asked for yellow warning dots, a way to resolve duplicate mods from review, and an explicit choice to leave unmatched mods local. The SMP inspection found 12 real conflict groups by Fabric mod ID. **Choose version** lists the exact JARs and previews the enabled state changes. **Keep local** stages an unmatched mod’s omission, and **Apply choices** checks it again before release or draft review. No instance files were edited during the SMP investigation.
+
+Verified the browser workflow in OLED and minimum-size Light, 10 native compatibility tests and 14 sharing service tests. The browser checks use isolated native-command fixtures. Visual approval is pending.
+
+## November 25, 2026 — Sharing controls and pack recovery
+
+Parks requested the invitation revocation fix, release recovery and a stop-sharing control before release. Older releases open a comparison with the latest version, the shared release-policy and note fields, and a ceramic **Restore as new release** header action. Followers can repair managed files in Releases and see backup locations when available. Access shows the player link state and the pause or resume control. Removed **Share instance** below **Open Pack Workspace** in the regular instance menu.
+
+## November 25, 2026 — Draft avatar placement restored
+
+Parks preferred the original leading avatar after identifying the large test initial as the profile picture slot. The draft list and review use the 34 px avatar beside the title and By line.
+
+## November 25, 2026 — Draft author byline
+
+Parks specified the draft author order as By, profile picture, name. Moved the 18 px image inline beneath the title in the draft list and review detail. Profiles use their verified account image, linked Minecraft avatar when available, or initial.
+
+## November 24, 2026 — Private drafts and owner review
+
+Editors save a reviewed snapshot from Changes and send it from Drafts. The owner opens the same comparison under Review, can return it with feedback and publishes the exact submitted snapshot. The existing ceramic header action carries Save draft, Send for review and Publish version. Parks approved the preceding Access revision.
+
+Parks asked for draft states to use the existing Mods-style tab bar and flagged the large default note field. Editors get Drafts, In review, Changes requested and Published tabs. Owners get In review and Published. The note and feedback controls now use the shared compact publication styling.
+
+Parks asked for clearer actor labels and a two-column review. The editor sees Send to owner, the owner sees Merge & publish, and the row shows the draft title with a By line and profile image when available. The comparison puts green additions on the left and red removals on the right.
+
+## November 24, 2026 — Access controls matched to Pack Workspace
+
+Parks pointed out that Create link belonged with the ceramic header actions and that the permission dropdown needed the launcher treatment. Create link now submits from the same header slot as Copy player link. Parks flagged an eye icon under the View arrow during review. The revised selector uses centered text and the standard chevron and popover.
+
+## November 24, 2026 — Sharing Access
+
+Added a sidebar destination for invitation management. Owners create View and Edit links, set expiration and use limits, revoke unused access paths and set publishing permissions beside each editor. The recipient sees the pack and invitation role before accepting. Hands-on layout review is pending.
+
+## November 24, 2026 — Shared-pack revisions and sidebar groups
+
+Parks requested a folding Sharing group with independently reachable pages and a single guide into the bottom child. Creator changes and follower updates have separate destinations. The creator chooses the release policy and the player reviews changes to the followed instance. Hands-on design review is pending.
+
+## November 24, 2026 — Player-link preview corrections
+
+Parks wanted direct access to resource packs in long releases, a legible download bar at the bottom right and less explanatory copy. The recipient now shares the inventory tabs and row styling. The active install reports its stage and progress across pages. The preview omits the separate-install explanation and shows the local name only when it differs. Parks will test in the open client.
+
+## November 24, 2026 — Install a shared pack from a player link
+
+Parks requested a recipient preview and a separate followed installation. **Open in Delight** on a player page and **Open player link** in the launcher’s File menu or New instance screen now lead to the same preview. The creator, release, runtime, pack download estimate, optional note and excluded folders sit above the published contents. Files reuse the installed-content row with Name and Status columns, a filled ceramic dot for enabled files and a hollow ring for disabled files. Headings and section labels carry no file totals.
+
+**Install & follow** opens the new instance when installation finishes. Reopening the same link shows **Open instance**. **Following shared pack** on its workspace Overview identifies the creator and installed release and gives access to the player link. Parks’s visual review is pending. [Pack Workspace design references](design-references/current-client/library.md#pack-workspace)
+
+## November 24, 2026 — Publish a first release from Pack Workspace
+
+The first-release review now offers a release note, shows the publishing account and explains exactly which files and enabled states players can see. A first-time publisher can read and accept the Delight Terms of Service in this flow. A creator who switches accounts sees the new account’s consent state. If the reviewed files change, Recheck contents preserves the note and asks the creator to confirm any excluded folders again.
+
+After publication, Overview shows the version, the creator’s note when present, and the saved player link. Keyboard focus moves to Copy player link. If clipboard access fails, the field selects the URL for manual copying. The version stays in the release details and the file rows retain the shared Name and Status layout. The OLED and minimum-size Light flows passed browser checks with isolated fixtures. Parks’s visual review is pending. [Full-window design references](design-references/current-client/library.md#pack-workspace)
+
+## November 24, 2026 — Pack Workspace source check and first release
+
+Create shared pack now checks file sources automatically. A problem appears under its file name and leaves the Status dot available for enabled state. The first-release preview shows the reviewed files and any folders the creator chose to omit. Its header action returns to contents and restores focus. Sidebar Back continues to return to the entry instance and tab. These screens are a local prototype awaiting Parks’s visual review.
+
+## November 24, 2026 — Workspace inventory and independent features
+
+Parks preferred the revised full-width instance layout and asked to keep future independent tools at home in this workspace. The frame now takes the selected instance, action and page body. Sharing owns its status lookup and inventory. The workspace and ordinary instance use the same installed-content row. Removed counts beside the category names and the “Review pack contents” heading. Populated inventories have small Name and Status labels, a green ceramic enabled dot and a hollow disabled ring. Both states have accessible names. The editable instance row keeps its existing controls. Parks requested a current-client screenshot catalog as the design reference.
+
+## November 24, 2026 — Pack Workspace unshared Overview
+
+Parks identified the initial Overview/review composition as old Bloom styling. His screenshot records the rejected implementation. The replacement uses the current Delight instance shell, the Create/Back action at the right of the identity header, and content tabs with an installed-file list. The previously approved sidebar switcher is outside this correction. Visual approval of the replacement is pending.
+
+Parks approved the revised instance dropdown and requested the first-run Overview and Create shared pack action. The local-instance surface uses its artwork, name, game and loader versions, a sentence explaining sharing, and one accent action. Create shared pack opens a review of local contents. This Overview awaits visual approval.
+
+## November 24, 2026 — Pack Workspace navigation prototype
+
+After reviewing the prototype, Parks rejected the instance switcher’s checkmark and requested a sidebar-width menu over the tabs. He then revised the width so the popup comes close to the sidebar edges with a small inset. Each edge now sits halfway between the trigger edge and the corresponding sidebar edge, including after resize. Selection retains its row highlight and accessible pressed state.
+
+Parks approved the navigation plan and requested a working first slice in a separate P: worktree. More opens an instance-specific workspace, the wide sidebar switches between real library entries, and Back returns to the original instance tab. The main instance page keeps its usual controls. Visual review is pending.
+
 ## November 7, 2026 — Optional sound and mechanical toggle feedback
 
 ## November 22, 2026 — Launcher wallpaper and frost

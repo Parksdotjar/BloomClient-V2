@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { FolderInput } from "lucide-react";
 
-export type FolderDragItem = { id: string; name: string; icon?: string | null };
-export function useInstanceFolderDrag(onDrop: (item: FolderDragItem, target: string) => void, disabled: boolean) {
+export type FolderDragItem = { id: string; name: string; icon?: string | null; kind?: "folder" };
+export function useInstanceFolderDrag(onDrop: (item: FolderDragItem, target: string, after: boolean) => void, disabled: boolean) {
   const [item, setItem] = useState<FolderDragItem | null>(null);
   const ghost = useRef<HTMLDivElement>(null);
   const origin = useRef({ x: 0, y: 0 });
@@ -34,15 +33,28 @@ export function useInstanceFolderDrag(onDrop: (item: FolderDragItem, target: str
     };
     const hit = () => {
       const element = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-instance-folder-drop]") || null;
-      return element && root.contains(element) && element.dataset.instanceFolderDrop !== `instance:${value.id}` ? element : null;
+      if (!element || !root.contains(element)) return null;
+      if (value.kind !== "folder") return { element, edge: "inside" };
+      const sections = root.querySelectorAll<HTMLElement>(".folder-section");
+      const first = sections[0], last = sections[sections.length - 1];
+      if (!first) return null;
+      let section = element.closest<HTMLElement>(".folder-section");
+      if (!section) section = Array.from(sections).find(s => y < s.getBoundingClientRect().top) ?? last;
+      if (section.dataset.instanceFolderDrop === `folder:${value.id}`) return null;
+      const heading = section.querySelector(".folder-toggle");
+      if (!heading) return null;
+      const bounds = heading.getBoundingClientRect();
+      return { element: section, edge: y < bounds.top + bounds.height / 2 ? "before" : "after" };
     };
     const paint = () => {
       const next = hit();
-      if (target !== next) { target?.removeAttribute("data-folder-drop-active"); target = next; target?.setAttribute("data-folder-drop-active", "true"); }
+      if (target !== next?.element) target?.removeAttribute("data-folder-drop-active");
+      target = next?.element ?? null;
+      if (next && target?.dataset.folderDropActive !== next.edge) target?.setAttribute("data-folder-drop-active", next.edge);
       if (ghost.current) {
-        ghost.current.style.transform = `translate3d(${Math.min(x + 16, window.innerWidth - 248)}px,${Math.min(y + 16, window.innerHeight - 72)}px,0)`;
+        ghost.current.style.transform = `translate3d(${Math.min(x + 16, window.innerWidth - 195)}px,${Math.min(y + 16, window.innerHeight - 72)}px,0)`;
         const label = ghost.current.querySelector("small");
-        if (label) label.textContent = target?.dataset.folderDropLabel || "Drop onto a folder or another instance";
+        if (label) label.textContent = target?.dataset.folderDropLabel || "";
       }
       const scroller = root.closest<HTMLElement>(".desktop-context-body") ?? root;
       const bounds = scroller.getBoundingClientRect();
@@ -63,9 +75,10 @@ export function useInstanceFolderDrag(onDrop: (item: FolderDragItem, target: str
     const up = (e: PointerEvent) => {
       if (e.pointerId !== pointerId) return;
       x = e.clientX; y = e.clientY;
-      const destination = active ? hit()?.dataset.instanceFolderDrop : undefined;
+      const drop = active ? hit() : null;
+      const destination = drop?.element.dataset.instanceFolderDrop;
       if (active) e.preventDefault();
-      clear(); if (destination) latest.current(value, destination);
+      clear(); if (destination) latest.current(value, destination, drop?.edge === "after");
     };
     const abort = () => clear(true);
     const hidden = () => { if (document.hidden) abort(); };
@@ -73,5 +86,5 @@ export function useInstanceFolderDrag(onDrop: (item: FolderDragItem, target: str
     window.addEventListener("pointermove", move, { passive: false }); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", abort); window.addEventListener("blur", abort); window.addEventListener("keydown", key, true); document.addEventListener("visibilitychange", hidden);
     cancel.current = abort;
   };
-  return { start, dragging: item, overlay: item ? createPortal(<div className="instance-folder-ghost" ref={ghost} style={{ transform: `translate3d(${origin.current.x}px,${origin.current.y}px,0)` }} aria-hidden="true"><span>{item.icon ? <img src={item.icon} alt="" /> : <b>?</b>}</span><div><strong>{item.name}</strong><small>Drop onto a folder or another instance</small></div><FolderInput size={17} /></div>, document.body) : null };
+  return { start, dragging: item, overlay: item ? createPortal(<div className="instance-folder-ghost" ref={ghost} style={{ transform: `translate3d(${origin.current.x}px,${origin.current.y}px,0)` }} aria-hidden="true">{item.icon && <span><img src={item.icon} alt="" /></span>}<div><strong>{item.name}</strong>{item.kind !== "folder" && <small/>}</div></div>, document.body) : null };
 }

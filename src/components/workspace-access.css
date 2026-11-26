@@ -1,0 +1,34 @@
+.workspace-access { display: grid; gap: 21px; max-width: 850px; margin-top: 20px; }
+.workspace-link-form { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.workspace-access label { font-size: 13px; }
+.workspace-link-form :is(label, .workspace-role-field) { display: grid; gap: 5px; font-size: 13px; }
+.workspace-access input:not([type="checkbox"]) {
+  box-sizing: border-box; min-height: 36px; border: 1px solid var(--launcher-menu-line);
+  border-radius: 7px; background: var(--control); color: var(--text); font: inherit; padding: 6px 9px;
+}
+.workspace-link-form input { width: 121px; }
+.workspace-role-field .select-wrap { width: 121px; min-width: 0; }
+.desktop-redesign .workspace-role-field .select-trigger {
+  min-height: 36px; justify-content: center; padding-inline: 28px;
+}
+.workspace-role-field .select-trigger > svg { top: 50%; translate: 0 -50%; }
+.workspace-created-link, .workspace-access-heading, .workspace-access-actions {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+}
+.workspace-access-heading { justify-content: space-between; }
+.workspace-player-access { border-bottom: 1px solid var(--desktop-line); padding-bottom: 12px; }
+.workspace-player-access p { margin-top: 3px; }
+.workspace-access-actions label { display: inline-flex; align-items: center; gap: 5px; }
+.workspace-created-link input { flex: 1 1 240px; min-width: 0; }
+.workspace-access h2 { margin: 0; font-size: 17px; }
+.workspace-access p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+.workspace-access :is(.workspace-access-error, .workspace-remove) { color: var(--theme-danger-ink); }
+.workspace-access-rows { padding: 0; margin: 8px 0 0; list-style: none; }
+.workspace-access-rows li {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  padding: 9px 2px; border-bottom: 1px solid var(--desktop-line);
+}
+.workspace-access-rows strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.workspace-access-rows small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.workspace-access .settings-action { display: inline-flex; align-items: center; gap: 5px; }
+.workspace-access :is(input, button):focus-visible { outline: 2px solid var(--accent-ink, var(--accent)); outline-offset: 2px; }

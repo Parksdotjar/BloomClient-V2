@@ -28,11 +28,13 @@ These rules are specific to Bloom Client's Locker and must be read before changi
 - Adjust cape-card size, grid density, preview scale, or panel proportions when the composition feels unbalanced.
 - Keep the player preview floating cleanly on its existing flat surface and the main navigation centered.
 - Reuse existing Bloom controls and interaction behavior; avoid adding non-functional visual objects.
-- Code redemption uses one attached input area under the main platform, with equal visible vertical margins around the field. No introductory tagline above the input. Keep sign-in guidance in the disabled input placeholder and preserve accessible labels. Successful redemption opens the claimed cloak in Locker; reuse the existing bottom notification.
+- Code redemption uses one attached input area under the main platform, with equal visible vertical margins around the field. No introductory tagline above the input. Keep sign-in guidance in the disabled input placeholder and preserve accessible labels. A new code claim celebrates in the Top Bar Island while the current page stays open. Equip opens that cloak in Locker for preview, and the collection’s Wear action applies it. An already-claimed code keeps the existing inline result, notification and Locker navigation. Shop claims keep their existing Add to Locker and In Locker actions.
 
 ## Wings in Locker and Shop
 
 Wings adds a collection category and a Shop filter using the current Locker layout. Reuse the existing card geometry and equipped highlight. Use the isolated wing and sigil for card art, and keep the hover fade short. The selected wing gets one live preview of the current account's Minecraft skin with Classic or Slim arms, plus separate left, right, and trim controls using the shared color picker. Preview changes are immediate. Equip and Save colors reflect server confirmation.
+
+In the Shop wing preview, center the **In Locker** label independently of the navigation glyph. Use the existing right-arrow icon at the trailing edge, vertically centered, with muted resting color and normal text color on hover or keyboard focus.
 
 ## Loading and refresh stability
 

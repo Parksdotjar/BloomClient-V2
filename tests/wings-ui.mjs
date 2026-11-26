@@ -55,7 +55,18 @@ try {
   await tab('Shop');
   await page.getByRole('group',{name:'Shop categories'}).getByRole('button',{name:'Wings',exact:true}).click();
   await page.getByRole('button',{name:'Add to Locker',exact:true}).click();
-  await page.getByRole('button',{name:'In Locker',exact:true}).click();
+  const openLocker = page.getByRole('button', { name: 'In Locker', exact: true });
+  assert.ok(await openLocker.evaluate(button => {
+    const row = button.getBoundingClientRect();
+    const label = button.querySelector('span').getBoundingClientRect();
+    const arrow = button.querySelector('svg.lucide-arrow-right').getBoundingClientRect();
+    const centerX = bounds => bounds.left + bounds.width / 2;
+    const centerY = bounds => bounds.top + bounds.height / 2;
+    return Math.abs(centerX(label) - centerX(row)) <= 1 &&
+      Math.abs(centerY(arrow) - centerY(row)) <= 1 &&
+      Math.abs(row.right - arrow.right - 13) <= 1;
+  }), 'In Locker centers its label and anchors the arrow to the right edge');
+  await openLocker.click();
   await page.locator('.wing-detail canvas[data-ready="true"][data-skin="true"]').waitFor();
   const card=page.locator('.wing-card-preview canvas[data-ready="true"]');
   await card.waitFor();

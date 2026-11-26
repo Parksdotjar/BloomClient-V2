@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, RotateCw } from "lucide-react";
+import { ArrowRight, RotateCw } from "lucide-react";
 import { installedWings, tintKeys, wingLabels, wingRequest,
   type EquippedWing, type Tint, type WingCatalog, type WingColors, type WingOffer } from "../services/delight-wings";
 import { CustomAccentPicker } from "./CustomAccentPicker";
@@ -112,8 +112,8 @@ export function WingsShelf({ mode, accountId, motion, initialId, onOpenLocker, o
       <WingPreview key={item.revision} item={item} motion={motion} accountId={accountId}
         colors={preview ? { ...finish, [preview.key]: preview.color } : finish}/>
       <div className="locker-detail-copy"><h2>{item.name}</h2></div>
-      {shop ? <button className="locker-equip" disabled={pending || !accountId} onClick={() => item.owned ? onOpenLocker(item.id) : claim(item)}>
-        {item.owned ? <><span>In Locker</span><ChevronRight size={15}/></> : !accountId ? "Sign in to add" : pending ? "Adding…" : "Add to Locker"}
+      {shop ? <button className={item.owned ? "locker-equip wing-open-locker" : "locker-equip"} disabled={pending || !accountId} onClick={() => item.owned ? onOpenLocker(item.id) : claim(item)}>
+        {item.owned ? <><span>In Locker</span><ArrowRight size={16} aria-hidden="true" /></> : !accountId ? "Sign in to add" : pending ? "Adding…" : "Add to Locker"}
       </button> : <>
         <fieldset className="wing-colors" disabled={pending}>
           <legend>Colors</legend>

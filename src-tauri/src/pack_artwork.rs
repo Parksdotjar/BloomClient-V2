@@ -4,7 +4,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use crate::{bloom_http_client, cache, content_folder, load_instance};
+use crate::{bloom_http_client, cache, existing_content_folder, instance_actions, load_instance};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -28,9 +28,10 @@ fn fingerprints(folder: &Path) -> Result<Vec<(String, String)>, String> {
         {
             continue;
         }
-        let Ok(metadata) = entry.metadata() else {
+        let Ok(metadata) = std::fs::symlink_metadata(entry.path()) else {
             continue;
         };
+        if instance_actions::linked(&metadata) { continue; }
         let modified = metadata
             .modified()
             .ok()
@@ -58,16 +59,21 @@ fn fingerprints(folder: &Path) -> Result<Vec<(String, String)>, String> {
 pub async fn get_pack_artwork(
     instance_id: String,
     category: String,
+    for_sharing: Option<bool>,
 ) -> Result<HashMap<String, String>, String> {
     crate::instance_actions::validate_id(&instance_id)?;
     if !matches!(category.as_str(), "shaderpacks" | "resourcepacks") {
         return Err("Unsupported pack category".into());
     }
     let files = tauri::async_runtime::spawn_blocking(move || {
-        fingerprints(&content_folder(&load_instance(&instance_id)?, &category)?)
+        match existing_content_folder(&load_instance(&instance_id)?, &category, for_sharing.unwrap_or(false))? {
+            Some(folder) => fingerprints(&folder),
+            None => Ok(Vec::new()),
+        }
     })
     .await
     .map_err(|e| e.to_string())??;
+    if files.is_empty() { return Ok(HashMap::new()); }
     let client = bloom_http_client()?;
     let mut artwork = HashMap::new();
     let mut missing = Vec::new();

@@ -68,6 +68,15 @@ test("native PKCE codes are single-use and create a credentialed social device",
   t.after(() => { api.database.close(); accountDatabase.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   const session = await authorize(api, "account-a", crypto.randomUUID());
   assert.equal(session.needsUsername, false);
+  assert.equal(api.workspacePublisher({ headers: {} }), null);
+  assert.deepEqual(api.workspacePublisher({ headers: { authorization: `Bearer ${session.accessToken}` } }),
+    { id: session.user.id, username: session.user.username });
+  assert.equal(api.workspaceAuthorProfile("unknown"), null);
+  assert.deepEqual(api.workspaceAuthorProfile(session.user.id),
+    { displayName: "Parks", avatarUrl: "https://images.example/account-a.png", minecraftUuid: null });
+  const minecraftUuid = "123e4567-e89b-12d3-a456-426614174000";
+  api.database.prepare("UPDATE social_users SET minecraft_uuid = ? WHERE id = ?").run(minecraftUuid, session.user.id);
+  assert.equal(api.workspaceAuthorProfile(session.user.id).minecraftUuid, minecraftUuid);
   assert.equal(session.user.displayName, "Parks");
   assert.equal(session.user.avatarUrl, "https://images.example/account-a.png");
   assert.equal(session.user.provider, "google");

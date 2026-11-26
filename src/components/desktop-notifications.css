@@ -1,0 +1,927 @@
+.desktop-notification-center {
+  --island-surface: var(--desktop-island-color, #050505);
+  --text: var(--desktop-island-ink, #fff);
+  --muted: color-mix(in srgb, var(--text) 78%, var(--island-surface));
+  --launcher-menu-hover: color-mix(in srgb, var(--text) 12%, var(--island-surface));
+  --launcher-menu-line: color-mix(in srgb, var(--text) 25%, transparent);
+  --desktop-selection: var(--launcher-menu-hover);
+  --island-accent: color-mix(in srgb, var(--accent) 65%, var(--text));
+  --island-danger: color-mix(in srgb, var(--theme-danger-ink, #d83d43) 60%, var(--text));
+  --island-notice-ink: color-mix(in srgb, #ef893c 78%, var(--text));
+  --island-inline-inset: 12px;
+  --notification-bell-width: 54px;
+  --notification-anchor-width: 36px;
+  --notification-click-expansion: 32px;
+  --notification-launch-width: clamp(156px, 22vw, 250px);
+  --notification-cancel-width: 32px;
+  --notification-motion: cubic-bezier(.23, .75, .24, 1);
+  --desktop-island-shape-time: 250ms;
+  --desktop-island-face-width: var(--notification-bell-width);
+  --desktop-island-expanded-width: min(calc(var(--desktop-island-face-width) + var(--notification-click-expansion)), var(--desktop-island-fit, 100vw));
+  --desktop-island-compact-height: calc(var(--desktop-title-height) - 8px);
+  --desktop-island-pill-radius: calc(var(--desktop-island-compact-height) / 2);
+  grid-area: 1 / 1;
+  align-self: start;
+  justify-self: center;
+  position: relative;
+  z-index: 2;
+  inline-size: min(var(--desktop-island-width, var(--desktop-island-face-width)), var(--desktop-island-fit, 100%));
+  block-size: var(--desktop-title-height);
+  min-inline-size: 0;
+  pointer-events: none;
+  transition: inline-size var(--desktop-island-shape-time) var(--notification-motion);
+}
+
+.desktop-notification-center[data-face="update"] {
+  --island-update-icon-size: 16px;
+  --island-update-icon-gap: 8px;
+  --island-update-control-gap: 6px;
+  --island-update-confirm-inset: 4px;
+  --island-update-action-inset: 9px;
+  --island-update-dismiss-size: 24px;
+  --desktop-island-face-width: calc(var(--desktop-island-text-width, 92px) + 2 * var(--island-inline-inset) + var(--island-update-icon-size) + var(--island-update-icon-gap));
+}
+
+.desktop-notification-center[data-update-confirm] {
+  --desktop-island-width: max(174px, calc(var(--desktop-island-text-width, 120px) + 2 * var(--island-update-confirm-inset) + var(--island-update-control-gap) + var(--island-update-dismiss-size) + var(--island-update-action-padding, 0px)));
+}
+
+.desktop-notification-center[data-update-confirm]:has(.desktop-launcher-update-action) {
+  --island-update-action-padding: calc(2 * var(--island-update-action-inset));
+}
+
+.desktop-notification-center[data-update-active] {
+  --desktop-island-width: max(var(--notification-launch-width), calc(var(--desktop-island-text-width, 32px) + 64px + 2 * var(--island-inline-inset) + var(--island-update-icon-gap)));
+}
+
+.desktop-notification-center[data-face="cosmetic"] { --desktop-island-face-width: 224px; }
+.desktop-notification-center[data-face="notice"] {
+  --desktop-island-shape-time: 480ms;
+  --notification-motion: cubic-bezier(.24, .66, .28, 1);
+  --island-notice-icon-size: 16px;
+  --island-notice-gap: 8px;
+  --island-notice-text-start: calc(var(--island-inline-inset) + var(--island-notice-icon-size) + var(--island-notice-gap));
+  --desktop-island-face-width: clamp(116px, calc(var(--desktop-island-text-width, 150px) + var(--island-notice-text-start) + var(--island-inline-inset) + 2px), 620px);
+}
+.desktop-notification-center[data-face="media"] {
+  --desktop-island-media-app-width: 0px;
+  --desktop-island-face-width: clamp(190px, calc(var(--desktop-island-text-width, 50px) + 128px + var(--desktop-island-media-app-width)), 425px);
+  --desktop-island-volume-width: clamp(62px, calc(var(--desktop-island-fit, 100vw) - 150px), 108px);
+}
+
+.desktop-notification-center[data-face="media"]:has(.desktop-island-media-app:not([hidden])) {
+  --desktop-island-media-app-width: 24px;
+}
+.desktop-notification-center[data-volume-open] {
+  --desktop-island-width: calc(var(--desktop-island-face-width) + var(--desktop-island-volume-width));
+}
+.desktop-notification-center[data-face="launching"] { --desktop-island-face-width: var(--notification-launch-width); }
+.desktop-notification-center[data-launch-cancel] {
+  --desktop-island-width: calc(var(--notification-launch-width) + var(--notification-cancel-width));
+}
+.desktop-notification-center[data-face="launched"] { --desktop-island-face-width: 84px; }
+
+.desktop-notification-center[data-expanded] { --desktop-island-width: var(--desktop-island-expanded-width); }
+
+.desktop-notification-center[data-details="notifications"] {
+  --desktop-island-expanded-width: min(420px, var(--desktop-island-fit, 100vw));
+}
+
+/* This is the only box that grows below the fixed title bar. */
+.desktop-island-surface {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline: 0;
+  block-size: calc(var(--desktop-island-compact-height) + var(--desktop-island-detail-height, 0px));
+  border-radius: var(--desktop-island-pill-radius);
+  /* Retained details can be larger than the pill. Clip them without scrolling its face. */
+  overflow: clip;
+  background: var(--island-surface);
+  color: var(--text);
+  transition:
+    block-size var(--desktop-island-shape-time) var(--notification-motion),
+    border-radius var(--desktop-island-shape-time) var(--notification-motion);
+}
+
+.desktop-notification-center[data-face="launching"] .desktop-island-surface { pointer-events: auto; }
+
+.desktop-notification-center[data-expanded] .desktop-island-surface {
+  border-radius: calc(var(--desktop-island-pill-radius) / 2);
+  pointer-events: auto;
+}
+
+.desktop-island-details {
+  position: absolute;
+  inset-block-start: var(--desktop-island-compact-height);
+  left: 50%;
+  transform: translateX(-50%);
+  inline-size: var(--desktop-island-expanded-width);
+  box-sizing: border-box;
+  padding: 0 var(--island-inline-inset) 5px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 130ms ease, visibility 0s linear var(--desktop-island-shape-time);
+}
+
+.desktop-notification-center[data-details="notifications"] .desktop-island-details { padding-inline: 8px; }
+
+.desktop-notification-center[data-expanded] .desktop-island-details {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 170ms ease 35ms;
+}
+
+.desktop-island-compact {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-inline-size: 0;
+  block-size: var(--desktop-island-compact-height);
+}
+
+.desktop-titlebar .desktop-notification-trigger {
+  min-inline-size: 0;
+  inline-size: 100%;
+  block-size: var(--desktop-island-compact-height);
+  border-radius: var(--desktop-island-pill-radius);
+  color: var(--text);
+  pointer-events: auto;
+  overflow: clip;
+}
+
+.desktop-notification-center[data-face="notifications"] .desktop-notification-trigger {
+  max-inline-size: var(--notification-bell-width);
+}
+
+.desktop-island-cosmetic-face {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding-inline: 9px;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.desktop-island-cosmetic-art {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  inline-size: 22px;
+  block-size: 22px;
+  color: var(--island-accent);
+}
+
+.desktop-island-cosmetic-art .cape-display.card { inline-size: 22px; block-size: 22px; perspective: none; }
+.desktop-island-cosmetic-art .cape-display.card .cape-display-object {
+  inline-size: 12px;
+  block-size: 19px;
+  transform: none;
+  filter: none;
+}
+.desktop-island-cosmetic-art .cape-display canvas { transform: none; }
+.desktop-island-cosmetic-art :is(.cape-display-shadow, .cape-display-edge, .cape-display-bottom) { display: none; }
+
+.desktop-island-cosmetic-label {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-titlebar .desktop-island-cosmetic-equip {
+  flex: none;
+  block-size: calc(var(--desktop-island-compact-height) - 6px);
+  min-inline-size: 0;
+  padding-inline: 10px;
+  border-radius: 100px;
+  color: var(--text);
+  background: var(--launcher-menu-hover);
+  pointer-events: auto;
+}
+
+.desktop-titlebar .desktop-island-cosmetic-equip:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--text) 20%, var(--island-surface));
+}
+
+.desktop-island-confetti {
+  position: absolute;
+  inset-block-start: calc(var(--desktop-title-height) - 6px);
+  inset-inline-start: 50%;
+  inline-size: 0;
+  block-size: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.desktop-island-confetti i {
+  position: absolute;
+  inline-size: 3px;
+  block-size: 6px;
+  border-radius: 1px;
+  background: var(--island-accent);
+  opacity: 0;
+  animation: desktop-island-confetti-fall 980ms cubic-bezier(.34, .14, .62, 1) var(--confetti-delay) both;
+}
+
+.desktop-island-confetti i:nth-child(3n + 1) { background: var(--island-notice-ink); }
+.desktop-island-confetti i:nth-child(3n + 2) { background: var(--muted); block-size: 3px; }
+
+@keyframes desktop-island-confetti-fall {
+  from { opacity: 0; transform: translateX(var(--confetti-start)) scale(.7); }
+  18% {
+    opacity: .85;
+    transform: translate(calc(var(--confetti-start) + var(--confetti-drift) * .25), 10px)
+      rotate(calc(var(--confetti-turn) * .25));
+  }
+  54% { opacity: .58; }
+  to {
+    opacity: 0;
+    transform: translate(calc(var(--confetti-start) + var(--confetti-drift)), var(--confetti-fall))
+      rotate(var(--confetti-turn)) scale(.7);
+  }
+}
+
+.desktop-titlebar .desktop-island-notice-trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding-inline: var(--island-notice-text-start) var(--island-inline-inset);
+  max-inline-size: var(--desktop-island-face-width);
+  text-align: start;
+}
+
+.desktop-titlebar .desktop-island-notice-trigger:is(:hover, :focus-visible) {
+  background: var(--launcher-menu-hover);
+}
+
+.desktop-island-notice-icon {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: var(--island-inline-inset);
+  inline-size: var(--island-notice-icon-size);
+  block-size: var(--island-notice-icon-size);
+  color: var(--island-notice-ink);
+  transform: translateY(-50%);
+  transition:
+    inset-inline-start var(--desktop-island-shape-time) var(--notification-motion),
+    transform var(--desktop-island-shape-time) var(--notification-motion);
+  animation: desktop-island-appear 150ms ease-out both;
+}
+
+.desktop-notification-center[data-notice-reading] .desktop-island-notice-icon {
+  inset-inline-start: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.desktop-island-notice-preview {
+  display: block;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 200ms ease, transform var(--desktop-island-shape-time) var(--notification-motion);
+}
+
+.desktop-notification-center[data-notice-reading] .desktop-island-notice-preview {
+  opacity: 0;
+  transform: translateY(var(--desktop-island-compact-height));
+}
+
+.desktop-notification-center[data-details="notice"] .desktop-island-details {
+  transition: opacity 210ms ease, visibility 0s linear var(--desktop-island-shape-time);
+}
+
+.desktop-notification-center[data-notice-reading] .desktop-island-details { transition: opacity 240ms ease; }
+
+.desktop-island-notice-message {
+  min-block-size: 0;
+  max-block-size: min(220px, 42dvh);
+  padding: 3px 4px 9px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--desktop-island-compact-height)));
+  transition: opacity 280ms ease, transform var(--desktop-island-shape-time) var(--notification-motion);
+}
+
+.desktop-notification-center[data-notice-reading] .desktop-island-notice-message {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@starting-style {
+  .desktop-notification-center[data-notice-reading] .desktop-island-notice-message {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--desktop-island-compact-height)));
+  }
+}
+
+.desktop-island-notice-message:focus-visible {
+  outline: 1px solid var(--island-accent);
+  outline-offset: -1px;
+}
+
+.desktop-island-notice-announcement {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: clip;
+  clip-path: inset(50%);
+}
+
+.desktop-titlebar .desktop-launcher-update-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--island-update-icon-gap);
+  padding-inline: var(--island-inline-inset);
+  max-inline-size: var(--desktop-island-face-width);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.desktop-titlebar .desktop-launcher-update-trigger:is(:hover, :focus-visible) {
+  background: var(--launcher-menu-hover);
+}
+
+.desktop-notification-trigger-icon {
+  display: grid;
+  flex: 0 0 var(--notification-anchor-width);
+  place-items: center;
+  inline-size: var(--notification-anchor-width);
+  pointer-events: none;
+}
+
+.desktop-launcher-update-trigger .desktop-notification-trigger-icon {
+  flex: none;
+  inline-size: var(--island-update-icon-size);
+}
+
+.desktop-launcher-update-icon { animation: desktop-island-appear 150ms ease-out both; }
+
+.desktop-launcher-update-label {
+  flex: none;
+  animation: desktop-island-label 165ms var(--notification-motion) 85ms both;
+}
+
+.desktop-island-update-confirm,
+.desktop-island-update-progress {
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.desktop-island-update-confirm {
+  justify-content: center;
+  gap: var(--island-update-control-gap);
+  padding-inline: var(--island-update-confirm-inset);
+  pointer-events: auto;
+  animation: desktop-island-appear 180ms ease-out both;
+}
+
+.desktop-island-update-status {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.desktop-titlebar .desktop-launcher-update-action {
+  flex: none;
+  block-size: calc(var(--desktop-island-compact-height) - 6px);
+  padding-inline: var(--island-update-action-inset);
+  border-radius: var(--desktop-island-pill-radius);
+  background-color: var(--accent);
+  color: var(--theme-on-accent, var(--text));
+  font: inherit;
+}
+
+.desktop-titlebar .desktop-launcher-update-action:not(:disabled):is(:hover, :focus-visible) {
+  background-color: color-mix(in srgb, var(--accent) 88%, var(--text));
+}
+
+.desktop-titlebar .desktop-launcher-update-action:disabled { opacity: .5; }
+
+.desktop-titlebar .desktop-island-update-dismiss {
+  flex: 0 0 var(--island-update-dismiss-size);
+  block-size: var(--island-update-dismiss-size);
+  border-radius: 50%;
+  color: var(--muted);
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.desktop-titlebar .desktop-island-update-dismiss:is(:hover, :focus-visible) {
+  background-color: var(--launcher-menu-hover);
+  color: var(--island-danger);
+}
+
+.desktop-island-update-progress {
+  gap: var(--island-update-icon-gap);
+  padding-inline: var(--island-inline-inset);
+}
+
+.desktop-island-update-progress .desktop-notification-launch-track {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.desktop-island-update-progress-value {
+  flex: none;
+  min-inline-size: var(--desktop-island-text-width, 0px);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes desktop-island-label {
+  from { opacity: 0; transform: translateX(5px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes desktop-island-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.desktop-notification-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.desktop-notification-dot {
+  position: absolute;
+  inset-block-start: -2px;
+  inset-inline-end: -3px;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--island-accent);
+  box-shadow: 0 0 0 1px var(--island-surface);
+}
+
+.desktop-notification-launch,
+.desktop-notification-launch-complete {
+  position: absolute;
+  inset: 3px 0;
+  width: min(100%, var(--desktop-island-face-width));
+  margin-inline: auto;
+  box-sizing: border-box;
+  border-radius: var(--desktop-island-pill-radius);
+  color: var(--text);
+  pointer-events: auto;
+}
+
+.desktop-notification-launch {
+  display: flex;
+  align-items: center;
+  width: auto;
+}
+
+.desktop-notification-launch-progress {
+  display: grid;
+  flex: 1 1 0;
+  grid-template-columns: minmax(0, 1fr) min(var(--notification-anchor-width), 100%);
+  align-items: center;
+  gap: 5px;
+  block-size: 100%;
+  min-inline-size: 0;
+  padding-inline: var(--island-inline-inset) 6px;
+}
+
+.desktop-notification-launch-progress:focus-visible { outline: none; }
+.desktop-notification-launch-progress:focus-visible .desktop-notification-launch-track {
+  outline: 1px solid var(--text);
+  outline-offset: 2px;
+}
+
+.desktop-notification-launch-track {
+  block-size: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--launcher-menu-hover);
+}
+
+.desktop-notification-launch-track > span {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--island-accent);
+  transform: scaleX(var(--launch-fill));
+  transform-origin: left;
+  transition: transform 100ms linear;
+}
+
+.desktop-island-update-progress .desktop-notification-launch-track[data-indeterminate] > span {
+  inline-size: 34%;
+  transform: translateX(97%);
+  animation: desktop-island-update-indeterminate 1.3s ease-in-out infinite alternate;
+}
+
+@keyframes desktop-island-update-indeterminate {
+  from { transform: translateX(0); }
+  to { transform: translateX(194%); }
+}
+
+.desktop-notification-launch-percent,
+.desktop-notification-launch-complete {
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.desktop-notification-launch-percent { font-variant-numeric: tabular-nums; }
+.desktop-notification-launch-complete { animation: desktop-island-appear 150ms ease-out both; }
+
+.desktop-titlebar .desktop-island-cancel-launch {
+  flex: 0 0 0;
+  min-inline-size: 0;
+  block-size: 100%;
+  border-radius: var(--desktop-island-pill-radius);
+  overflow: hidden;
+  color: var(--muted);
+  opacity: 0;
+  transition: flex-basis 250ms var(--notification-motion), opacity 150ms ease, color 120ms ease;
+}
+
+.desktop-notification-center[data-launch-cancel] .desktop-island-cancel-launch {
+  flex-basis: var(--notification-cancel-width);
+  opacity: 1;
+}
+
+.desktop-island-cancel-launch > svg { margin-inline-end: 6px; }
+
+.desktop-titlebar .desktop-island-cancel-launch:is(:hover, :focus-visible) {
+  color: var(--island-danger);
+  background: transparent;
+}
+
+.desktop-island-media-face {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding-inline: 8px;
+  pointer-events: auto;
+}
+
+.desktop-island-media-app {
+  flex: 0 0 18px;
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
+.desktop-island-media-copy,
+.desktop-island-notice-preview,
+.desktop-island-text-measure {
+  min-inline-size: 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.desktop-island-media-copy {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.desktop-island-text-measure {
+  position: absolute;
+  inline-size: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.desktop-island-text-measure.desktop-island-update-measure {
+  display: flex;
+  align-items: center;
+  gap: var(--island-update-control-gap);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.desktop-island-media-artist {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.desktop-island-media-transport {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.desktop-titlebar .desktop-island-media-control {
+  flex: none;
+  inline-size: 23px;
+  block-size: 23px;
+  border-radius: 50%;
+}
+
+.desktop-titlebar .desktop-island-media-control:disabled {
+  opacity: .38;
+  background: transparent;
+}
+
+.desktop-titlebar .desktop-island-media-primary:not(:disabled),
+.desktop-titlebar .desktop-island-media-control[aria-expanded="true"] {
+  background: var(--launcher-menu-hover);
+}
+
+.desktop-titlebar .desktop-island-media-primary:not(:disabled):is(:hover, :focus-visible),
+.desktop-titlebar .desktop-island-media-control[aria-expanded="true"]:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--text) 24%, var(--island-surface));
+}
+
+.desktop-island-media-volume {
+  display: grid;
+  align-items: center;
+  box-sizing: border-box;
+  flex: 0 0 0;
+  min-inline-size: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: flex-basis 250ms var(--notification-motion), opacity 140ms ease;
+}
+
+.desktop-notification-center[data-volume-open] .desktop-island-media-volume {
+  flex-basis: var(--desktop-island-volume-width);
+  opacity: 1;
+}
+
+.desktop-island-media-volume[data-pc-volume] { grid-template-columns: auto minmax(0, 1fr); }
+
+.desktop-island-volume-scope {
+  padding-inline: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.desktop-island-media-volume-slider {
+  appearance: none;
+  inline-size: calc(100% - 10px);
+  min-inline-size: 0;
+  block-size: 24px;
+  margin: 0 6px 0 4px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  direction: ltr;
+}
+
+.desktop-island-media-volume-slider::-webkit-slider-runnable-track {
+  block-size: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--island-accent) var(--media-volume-fill),
+    var(--launcher-menu-line) var(--media-volume-fill));
+}
+
+.desktop-island-media-volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  inline-size: 10px;
+  block-size: 10px;
+  margin-block-start: -3px;
+  border: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.desktop-island-media-volume-slider::-moz-range-track {
+  block-size: 4px;
+  border-radius: 999px;
+  background: var(--launcher-menu-line);
+}
+
+.desktop-island-media-volume-slider::-moz-range-progress {
+  block-size: 4px;
+  border-radius: 999px;
+  background: var(--island-accent);
+}
+
+.desktop-island-media-volume-slider::-moz-range-thumb {
+  inline-size: 10px;
+  block-size: 10px;
+  border: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .desktop-notification-center[data-motion="on"] .desktop-island-media-volume-slider::-webkit-slider-thumb {
+    animation: desktop-island-volume-thumb 180ms var(--notification-motion) both;
+  }
+  .desktop-notification-center[data-motion="on"] .desktop-island-media-volume-slider::-moz-range-thumb {
+    animation: desktop-island-volume-thumb 180ms var(--notification-motion) both;
+  }
+}
+
+@keyframes desktop-island-volume-thumb {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+.desktop-island-media-volume-slider:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: -1px;
+}
+
+.desktop-island-media-volume-status {
+  margin-inline: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.desktop-notification-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  max-block-size: min(350px, 52dvh);
+  overflow: hidden;
+  padding: 2px 0 3px;
+  color: var(--text);
+}
+
+.desktop-titlebar .desktop-notification-text-button {
+  min-block-size: 28px;
+  block-size: auto;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.desktop-titlebar .desktop-notification-text-button:is(:hover, :focus-visible) {
+  color: var(--text);
+  background: var(--launcher-menu-hover);
+}
+
+.desktop-island-compact:has(.desktop-notification-mark-all) {
+  padding-inline: 36px;
+}
+
+.desktop-titlebar .desktop-notification-mark-all {
+  position: absolute;
+  inset-inline-end: 8px;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  display: grid;
+  place-items: center;
+  inline-size: 27px;
+  min-inline-size: 0;
+  block-size: 22px;
+  padding: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  pointer-events: auto;
+}
+
+.desktop-titlebar .desktop-notification-mark-all:is(:hover, :focus-visible) {
+  color: var(--text);
+  background: var(--launcher-menu-hover);
+}
+
+.desktop-notification-empty {
+  margin: 0;
+  padding: 10px 5px 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.desktop-notification-empty > p {
+  margin: 0 0 6px;
+}
+
+.desktop-notification-list {
+  min-block-size: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.desktop-notification-list > li + li {
+  border-block-start: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.desktop-titlebar .desktop-notification-row {
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr) 13px;
+  align-items: center;
+  justify-items: stretch;
+  gap: 8px;
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 45px;
+  box-sizing: border-box;
+  padding: 6px;
+  border-radius: 6px;
+  text-align: start;
+}
+
+.desktop-titlebar button.desktop-notification-row:is(:hover, :focus-visible) {
+  background: var(--launcher-menu-hover);
+}
+
+.desktop-notification-icon {
+  display: grid;
+  place-items: center;
+  align-self: start;
+  inline-size: 27px;
+  block-size: 27px;
+  border-radius: 7px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.desktop-notification-row[data-unread="true"] .desktop-notification-icon { color: var(--island-accent); }
+
+.desktop-notification-description {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.desktop-notification-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1px 8px;
+}
+
+.desktop-notification-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.desktop-notification-row[data-unread="true"] .desktop-notification-title { font-weight: 650; }
+
+.desktop-notification-heading > time {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.desktop-notification-indicator {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.desktop-notification-indicator > * { grid-area: 1 / 1; }
+.desktop-notification-row-dot {
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: 50%;
+  background: var(--island-accent);
+}
+
+.desktop-notification-chevron { opacity: 0; }
+
+.desktop-notification-row:is(:hover, :focus-visible) .desktop-notification-chevron { opacity: 1; }
+.desktop-notification-row:is(:hover, :focus-visible) .desktop-notification-row-dot { opacity: 0; }
+
+.desktop-notification-center[data-motion="off"],
+.desktop-notification-center[data-motion="off"] * {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-notification-center,
+  .desktop-notification-center * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

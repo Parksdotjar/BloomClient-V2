@@ -1,17 +1,15 @@
-/* Shared navigation baseline; the approved ceramic main-sidebar treatment is scoped below. */
+/* Shared navigation baseline and the moving main-sidebar selection. */
 :is(.sidebar-navigation, .settings-tabs) {
   --nav-idle-ink: color-mix(in srgb, var(--theme-ink, #f1f4f1) 50%, var(--muted));
   --nav-selected-ink: var(--theme-ink, #f1f4f1);
   --nav-idle-fill: transparent;
-  --nav-selected-top: color-mix(in srgb, var(--panel-strong) 60%, var(--theme-raised, #343a3d));
-  --nav-selected-bottom: color-mix(in srgb, var(--panel-strong) 90%, var(--theme-raised, #343a3d));
+  --nav-selected-fill: color-mix(in srgb, var(--panel-strong) 70%, var(--theme-raised, #343a3d));
   --nav-selected-opacity: 100%;
 }
 
 :root[data-theme="light"] :is(.sidebar-navigation, .settings-tabs) {
   --nav-idle-ink: var(--muted);
-  --nav-selected-top: var(--panel);
-  --nav-selected-bottom: color-mix(in srgb, var(--panel) 80%, var(--panel-strong));
+  --nav-selected-fill: var(--panel);
 }
 
 :is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button {
@@ -36,9 +34,7 @@
 }
 
 :is(.app-shell > .sidebar > .sidebar-navigation, .app-shell .settings-tabs) > button:is(.active, .selected) {
-  background: linear-gradient(145deg,
-    color-mix(in srgb, var(--nav-selected-top) var(--nav-selected-opacity), transparent),
-    color-mix(in srgb, var(--nav-selected-bottom) var(--nav-selected-opacity), transparent)) !important;
+  background: color-mix(in srgb, var(--nav-selected-fill) var(--nav-selected-opacity), transparent) !important;
   color: var(--nav-selected-ink) !important;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-ink, #f1f4f1) 8%, transparent),
     inset 0 1px 0 var(--theme-highlight, #ffffff08),
@@ -50,7 +46,7 @@
   outline-offset: 2px;
 }
 
-/* One ceramic surface paints the selection; route buttons only paint their ink. */
+/* One surface paints the selection while route buttons supply their ink. */
 .app-shell > .sidebar {
   background: var(--ceramic-sidebar, #000);
 }
@@ -60,15 +56,13 @@
 .app-shell > .sidebar > .sidebar-navigation {
   position: relative;
   isolation: isolate;
-  --nav-selected-top: var(--panel-strong);
-  --nav-selected-bottom: color-mix(in srgb, var(--panel-strong) 25%, var(--page));
+  --nav-selected-fill: var(--panel-strong);
   --ceramic-shadow: #0009;
   --ceramic-edge: #ffffff0c;
   --nav-idle-ink: var(--muted);
 }
 :root[data-theme="light"] .app-shell > .sidebar > .sidebar-navigation {
-  --nav-selected-top: #e9e9e9;
-  --nav-selected-bottom: #d4d4d4;
+  --nav-selected-fill: #e9e9e9;
   --ceramic-shadow: #a0a0a044;
   --ceramic-edge: #ffffff30;
 }
@@ -93,9 +87,7 @@
   width: 100%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(160deg,
-    color-mix(in srgb, var(--nav-selected-top) var(--nav-selected-opacity), transparent) 20%,
-    color-mix(in srgb, var(--nav-selected-bottom) var(--nav-selected-opacity), transparent)) !important;
+  background: color-mix(in srgb, var(--nav-selected-fill) var(--nav-selected-opacity), transparent) !important;
   box-shadow: inset 1px 2px 2px var(--ceramic-edge), inset -1px -2px 3px var(--theme-shadow-soft, #0003),
     0 6px 10px var(--ceramic-shadow) !important;
 }

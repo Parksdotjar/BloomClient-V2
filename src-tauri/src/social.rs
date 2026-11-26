@@ -682,6 +682,39 @@ pub(crate) fn ask_delight_profile() -> Option<String> {
     Some(id)
 }
 
+pub(super) fn workspace_publisher() -> Result<Option<(String, String)>, String> {
+    let session = restore_session()?;
+    Ok(session.user.filter(|_| session.signed_in).map(|user| {
+        let name = user.username.or(user.display_name).unwrap_or_else(|| "Delight creator".into());
+        (user.id, name)
+    }))
+}
+
+// Acquire the credentials for the account shown on the review, including on a
+// refresh. Another profile may become active while the native check is running.
+pub(super) fn workspace_request(
+    publisher: &str, route: &str, body: Option<&serde_json::Value>,
+) -> Result<reqwest::blocking::Response, String> {
+    let (name, tokens) = {
+        let _guard = social_credential_io().lock().map_err(|_| "The account is busy. Try again.")?;
+        if active_profile().as_deref() != Some(publisher) { return Err("signed_out".into()); }
+        let tokens = load_tokens().ok_or("signed_out")?;
+        if tokens.refresh_expires_at <= timestamp() { return Err("signed_out".into()); }
+        let tokens = if tokens.access_expires_at <= timestamp() + 30_000 { refresh_tokens(&tokens)? } else { tokens };
+        (format!("tokens:{publisher}"), tokens)
+    };
+    // Keep the production account token on the same fixed service as Social.
+    let base = SOCIAL_API.trim_end_matches("/v1/social");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(50)).redirect(reqwest::redirect::Policy::none())
+        .build().map_err(|_| "Could not open the sharing service.")?;
+    authenticated_response(tokens, |tokens| {
+        let url = format!("{base}{route}");
+        let req = match body { Some(data) => client.post(url).json(data), None => client.get(url) };
+        req.bearer_auth(&tokens.access_token).send().map_err(|_| crate::workspace_publication::UNCONFIRMED_REQUEST.into())
+    }, |old| refresh_rejected_tokens(&name, old))
+}
+
 pub(crate) fn ask_delight_request(account: &str, body: Option<serde_json::Value>) -> Result<serde_json::Value, String> {
     let (profile, tokens) = {
         let _guard = social_credential_io().lock().map_err(|_| "offline")?;

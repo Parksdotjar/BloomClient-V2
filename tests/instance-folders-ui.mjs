@@ -26,7 +26,10 @@ await page.addInitScript(() => {
       if (command === "list_instances") return instances;
       if (command === "list_instance_content") return [];
       if (command === "list_instance_folders") {
-        if (window.folderTest.failLoad) throw "Folder file unreadable";
+        if (sessionStorage.getItem("delay-folder-read")) {
+          await new Promise(resolve => window.folderTest.releaseRead = resolve);
+        }
+        if (window.folderTest.failLoad || sessionStorage.getItem("fail-folder-read")) throw "Folder file unreadable";
         return JSON.parse(localStorage.getItem("test-folders") || "[]");
       }
       if (command === "change_instance_folder") {
@@ -42,6 +45,10 @@ await page.addInitScript(() => {
         else if (c.action === "move") {
           for (const f of folders) f.instanceIds = f.instanceIds.filter(id => id !== c.instanceId);
           if (c.folderId) folders.find(f => f.id === c.folderId).instanceIds.push(c.instanceId);
+        } else if (c.action === "reorder") {
+          const moved = folders.find(f => f.id === c.folderId);
+          folders = folders.filter(f => f !== moved);
+          folders.splice(folders.findIndex(f => f.id === c.targetId) + Number(c.after), 0, moved);
         } else if (c.action === "dissolve") folders = folders.filter(f => f.id !== c.folderId);
         localStorage.setItem("test-folders", JSON.stringify(folders));
         return folders;
@@ -60,8 +67,8 @@ await page.addInitScript(() => {
   };
 });
 const settle = () => page.waitForTimeout(380);
-const nav = async () => { await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Instances", exact: true }).click(); await page.getByRole("button", { name: "Organize folders" }).click(); };
-const folder = name => page.locator(".instance-folder-entry").filter({ has: page.locator(".instance-folder-title strong", { hasText: name }) });
+const nav = async () => { await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Instances", exact: true }).click(); };
+const folder = name => page.locator(".folder-section").filter({ has: page.getByRole("button", { name, exact: true }) });
 const card = name => page.locator(".desktop-instance-link").filter({ has: page.getByRole("button", { name, exact: true }) });
 const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("test-folders") || "[]"));
 const calls = () => page.evaluate(() => window.folderTest.calls.filter(c => c.command === "change_instance_folder").length);
@@ -79,113 +86,134 @@ const drop = async locator => {
   await page.waitForTimeout(100); await page.mouse.up(); await settle();
 };
 const organize = async name => {
-  await page.getByRole("button", { name: `Move ${name} to folder`, exact: true }).click();
+  await card(name).locator(".instance-nav-name").click({ button: "right" });
 };
-try {
-  await page.goto(url); await nav(); await card("Meadow").waitFor(); await page.waitForTimeout(1200);
-  const sidebar = await page.locator(".desktop-rail").boundingBox();
-  const newButton = await page.locator(".desktop-create").boundingBox();
+const heading = name => folder(name).locator(".folder-toggle");
+const saveName = async name => {
+  await page.getByRole("textbox", { name: "Folder name" }).fill(name);
+  await page.getByRole("button", { name: "Save folder" }).click();
+  await heading(name).waitFor();
+};
+const create = async name => {
   await page.getByRole("button", { name: "New folder", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("textbox", { name: "Folder name", exact: true }).fill("Survival");
-  await dialog.getByRole("checkbox", { name: /Meadow/ }).check();
-  await dialog.getByRole("checkbox", { name: /Creative/ }).check();
-  await dialog.getByRole("button", { name: "Create folder", exact: true }).click();
-  await dialog.waitFor({ state: "detached" }); await settle();
+  await saveName(name);
+};
+async function dragFolder(name, destination, after) {
+  const from = await heading(name).boundingBox(), to = await heading(destination).boundingBox();
+  await page.mouse.move(from.x + 20, from.y + from.height / 2);
+  await page.mouse.down(); await page.mouse.move(to.x + 20, to.y + (after ? to.height - 3 : 3), { steps: 8 });
+  await page.waitForFunction(({ name, edge }) => document.querySelector(`.folder-section[data-folder-drop-active="${edge}"] .folder-toggle`)?.textContent === name, { name: destination, edge: after ? "after" : "before" });
+  await page.mouse.up(); await settle();
+}
+try {
+  await page.goto(url); await nav(); await card("Meadow").waitFor();
+  await create("Survival"); await create("Building");
+  await heading("Survival").hover();
+  assert.equal(await folder("Survival").locator(".folder-section-heading button").count(), 1);
+  const survival = heading("Survival");
+  await survival.locator("svg.lucide-folder-open:first-child").click();
+  assert.equal(await survival.getAttribute("aria-expanded"), "false");
+  await survival.locator("svg.lucide-folder:first-child").click();
+  assert.equal(await survival.getAttribute("aria-expanded"), "true");
+  assert.equal(await survival.locator("svg").count(), 1);
+  await card("Creative").hover();
+  assert.equal(await card("Creative").getByRole("button").count(), 1);
+  await organize("Creative");
+  await page.getByRole("dialog", { name: "Move Creative" }).getByRole("button", { name: "Close" }).click();
+  await startDrag("Meadow"); await drop(heading("Survival"));
+  await startDrag("Creative"); await drop(heading("Survival"));
   assert.deepEqual((await stored())[0].instanceIds, ["0", "2"]);
-  assert.equal(await folder("Survival").locator(".instance-folder-cover").getAttribute("aria-expanded"), "true");
-  assert.equal(await folder("Survival").locator(".instance-folder-members .desktop-instance-link").count(), 2);
-  assert.equal(await page.locator(".instance-hero-actions").getByRole("button", { name: "Play", exact: true }).isVisible(), true);
-  assert.deepEqual(await page.locator(".desktop-rail").boundingBox(), sidebar);
-  assert.deepEqual(await page.locator(".desktop-create").boundingBox(), newButton);
-  await screenshot("tray-oled");
-  await folder("Survival").locator(".instance-folder-cover").click(); await settle();
-  assert.equal(await folder("Survival").locator(".instance-folder-tray-reveal").getAttribute("inert"), "");
-  assert.equal((await folder("Survival").locator(".instance-folder-tray-reveal").boundingBox()).height, 0);
-  await screenshot("stack-oled");
-  await page.reload(); await nav(); await folder("Survival").waitFor();
-  assert.deepEqual((await stored())[0].instanceIds, ["0", "2"], "Grouping survives a library remount and restart fixture");
+  const folderReads = () => page.evaluate(() => window.folderTest.calls.filter(c => c.command === "list_instance_folders").length);
+  const initialReads = await folderReads();
+  assert.equal(initialReads, 1);
+  await card("Creative").locator(".instance-nav-name").click();
+  await folder("Survival").getByRole("button", { name: "Creative", exact: true }).waitFor();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Locker", exact: true }).click();
+  await nav();
+  await folder("Survival").getByRole("button", { name: "Creative", exact: true }).waitFor();
+  assert.equal(await folderReads(), initialReads, "Selecting an instance and returning to the sidebar reuse its layout");
+  await create("Testing");
+  await dragFolder("Survival", "Building", true);
+  assert.deepEqual((await stored()).map(f => f.name), ["Building", "Survival", "Testing"]);
+  await page.evaluate(() => sessionStorage.setItem("delay-folder-read", "1"));
+  await page.reload(); await nav();
+  await page.waitForFunction(() => !!window.folderTest.releaseRead);
+  assert.equal(await page.locator(".instance-folder-loose .desktop-instance-link").count(), 0, "Cold start must not paint a provisional ungrouped list");
+  await page.evaluate(() => { sessionStorage.removeItem("delay-folder-read"); window.folderTest.releaseRead(); });
+  await heading("Survival").waitFor();
+  assert.deepEqual(await page.locator(".folder-toggle").allTextContents(), ["Building", "Survival", "Testing"]);
+  assert.deepEqual((await stored())[1].instanceIds, ["0", "2"]);
+  await dragFolder("Survival", "Building", false);
+  await heading("Survival").focus();
+  await page.keyboard.press("Alt+ArrowDown");
+  await page.waitForFunction(() => document.querySelector(".folder-toggle")?.textContent === "Building");
+  await page.keyboard.press("Alt+ArrowUp");
+  await page.waitForFunction(() => document.querySelector(".folder-toggle")?.textContent === "Survival");
+  await heading("Testing").click({ button: "right" });
+  await page.getByRole("button", { name: "Ungroup", exact: true }).click();
+  await page.getByRole("button", { name: "Remove folder", exact: true }).click();
+  await heading("Building").click();
+  await startDrag("Creative"); await drop(heading("Building"));
+  assert.deepEqual((await stored())[1].instanceIds, ["2"]);
+  await heading("Survival").click(); await page.reload(); await nav();
+  for (const name of ["Survival", "Building"]) {
+    assert.equal(await heading(name).getAttribute("aria-expanded"), "false");
+  }
   await page.getByRole("button", { name: "Filter instances" }).click();
-  await page.getByRole("textbox", { name: "Search instances" }).fill("Creative");
-  assert.equal(await page.locator(".instance-folder-entry").count(), 1);
-  await page.keyboard.press("Escape");
-  await folder("Survival").locator(".instance-folder-cover").click(); await settle();
-  assert.equal(await folder("Survival").locator(".desktop-instance-link").count(), 1);
-  await page.getByRole("button", { name: "Filter instances" }).click();
-  await page.getByRole("textbox", { name: "Search instances" }).fill("Survival");
-  assert.equal(await folder("Survival").locator(".desktop-instance-link").count(), 2);
-  await page.getByRole("menuitem", { name: "Reset filters" }).click();
-  await folder("Survival").getByRole("button", { name: "Rename", exact: true }).click();
-  await folder("Survival").getByRole("textbox", { name: "Folder name" }).fill("Our worlds");
-  await page.getByRole("button", { name: "Save folder name" }).click(); await settle();
-  assert.equal((await stored())[0].name, "Our worlds");
-  await folder("Our worlds").locator(".instance-folder-cover").click(); await settle();
-  await startDrag("Vanilla"); await drop(folder("Our worlds").locator(".instance-folder-cover"));
-  assert.deepEqual((await stored())[0].instanceIds, ["0", "2", "1"], "Dropping on a collapsed stack moves the instance");
-  await folder("Our worlds").locator(".instance-folder-cover").click(); await settle();
+  const search = page.getByRole("textbox", { name: "Search instances" });
+  await search.fill("Creative"); await card("Creative").waitFor();
+  assert.equal(await page.locator(".folder-section").count(), 1);
+  await search.fill(""); await page.keyboard.press("Escape");
+  assert.equal(await heading("Building").getAttribute("aria-expanded"), "false");
+  await heading("Survival").click(); await heading("Building").click();
+  await screenshot("inline-folders");
+  await startDrag("Creative"); await drop(card("Vanilla").locator(".instance-nav-name"));
+  assert.deepEqual((await stored())[1].instanceIds, []);
+  await startDrag("Creative"); await drop(heading("Building"));
   await startDrag("Creative");
-  await drop(page.locator(".instance-folder-drop-out"));
-  assert.deepEqual((await stored())[0].instanceIds, ["0", "1"], "Dragging out removes membership");
-  assert.equal(await page.locator(".instance-folder-loose").locator(".desktop-instance-link").filter({ hasText: "Creative" }).count(), 1);
+  const listBounds = await page.getByRole("navigation", { name: "Your instances" }).boundingBox();
+  const blankX = listBounds.x + listBounds.width / 2, blankY = listBounds.y + listBounds.height - 6;
+  assert.equal(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className, [blankX, blankY]), "instance-folders-grid");
+  await page.mouse.move(blankX, blankY); await page.mouse.up();
+  await page.locator(".instance-folder-loose").getByRole("button", { name: "Creative", exact: true }).waitFor();
+  assert.deepEqual((await stored())[1].instanceIds, []);
   const beforeCancel = await calls();
-  await startDrag("Meadow"); await page.keyboard.press("Escape"); await page.mouse.up(); await settle();
-  assert.equal(await calls(), beforeCancel, "Escape never saves or launches a dragged instance");
-  assert.equal(await page.locator(".instance-folder-ghost").count(), 0);
-  assert.equal(await folder("Our worlds").locator(".instance-folder-cover").getAttribute("aria-expanded"), "true");
-  await startDrag("Meadow"); await page.mouse.move(5, 5); await page.mouse.up(); await settle();
-  assert.equal(await calls(), beforeCancel, "Dropping outside the library leaves membership unchanged");
-  // Native save failure keeps the old visible membership and provides an error.
+  await startDrag("Meadow"); await page.keyboard.press("Escape"); await page.mouse.up();
+  assert.equal(await calls(), beforeCancel);
+  await startDrag("Meadow"); await page.mouse.move(4, 4); await page.mouse.up();
+  assert.equal(await calls(), beforeCancel);
   await page.evaluate(() => window.folderTest.failSave = true);
-  await startDrag("Meadow"); await drop(page.locator(".instance-folder-drop-out"));
-  await page.getByRole("alert").waitFor(); assert.equal(await folder("Our worlds").locator(".desktop-instance-link").count(), 2);
-  assert.deepEqual((await stored())[0].instanceIds, ["0", "1"]);
+  await startDrag("Meadow"); await drop(card("Vanilla").locator(".instance-nav-name"));
+  await page.getByRole("alert").waitFor(); assert.deepEqual((await stored())[0].instanceIds, ["0"]);
   await page.evaluate(() => window.folderTest.failSave = false);
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await organize("Meadow"); await dialog.getByRole("button", { name: "Outside folders" }).click(); await settle();
-  assert.deepEqual((await stored())[0].instanceIds, ["1"], "The accessible menu performs the same move");
-  await organize("Meadow"); await dialog.getByRole("button", { name: "Our worlds", exact: true }).click(); await settle();
-  assert.deepEqual((await stored())[0].instanceIds, ["1", "0"]);
-  await folder("Our worlds").locator(".instance-folder-cover").click(); await settle();
-  await startDrag("Creative"); await drop(card("Adventure").locator(".instance-nav-name"));
-  assert.equal(await dialog.getByRole("checkbox", { name: /Creative/ }).isChecked(), true);
-  assert.equal(await dialog.getByRole("checkbox", { name: /Adventure/ }).isChecked(), true);
-  await dialog.getByRole("textbox", { name: "Folder name" }).fill("Building");
-  await dialog.getByRole("button", { name: "Create folder", exact: true }).click(); await settle();
-  assert.equal((await stored()).length, 2, "Dragging two loose instances together creates a named folder");
-  await screenshot("two-folders");
-  await page.evaluate(() => { document.documentElement.dataset.theme = "light"; document.documentElement.style.setProperty("--accent", "#397bdc"); });
-  await screenshot("tray-light");
-  for (const mode of ["off", "ultra", "reduced"]) {
-    await page.evaluate(mode => { document.documentElement.dataset.animations = mode === "off" ? "off" : "on"; document.documentElement.dataset.performance = mode === "ultra" ? "ultra" : "normal"; }, mode);
-    await page.emulateMedia({ reducedMotion: mode === "reduced" ? "reduce" : "no-preference" });
-    assert.equal(await folder("Building").locator(".instance-folder-tray-reveal").evaluate(el => getComputedStyle(el).transitionDuration), "0s");
-    assert.equal(await folder("Building").locator(".instance-organizable").first().evaluate(el => getComputedStyle(el).animationName), "none");
-  }
-  await page.setViewportSize({ width: 1050, height: 760 }); await settle(); await screenshot("tray-small-window");
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "Tray fits the supported small window");
-  await folder("Building").getByRole("button", { name: "Ungroup", exact: true }).click();
-  await folder("Building").getByRole("button", { name: "Ungroup folder", exact: true }).click(); await settle();
+  await startDrag("Meadow"); await drop(card("Vanilla").locator(".instance-nav-name"));
+  assert.deepEqual((await stored())[0].instanceIds, []);
+  await page.evaluate(() => window.folderTest.delaySave = true);
+  await organize("Meadow");
+  await page.getByRole("dialog").getByRole("button", { name: "Building", exact: true }).click();
+  await page.waitForFunction(() => !!window.folderTest.releaseSave);
+  assert.deepEqual((await stored())[1].instanceIds, [], "A pending move keeps the confirmed membership");
+  await page.evaluate(() => { window.folderTest.delaySave = false; window.folderTest.releaseSave(); });
+  await folder("Building").getByRole("button", { name: "Meadow", exact: true }).waitFor();
+  await heading("Building").click({ button: "right" });
+  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await saveName("Our worlds");
+  await page.setViewportSize({ width: 1050, height: 760 }); await screenshot("inline-small");
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await heading("Our worlds").click({ button: "right" });
+  await page.getByRole("button", { name: "Ungroup", exact: true }).click();
+  await page.getByRole("button", { name: "Remove folder", exact: true }).click();
+  await page.locator(".instance-folder-loose").getByRole("button", { name: "Meadow", exact: true }).waitFor();
   assert.equal((await stored()).length, 1);
-  assert.equal(await page.locator(".instance-folder-loose .desktop-instance-link").count(), 2, "Ungroup returns members without deleting them");
-  await page.getByRole("button", { name: "New folder", exact: true }).click();
-  await dialog.getByRole("textbox", { name: "Folder name" }).fill("Empty folder");
-  await dialog.getByRole("button", { name: "Create folder", exact: true }).click(); await settle();
-  assert.equal(await folder("Empty folder").locator(".instance-folder-empty").isVisible(), true);
-  await page.keyboard.press("Escape");
-  assert.equal(await folder("Empty folder").locator(".instance-folder-cover").evaluate(el => el === document.activeElement), true, "Escape returns focus to the stack");
-  // Failure to read organization must not block access to existing instances.
-  await page.evaluate(() => { window.folderTest.failLoad = true; });
-  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Home", exact: true }).click();
+  await page.evaluate(() => sessionStorage.setItem("fail-folder-read", "1"));
+  await page.reload();
   await nav(); await page.getByRole("alert").waitFor();
   assert.equal(await page.locator(".desktop-instance-link").count(), 4);
-  await page.getByRole("button", { name: "New folder", exact: true }).click();
-  assert.equal(await dialog.getByRole("button", { name: "Create folder", exact: true }).isDisabled(), true);
-  await page.evaluate(() => window.folderTest.failLoad = false);
-  await dialog.getByRole("button", { name: "Retry", exact: true }).click();
-  await page.keyboard.press("Escape"); await settle();
-  assert.equal(await page.locator(".instance-folder-entry").count(), 2);
-  assert.equal(await page.evaluate(() => window.folderTest.calls.some(c => /launch_minecraft|delete_instance|open_instance_folder/.test(c.command))), false, "Organization does not launch, open or delete game files");
+  await page.evaluate(() => sessionStorage.removeItem("fail-folder-read"));
+  await page.getByRole("button", { name: "Retry", exact: true }).click(); await heading("Survival").waitFor();
+  assert.equal(await page.evaluate(() => window.folderTest.calls.some(c => /launch_minecraft|delete_instance|open_instance_folder/.test(c.command))), false);
   assert.deepEqual(errors, []);
-  console.log("Instance folders: create, persistence, stacked tray, search, rename, drag-in/out/create/cancel, failed writes, menu moves, ungroup, empty folders, theme/motion, small windows and read recovery passed.");
-} catch (error) { await screenshot("failure"); console.log(await page.locator(".instance-folders-grid, .instance-folder-entry, .instance-folder-members, .instance-organizable, .desktop-instance-link").evaluateAll(els => els.map(el => { const s = getComputedStyle(el), b = el.getBoundingClientRect(); return { cls: el.className, x: b.x, y: b.y, h: b.height, rows: s.gridTemplateRows, gap: s.rowGap, margin: s.margin, transform: s.transform, display: s.display, align: s.alignSelf, height: s.height, max: s.maxHeight }; }))); throw error; }
+  console.log("Passed leading open/closed folder icons, pointer and keyboard group reordering, saved order, collapse, filtering, drag in/between/out, cancellation, save/read recovery, rename and ungroup.");
+} catch (error) { await screenshot("failure"); throw error; }
 finally { await browser.close(); }

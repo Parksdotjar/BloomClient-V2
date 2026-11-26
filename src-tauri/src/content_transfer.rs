@@ -108,7 +108,7 @@ fn paths(request: &Transfer) -> Result<Paths, String> {
     Ok(Paths { source, folder, target })
 }
 
-fn hash(path: &Path) -> Result<String, String> {
+pub(super) fn hash(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|e| e.to_string())?;
     let mut digest = Sha512::new();
     let mut buffer = [0; 64 * 1024];
@@ -120,11 +120,11 @@ fn hash(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", digest.finalize()))
 }
 
-fn manifest(path: &Path, category: &str) -> Result<Option<Value>, String> {
+pub(super) fn manifest(path: &Path, category: &str) -> Result<Option<Value>, String> {
     let file = File::open(path).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipArchive::new(file).map_err(|_| "This file is not a valid content archive.")?;
     if category == "shaderpacks" {
-        if !zip.file_names().any(|name| name.starts_with("shaders/")) {
+        if !zip.file_names().any(|name| name.rsplit_once('/').is_some_and(|(parent, _)| parent.split('/').any(|part| part == "shaders"))) {
             return Err("This archive does not contain a shader pack.".into());
         }
         return Ok(None);
@@ -136,13 +136,42 @@ fn manifest(path: &Path, category: &str) -> Result<Option<Value>, String> {
     let mut bytes = Vec::new();
     member.take(256 * 1024 + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
     if bytes.len() > 256 * 1024 { return Err("The content metadata is too large.".into()); }
-    let metadata: Value = serde_json::from_slice(&bytes).map_err(|_| "The content metadata is invalid.")?;
+    let metadata: Value = if category == "mods" {
+        parse_fabric_metadata(&bytes)
+    } else {
+        serde_json::from_slice(&bytes)
+    }.map_err(|_| "The content metadata is invalid.")?;
     if (category == "mods" && metadata["id"].as_str().is_none())
         || (category == "resourcepacks" && !metadata["pack"].is_object())
     {
         return Err("The content metadata is invalid.".into());
     }
     Ok(Some(metadata))
+}
+
+// Fabric accepts literal newlines in quoted values. Normalize that specific
+// syntax in memory and keep the original JAR bytes for identity and delivery.
+pub(super) fn parse_fabric_metadata(bytes: &[u8]) -> serde_json::Result<Value> {
+    serde_json::from_slice(bytes).or_else(|strict| {
+        let mut quoted = false;
+        let mut escaped = false;
+        let mut repaired = Vec::with_capacity(bytes.len());
+        for &byte in bytes {
+            if quoted && !escaped && byte == b'\n' {
+                repaired.extend_from_slice(&[b'\\', b'n']);
+                continue;
+            }
+            if byte == b'"' && !escaped {
+                quoted = !quoted;
+            }
+            escaped = quoted && byte == b'\\' && !escaped;
+            repaired.push(byte);
+        }
+        if repaired.len() == bytes.len() {
+            return Err(strict);
+        }
+        serde_json::from_slice(&repaired)
+    })
 }
 
 fn check_destination(request: &Transfer, paths: &Paths, metadata: &Option<Value>) -> Result<(), String> {
@@ -269,6 +298,31 @@ impl Drop for ActivityReservation {
     }
 }
 
+fn copy_reviewed(request: Transfer, fingerprint: String, allow_unverified: bool) -> Result<(), String> {
+    let _copy_lock = COPY_LOCK.lock().map_err(|_| "Another copy is still finishing.")?;
+    let (paths, preview) = inspect(&request)?;
+    if preview.fingerprint != fingerprint {
+        return Err("The source changed. Drag the file again to review it.".into());
+    }
+    if !preview.verified && !allow_unverified {
+        return Err("Review the compatibility warning before copying this file.".into());
+    }
+    if request.category == "mods" && !request.file_name.ends_with(".disabled") {
+        return crate::pack_compatibility::dependencies::catalog::install_local_verified(
+            &paths.target, paths.source, &fingerprint,
+        );
+    }
+    copy_new(&paths.source, &paths.folder, &request.file_name, &fingerprint, |complete_file| {
+        let current = self::paths(&request)?;
+        if current.source.canonicalize().ok() != paths.source.canonicalize().ok()
+            || current.folder.canonicalize().ok() != paths.folder.canonicalize().ok()
+        {
+            return Err("The instance location changed. Review this copy again.".into());
+        }
+        check_destination(&request, &current, &manifest(complete_file, &request.category)?)
+    })
+}
+
 #[tauri::command]
 pub(crate) async fn copy_instance_content(
     state: tauri::State<'_, LauncherState>,
@@ -276,6 +330,9 @@ pub(crate) async fn copy_instance_content(
     fingerprint: String,
     allow_unverified: bool,
 ) -> Result<(), String> {
+    if request.category == "mods" && !request.file_name.ends_with(".disabled") {
+        return crate::run_mod_edit(&state, move || copy_reviewed(request, fingerprint, allow_unverified)).await;
+    }
     let reservation = {
         let mut active = state.launch_active.lock().map_err(|_| "The launcher is busy.")?;
         crate::validate_content_install_activity(&request.category, *active, state.game_running.load(Ordering::SeqCst))?;
@@ -290,25 +347,9 @@ pub(crate) async fn copy_instance_content(
         }
     };
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let _copy_lock = COPY_LOCK.lock().map_err(|_| "Another copy is still finishing.")?;
-        let (paths, preview) = inspect(&request)?;
-        if preview.fingerprint != fingerprint {
-            return Err("The source changed. Drag the file again to review it.".into());
-        }
-        if !preview.verified && !allow_unverified {
-            return Err("Review the compatibility warning before copying this file.".into());
-        }
-        copy_new(&paths.source, &paths.folder, &request.file_name, &fingerprint, |complete_file| {
-            let current = self::paths(&request)?;
-            if current.source.canonicalize().ok() != paths.source.canonicalize().ok()
-                || current.folder.canonicalize().ok() != paths.folder.canonicalize().ok()
-            {
-                return Err("The instance location changed. Review this copy again.".into());
-            }
-            check_destination(&request, &current, &manifest(complete_file, &request.category)?)
-        })
+        let _reservation = reservation;
+        copy_reviewed(request, fingerprint, allow_unverified)
     }).await.map_err(|e| e.to_string())?;
-    drop(reservation);
     result
 }
 

@@ -10,6 +10,7 @@ pub(super) fn validate_id(id: &str) -> Result<(), String> {
 #[tauri::command]
 pub(crate) fn rename_instance(instance_id: String, name: String) -> Result<super::InstanceConfig, String> {
     validate_id(&instance_id)?;
+    let _edit = crate::workspace_install::updates::edit_lease(&instance_id)?;
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control) {
         return Err("Use an instance name of 1–80 characters without control characters.".into());
@@ -20,7 +21,7 @@ pub(crate) fn rename_instance(instance_id: String, name: String) -> Result<super
     Ok(config)
 }
 
-fn linked(metadata: &fs::Metadata) -> bool {
+pub(super) fn linked(metadata: &fs::Metadata) -> bool {
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
