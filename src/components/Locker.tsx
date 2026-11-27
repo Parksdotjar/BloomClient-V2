@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { chooseEquipment, equipmentSlot, readEquipment, useEquipment } from "../services/locker-equipment";
 import { invoke } from "../services/invoke";
-import { ChevronLeft, ChevronRight, Shirt, RotateCw, Layers, PersonStanding, Flag, Store, Bird } from "lucide-react";
+import { ChevronLeft, ChevronRight, Shirt, RotateCw, Layers, PersonStanding, Flag, Store, Bird, Rabbit, Backpack } from "lucide-react";
 import { CapePreview, type CapeAnimation } from "./CapePreview";
 import { CapeDisplay } from "./CapeDisplay";
 import "./locker.css";
@@ -163,7 +163,7 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
 }
 
 export const lockerSections = [
-  ["Equipped look", PersonStanding], ["Cloaks", Layers], ["Capes", Flag], ["Wings", Bird], ["Skins", Shirt], ["Shop", Store],
+  ["Equipped look", PersonStanding], ["Cloaks", Layers], ["Capes", Flag], ["Wings", Bird], ["Back", Backpack], ["Hats", Rabbit], ["Skins", Shirt], ["Shop", Store],
 ] as const;
 export type LockerSection = typeof lockerSections[number][0];
 
@@ -182,10 +182,12 @@ export async function getEquippedCloak(accountId: string) {
   return catalog.items.find(item => item.id === slot.choice);
 }
 
+type EquippedModel = { item: WingRevision; colors: WingColors };
+
 function EquippedLook({ accountId, motion, onSection }: { accountId: string; motion: boolean; onSection: (section: LockerSection) => void }) {
   const localCape = useEquipment("cape:" + accountId);
   const localCloak = useEquipment("cloak:" + accountId);
-  const [look, setLook] = useState<{ wardrobe: Wardrobe; cloak?: LockerCloak; wing?: { item: WingRevision; colors: WingColors } } | null>(null);
+  const [look, setLook] = useState<{ wardrobe: Wardrobe; cloak?: LockerCloak; wing?: EquippedModel; hat?: EquippedModel } | null>(null);
   const [error, setError] = useState("");
   const [revision, retry] = useState(0);
   useEffect(() => {
@@ -194,11 +196,16 @@ function EquippedLook({ accountId, motion, onSection }: { accountId: string; mot
     Promise.all([
       invoke<Wardrobe>("get_minecraft_wardrobe", { accountId, refresh: false }),
       getEquippedCloak(accountId),
-      Promise.all([wingRequest<WingCatalog>("GET", "locker", accountId), installedWings()]),
-    ]).then(([wardrobe, cloak, [wings, installed]]) => {
-      const equipped = wings.equipped;
-      const item = equipped && installed.get(equipped.id + ":" + equipped.revision);
-      if (current) setLook({ wardrobe, cloak, wing: item && equipped ? { item, colors: equipped.colors } : undefined });
+      installedWings(),
+      wingRequest<WingCatalog>("GET", "locker", accountId),
+      wingRequest<WingCatalog>("GET", "locker", accountId, undefined, "hats").catch(() => null),
+    ]).then(([wardrobe, cloak, installed, wings, hats]) => {
+      const resolve = (catalog: WingCatalog | null): EquippedModel | undefined => {
+        const equipped = catalog?.equipped;
+        const item = equipped && installed.get(equipped.id + ":" + equipped.revision);
+        return item && equipped ? { item, colors: equipped.colors } : undefined;
+      };
+      if (current) setLook({ wardrobe, cloak, wing: resolve(wings), hat: resolve(hats) });
     }).catch(reason => { if (current) setError(String(reason)); });
     return () => { current = false; };
   }, [accountId, revision]);
@@ -207,14 +214,17 @@ function EquippedLook({ accountId, motion, onSection }: { accountId: string; mot
   const skin = look.wardrobe.currentSkin;
   const cape = look.wardrobe.capes.find(item => localCape === undefined ? item.active : item.id === localCape);
   const cloak = localCloak === undefined ? look.cloak : cloakCatalogMemoryCache.get(accountId)?.find(item => item.id === localCloak);
+  const model = look.wing ?? look.hat;
   return <div className="locker-content">
     <div className="look-slots">{([
       ["Skins", "Skin", skin?.name || "Default skin", Shirt],
       ["Cloaks", "Delight cloak", cloak?.name || "None equipped", Layers],
       ["Capes", "Minecraft cape", cape?.name || "None equipped", Flag],
-      ["Wings", "Wings", look.wing?.item.name || "None equipped", Bird],
+      ["Wings", "Wings", (look.wing?.item.slot !== "back" && look.wing?.item.name) || "None equipped", Bird],
+      ["Back", "Back", (look.wing?.item.slot === "back" && look.wing.item.name) || "None equipped", Backpack],
+      ["Hats", "Hat", look.hat?.item.name || "None equipped", Rabbit],
     ] as const).map(([section, label, name, Icon]) => <button key={section} onClick={() => onSection(section)}><Icon size={19}/><span><small>{label}</small><strong>{name}</strong></span><ChevronRight size={16}/></button>)}</div>
-    <aside className="locker-detail" aria-label="Equipped character">{look.wing ? <WingPreview item={look.wing.item} colors={look.wing.colors} accountId={accountId} skinTexture={skin?.texture} variant={skin?.variant} front motion={motion}/> : <div className="locker-preview"><CapePreview skinUuid={accountId} skinTexture={skin?.texture} variant={skin?.variant} texture={cloak?.textureUrl || cape?.texture} animation={cloak?.animation} front={!cloak && !cape} motion={motion}/></div>}</aside>
+    <aside className="locker-detail" aria-label="Equipped character">{model ? <WingPreview item={model.item} colors={model.colors} additional={look.wing ? look.hat : undefined} capeTexture={look.wing ? undefined : cloak?.textureUrl || cape?.texture} capeAnimation={cloak?.animation} accountId={accountId} skinTexture={skin?.texture} variant={skin?.variant} front motion={motion}/> : <div className="locker-preview"><CapePreview focus="body" skinUuid={accountId} skinTexture={skin?.texture} variant={skin?.variant} texture={cloak?.textureUrl || cape?.texture} animation={cloak?.animation} front={!cloak && !cape} motion={motion}/></div>}</aside>
   </div>;
 }
 
@@ -226,8 +236,18 @@ export function Locker(props: {
 }) {
   const { section, onSection, profile, onCosmeticUnlock, cloakSelection } = props;
   const [claim, setClaim] = useState<{id: string; account?: string; sequence: number}>({id: "", sequence: 0});
-  const [shopCategory, setShopCategory] = useState<"Cloaks" | "Wings">("Cloaks");
-  const [wing, setWing] = useState<{ id: string; account?: string }>();
+  const [shopCategory, setShopCategory] = useState<"Cloaks" | "Wings" | "Hats" | "Back">("Cloaks");
+  const [modelSelection, setModelSelection] = useState<{ id: string; account?: string; section: "Wings" | "Hats" | "Back" }>();
+  const [localModelPreview, setLocalModelPreview] = useState(false);
+  useEffect(() => {
+    if (!import.meta.env.DEV || profile) return;
+    let active = true;
+    void wingRequest<WingCatalog>("GET", "shop", undefined, undefined, "hats")
+      .then(catalog => { if (active) setLocalModelPreview(catalog.localPreview === true); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [profile]);
+  const modelAccountId = profile?.id ?? (localModelPreview ? "local-preview-player" : undefined);
   const mounted = useRef(true);
   const activeAccount = useRef(profile?.id);
   activeAccount.current = profile?.id;
@@ -252,21 +272,30 @@ export function Locker(props: {
     if (!mounted.current || activeAccount.current === item.accountId) onCosmeticUnlock?.({ ...item, textureUrl });
   }
   const openLocker = (id: string) => { recordClaim(id); onSection("Cloaks"); };
-  const openWings = (id: string) => { setWing({ id, account: profile?.id }); onSection("Wings"); };
-  const wingShelf = { accountId: profile?.id, motion: props.motion, onNotify: props.onNotify, onOpenLocker: openWings };
+  const modelShelf = (category: "Wings" | "Hats" | "Back") => ({
+    accountId: modelAccountId,
+    motion: props.motion,
+    onNotify: props.onNotify,
+    category: category === "Back" ? "back" as const : category === "Hats" ? "hats" as const : "wings" as const,
+    onOpenLocker: (id: string) => {
+      setModelSelection({ id, account: modelAccountId, section: category });
+      onSection(category);
+    },
+  });
   return <section className="locker-workspace desktop-locker">
     <header className="look-heading"><h1>{section}</h1><CapeRedemption key={profile?.id || "guest"} accountId={profile?.id} onNotify={props.onNotify} onClaim={openLocker}
       onCosmeticUnlock={onCosmeticUnlock ? item => void celebrateClaim(item) : undefined}/></header>
     {section === "Shop" ? <>
       <div className="shop-cosmetic-categories" role="group" aria-label="Shop categories">
-        {(["Cloaks", "Wings"] as const).map(category => <button key={category} aria-pressed={shopCategory === category} onClick={() => setShopCategory(category)}>{category}</button>)}
+        {(["Cloaks", "Wings", "Back", "Hats"] as const).map(category => <button key={category} aria-pressed={shopCategory === category} onClick={() => setShopCategory(category)}>{category}</button>)}
       </div>
-      {shopCategory === "Wings" ? <WingsShelf mode="shop" key={profile?.id || "guest"} {...wingShelf}/> :
+      {shopCategory !== "Cloaks" ? <WingsShelf mode="shop" key={shopCategory + (modelAccountId || "guest")} {...modelShelf(shopCategory)}/> :
         <CosmeticsShop key={profile?.id || "guest"} accountId={profile?.id} motion={props.motion} onNotify={props.onNotify} onAdded={recordClaim} onOpenLocker={openLocker}/>}
     </> :
       section === "Cloaks" ? <CloakCollection key={profile?.id || "guest"} {...props} heading={<span>Collection</span>} onBrowse={() => onSection("Shop")} catalogRevision={claim.sequence} claimedId={claim.account === profile?.id ? claim.id : undefined}/> :
+      (section === "Wings" || section === "Back" || section === "Hats") && modelAccountId
+        ? <WingsShelf mode="locker" key={section + modelAccountId} {...modelShelf(section)} initialId={modelSelection?.section === section && modelSelection.account === modelAccountId ? modelSelection.id : undefined}/> :
       !profile ? <div className="locker-inline-state"><h2>Sign in to Minecraft</h2><p>Your equipped look and wardrobe appear here when signed in.</p></div> :
-      section === "Wings" ? <WingsShelf mode="locker" key={profile.id} {...wingShelf} initialId={wing && wing.account === profile.id ? wing.id : undefined}/> :
       section === "Equipped look" ? <EquippedLook key={profile.id} accountId={profile.id} motion={props.motion} onSection={onSection}/> :
       <MinecraftWardrobe getCloak={getEquippedCloak} key={profile.id + section} accountId={profile.id} tab={section === "Skins" ? "skins" : "capes"} heading={<span>Collection</span>} motion={props.motion} onNotify={props.onNotify}/>}
   </section>;

@@ -1609,3 +1609,15 @@ Equipped look wing preview must reserve its explicit preview height. Its absolut
 ## November 23, 2026 — Home Play launch fill correction
 
 Parks reported that Home Play still did not become a loading bar. The desktop accent background was overriding the dim loading surface, making the fill indistinguishable. The native process-start flag also hid the bar during renderer and resource loading. Home Play now keeps native launch percentage visible until the loading phase ends, then shows Running… for its running instance. A browser regression exercises process start before game ready, native percentage widths, cancellation, completion and disabled motion settings. This correction awaits user visual review.
+
+## November 26, 2026 — Bunny Ears in Hats
+
+Parks requested a stepped, head-mounted Bunny Ears cosmetic with one slightly bent ear. Parks expanded the initial shared outer color to independent inner and outer colors for each ear. Hats reuse the existing Shop claim, Locker card, player preview, and color-picker interactions. The preview also supports wearing hats and wings together. The local Tauri client was started in an isolated profile for visual review. The welcome screen offers Preview local cosmetics when the checkout's preview service is active.
+
+Parks approved the ears' shape and replaced the initial palette with rose pink (#EAB6CE) inside both ears and white (#FFFFFF) outside both ears. He requested believable material colors by default for future cosmetics. The editable project, thumbnail, bundle, local preview and production metadata use the approved colors.
+
+2026-11-26 — Parks approved hat fit, hat card framing and palette previews. Added attachment-centered wheel zoom, continuous character previews and click-to-equip with an optimistic outline and failure rollback.
+
+### 2026-11-26 — Shared color editing
+
+2026-11-26 — Shared launcher color pickers now place a screen eyedropper between Hex and Apply. Releasing the color field or hue control commits one edit. Clicking outside commits a valid hex entry. Ctrl/Cmd+Z reverses the last committed change while native text undo remains available in the hex field. Worn cosmetic writes are serialized, including immediate undo during an outstanding save. Browser flows passed for hats, wings and back items, including click-away and mocked eyedropper results. The OS loupe was not manually sampled.

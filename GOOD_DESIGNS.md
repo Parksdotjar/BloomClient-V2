@@ -1,5 +1,9 @@
 # Delight Client Approved Design Patterns
 
+## Bunny Ears shape and palette — November 26, 2026
+
+Parks approved the Bunny Ears shape after seeing it in Locker and chose white exterior felt and rose pink inner felt for both ears. The stepped silhouettes and slight bend remain visible with the default palette. Each of the four regions remains independently customizable. The approval covers this cosmetic's shape and stock colors.
+
 ## November 25, 2026 — Updates settings
 
 Parks approved the revised Updates page on November 25, 2026, calling it “INFINITLY BETTER.” Use this page as the reference for grouping each settings action with its status and for left-aligned, actionable instance results.
@@ -353,3 +357,5 @@ Parks called the slower eased delete animation “much better,” then requested
 ## Portal placement — direction approved, November 14, 2026
 
 Parks explicitly approved moving global Settings into the account menu and replacing its sidebar slot with **Portal**, combining servers and worlds, recent sessions and direct Play/Join. He explicitly required the existing instance header and everything else to stay the same. Approval covers this placement and scope; the new Portal page rendering still awaits visual review. The earlier instance-header redesign proposals were rejected and are not approved references.
+
+Parks approved the hat bases seated roughly half a model pixel into the head, the framing of hat cards, and previews showing the selected palette.

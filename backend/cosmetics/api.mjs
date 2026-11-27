@@ -88,7 +88,7 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
       return { uuid:session.uuid, expiresAt, sessionKey };
     },
     async checkReadiness() { if (enabled) await store.checkReadiness(); }, async handle(request,response,pathname,url) {
-    if (!/^\/v1\/(capes(?:\/|$)|wings(?:\/|$)|cosmetics(?:\/|$)|admin\/(?:capes|studio)(?:\/|$))/.test(pathname)) return false;
+    if (!/^\/v1\/(capes(?:\/|$)|(?:wings|hats)(?:\/|$)|cosmetics(?:\/|$)|admin\/(?:capes|studio)(?:\/|$))/.test(pathname)) return false;
     try {
       if (!enabled) throw new ApiError(503,'cosmetics_not_configured');
       // Do not trust forwarded headers without a deployment-specific proxy allowlist.
@@ -109,7 +109,7 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
         const token = bearer(request);
         if (!/^bst_[\w-]{43}$/.test(token)) throw new ApiError(401,'studio_session_required');
         studioSessions.delete(hash(token)); json(response,200,{ok:true});
-      } else if (pathname.startsWith('/v1/wings/') || pathname.startsWith('/v1/admin/studio/wings')) {
+      } else if (/^\/v1\/(?:wings\/|hats\/|admin\/studio\/(?:wings|hats)(?:\/|$))/.test(pathname)) {
         await wingRequest(pathname,method,{store,request,url,json,response,owner:wingOwner,identity,readBody,limit});
       } else if (/^\/v1\/capes\/assets\/[^/]+$/.test(pathname) && method === 'GET' && store.leasedAsset) {
         const bytes = await store.leasedAsset(pathname.split('/')[4]);

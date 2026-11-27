@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCosmeticsApi } from "../backend/cosmetics/api.mjs";
 import { ApiError } from "../backend/cosmetics/assets.mjs";
@@ -21,7 +20,7 @@ export async function startLocalWings(root, viteHttpServer) {
 
   const key = createHash("sha256").update(root).digest("hex").slice(0, 16);
   const store = new SqliteCosmeticsStore({
-    directory: join(tmpdir(), "delight-dev-wings-" + key),
+    directory: join(root, "node_modules/.cache", "delight-dev-wings-" + key),
     publicUrl: "https://local.invalid",
   });
   const api = createCosmeticsApi({
@@ -33,7 +32,7 @@ export async function startLocalWings(root, viteHttpServer) {
   });
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, "http://" + host);
-    if (!url.pathname.startsWith("/v1/wings/") || !(await api.handle(request, response, url.pathname, url))) {
+    if (!/^\/v1\/(wings|hats)\//.test(url.pathname) || !(await api.handle(request, response, url.pathname, url))) {
       response.writeHead(404).end();
     }
   });
@@ -48,10 +47,14 @@ export async function startLocalWings(root, viteHttpServer) {
   } catch (error) {
     store.close();
     if (error.code !== "EADDRINUSE") throw error;
-    const response = await fetch(`http://${host}:${port}/v1/wings/shop`, { signal: AbortSignal.timeout(2000) });
-    const catalog = response.ok ? await response.json() : null;
-    if (!entries.every(entry => catalog?.items?.some(item => item.id === entry.id && item.revision === entry.revision))) {
-      throw new Error("Port 19192 is in use by a service that does not serve this checkout's wings.");
+    for (const category of ["wings", "hats"]) {
+      const expected = entries.filter(entry => (entry.slot === "hat") === (category === "hats"));
+      if (!expected.length) continue;
+      const response = await fetch(`http://${host}:${port}/v1/${category}/shop`, { signal: AbortSignal.timeout(2000) });
+      const catalog = response.ok ? await response.json() : null;
+      if (!expected.every(entry => catalog?.items?.some(item => item.id === entry.id && item.revision === entry.revision))) {
+        throw new Error("Port 19192 is in use by a service that does not serve this checkout's cosmetics.");
+      }
     }
     return;
   }
@@ -62,17 +65,23 @@ export async function startLocalWings(root, viteHttpServer) {
     server.closeAllConnections();
   });
   try {
-    const previous = store.wings.equipped(player);
-    const preview = entries.find(entry => entry.id === previous?.id) ?? entries[0];
-    for (const entry of entries) {
-      store.wings.stage(entry);
-      store.wings.publish(entry);
-    }
-    if (!store.wings.owns(player, preview.id)) {
-      store.wings.claim(player, preview);
-      store.wings.equip(player, { ...preview, colors: preview.defaults });
-    } else if (previous && previous.id === preview.id && previous.revision !== preview.revision) {
-      store.wings.equip(player, { ...preview, colors: previous.colors });
+    for (const category of ["wings", "hats"]) {
+      const collection = store[category];
+      const offers = entries.filter(entry => (entry.slot === "hat") === (category === "hats"));
+      if (!offers.length) continue;
+      const previous = collection.equipped(player);
+      const preview = offers.find(entry => entry.id === previous?.id) ?? offers[0];
+      for (const entry of offers) {
+        collection.stage(entry);
+        collection.publish(entry);
+        collection.claim(player, entry);
+      }
+      if (!collection.owns(player, preview.id)) {
+        collection.claim(player, preview);
+        collection.equip(player, { ...preview, colors: preview.defaults });
+      } else if (previous && previous.id === preview.id && previous.revision !== preview.revision) {
+        collection.equip(player, { ...preview, colors: previous.colors });
+      }
     }
   } catch (error) {
     server.close();

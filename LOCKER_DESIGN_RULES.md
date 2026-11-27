@@ -36,11 +36,15 @@ Wings adds a collection category and a Shop filter using the current Locker layo
 
 In the Shop wing preview, center the **In Locker** label independently of the navigation glyph. Use the existing right-arrow icon at the trailing edge, vertically centered, with muted resting color and normal text color on hover or keyboard focus.
 
+## Hats in Locker and Shop
+
+Use the existing cosmetic shelf for head-mounted items. Bunny Ears exposes left inner, left outer, right inner, and right outer colors through the shared picker. The selected hat starts facing the player so the inside of each ear can be seen. Equipped look places the hat on the same player as the independently equipped wings or cape.
+
 ## Loading and refresh stability
 
 - Hidden card actions stay fully hidden until hover or keyboard focus, including while disabled for account loading or saving. Disabled opacity must never override the resting reveal state and paint Equip/Unequip over the item name.
 - Cached catalog contents have a valid selected preview immediately. Refresh keeps the selected item, confirmed equipped marker and an edited Classic/Slim choice when the item still exists. Imported skins use their recorded arm model; missing selections fall back to an available item and pagination clamps when a catalog shrinks.
-- Show refresh progress on the existing refresh icon and prevent overlapping refresh/equip actions. Apply/equip indicators change only after the native operation succeeds.
+- Show refresh progress on the existing refresh icon and prevent overlapping refresh/equip actions. Move the owned cosmetic’s equipped outline immediately on click and roll it back if the native operation fails.
 - Card columns respond to the catalog's available width, not just the window width. Keep cards readable beside the preview; the preview keeps its own height and stays alongside long desktop grids rather than stretching with every row. The stacked compact layout scrolls normally.
 - Hover/focus reveals respect reduced motion, Show Animations off and Ultra Performance. Keep these cases in `tests/locker-ui.mjs`.
 
@@ -53,3 +57,5 @@ The October 2026 experiment that added a hanger/title lockup, a rail behind cape
 Wing card artwork uses a straight-on camera centered on the cosmetic bounds, with equal horizontal margins. Character preview rotation belongs to the detail pane.
 
 Equipped look includes the Wings slot and renders the equipped wing revision with its saved colors and animation. Visible wings take precedence over capes in the character preview, matching the game.
+
+Right-hand previews allow scroll zoom and drag orbit. Focus hats at the head, capes/cloaks/wings/back items at the back and whole-look or skin previews on the body. Shoulder and foot attachments use their own anchors when introduced. Keep the current worn model visible until its replacement is ready. Shop cards select for inspection.

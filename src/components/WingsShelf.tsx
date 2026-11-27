@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, RotateCw } from "lucide-react";
-import { installedWings, tintKeys, wingLabels, wingRequest,
-  type EquippedWing, type Tint, type WingCatalog, type WingColors, type WingOffer } from "../services/delight-wings";
+import { installedWings, cosmeticColorLabels, wingRequest,
+  type CosmeticCategory, type EquippedWing, type Tint, type WingCatalog, type WingColors, type WingOffer } from "../services/delight-wings";
 import { CustomAccentPicker } from "./CustomAccentPicker";
 import { WingPreview } from "./WingPreview";
 import "./wings-shelf.css";
 
 type Props = {
   mode: "shop" | "locker";
+  category?: CosmeticCategory;
   accountId?: string;
   motion: boolean;
   initialId?: string;
@@ -15,7 +16,7 @@ type Props = {
   onNotify: (message: string, kind?: "success" | "error") => void;
 };
 
-export function WingsShelf({ mode, accountId, motion, initialId, onOpenLocker, onNotify }: Props) {
+export function WingsShelf({ mode, category = "wings", accountId, motion, initialId, onOpenLocker, onNotify }: Props) {
   const [catalog, setCatalog] = useState<WingCatalog>();
   const [selected, setSelected] = useState(initialId);
   const [draft, setDraft] = useState<WingColors>();
@@ -24,7 +25,12 @@ export function WingsShelf({ mode, accountId, motion, initialId, onOpenLocker, o
   const [pending, setPending] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const alive = useRef(true);
+  const equipmentWrites = useRef(Promise.resolve());
+  const latestWrite = useRef(0);
+  const confirmed = useRef<EquippedWing | null>(null);
   const shop = mode === "shop";
+  const hats = category === "hats";
+  const label = category === "back" ? "back cosmetics" : category;
   useEffect(() => {
     alive.current = true;
     return () => { alive.current = false; };
@@ -32,19 +38,21 @@ export function WingsShelf({ mode, accountId, motion, initialId, onOpenLocker, o
   useEffect(() => {
     let current = true;
     setError("");
-    void Promise.all([installedWings(), wingRequest<WingCatalog>("GET", mode, accountId)]).then(([assets, data]) => {
+    void Promise.all([installedWings(), wingRequest<WingCatalog>("GET", mode, accountId, undefined, category)]).then(([assets, data]) => {
       if (!current) return;
       const items = data.items.flatMap(item => {
         const local = assets.get(item.id + ":" + item.revision);
-        return local ? [{ ...item, previewRevision: local.previewRevision }] : [];
+        return local && local.slot === (hats ? "hat" : category === "back" ? "back" : undefined)
+          ? [{ ...item, slot: local.slot, previewRevision: local.previewRevision }] : [];
       });
+      confirmed.current = data.equipped ?? null;
       setCatalog({ ...data, items });
       setSelected(previous => items.some(item => item.revision === previous) ? previous :
         items.find(item => item.id === initialId || item.revision === data.equipped?.revision)?.revision ?? items[0]?.revision);
       setDraft(undefined);
     }).catch(reason => { if (current) setError(String(reason)); });
     return () => { current = false; };
-  }, [mode, accountId, initialId, refresh]);
+  }, [mode, accountId, initialId, refresh, category, hats]);
 
   async function change(action: () => Promise<void>) {
     setPending(true);
@@ -54,6 +62,13 @@ export function WingsShelf({ mode, accountId, motion, initialId, onOpenLocker, o
   }
 
   const item = catalog?.items.find(item => item.revision === selected);
+  const labels = item?.id === "mushroom-cap"
+    ? { left: "Crown", right: "Spores", trim: "Brim", rightOuter: "Stem" }
+    : item?.id === "miners-helmet"
+      ? { left: "Center strip", right: "Helmet shell", trim: "Lamp lens", rightOuter: "Lamp housing" }
+      : cosmeticColorLabels[category];
+  const colorControls = Object.entries(labels) as [Tint, string][];
+  const tintKeys = colorControls.map(([key]) => key);
   const equipped = catalog?.equipped;
   const wearing = !!item && equipped?.id === item.id && equipped?.revision === item.revision;
   const finish = item ? draft ?? item.configured ?? item.defaults : undefined;
@@ -61,7 +76,7 @@ export function WingsShelf({ mode, accountId, motion, initialId, onOpenLocker, o
 
   function claim(offer: WingOffer) {
     void change(async () => {
-      await wingRequest("POST", "claim", accountId, { id: offer.id, revision: offer.revision });
+      await wingRequest("POST", "claim", accountId, { id: offer.id, revision: offer.revision }, category);
       if (alive.current) {
         setCatalog(previous => previous && { ...previous, items: previous.items.map(item => item.id === offer.id ? { ...item, owned: true } : item) });
         onNotify("Added " + offer.name + " to Locker.", "success");
@@ -70,46 +85,70 @@ export function WingsShelf({ mode, accountId, motion, initialId, onOpenLocker, o
   }
 
   function equip(next: EquippedWing | { id: null }) {
-    void change(async () => {
-      const result = await wingRequest<{ equipped: EquippedWing | null }>("PUT", "equipped", accountId, next);
-      if (!alive.current) return;
-      const saved = result.equipped;
-      setCatalog(previous => previous && {
-        ...previous, equipped: saved, items: previous.items.map(offer => saved && offer.id === saved.id
-          ? { ...offer, configured: saved.colors } : offer),
-      });
-      setDraft(undefined);
-      onNotify(saved ? "Wing colors and equipment saved." : "Wings unequipped.", "success");
+    const sequence = ++latestWrite.current;
+    setPending(true);
+    setCatalog(current => current && { ...current, equipped: next.id === null ? null : next });
+    equipmentWrites.current = equipmentWrites.current.then(async () => {
+      try {
+        const { equipped: saved } = await wingRequest<{ equipped: EquippedWing | null }>("PUT", "equipped", accountId, next, category);
+        if (!alive.current) return;
+        confirmed.current = saved;
+        setCatalog(current => current && {
+          ...current, equipped: sequence === latestWrite.current ? saved : current.equipped,
+          items: current.items.map(offer => saved && offer.revision === saved.revision
+            ? { ...offer, configured: saved.colors } : offer),
+        });
+        if (sequence === latestWrite.current) {
+          onNotify(saved ? "Colors and equipment saved." : hats ? "Hat unequipped." : category === "back" ? "Back cosmetic unequipped." : "Wings unequipped.", "success");
+        }
+      } catch (error) {
+        if (alive.current && sequence === latestWrite.current) {
+          const previous = confirmed.current;
+          setCatalog(current => current && { ...current, equipped: previous });
+          if (previous && catalog?.items.some(offer => offer.revision === previous.revision)) setSelected(previous.revision);
+          onNotify(String(error), "error");
+        }
+      } finally {
+        if (alive.current && sequence === latestWrite.current) {
+          setDraft(undefined);
+          setPending(false);
+        }
+      }
     });
   }
 
   if (error) return <div className="locker-inline-state" role="alert">
     {error}<button onClick={() => setRefresh(value => value + 1)}>Try again</button>
   </div>;
-  if (!catalog) return <div className="locker-inline-state" role="status"><RotateCw size={16} className="shop-spinner"/> Loading wings…</div>;
+  if (!catalog) return <div className="locker-inline-state" role="status"><RotateCw size={16} className="shop-spinner"/> Loading {label}…</div>;
   return <div className={"locker-content wings-layout" + (item ? " has-selection" : "")}>
     <section className="locker-collection wings-collection">
-      <header className="locker-collection-heading"><div><h2>{shop ? "Available wings" : "Collection"}</h2>
+      <header className="locker-collection-heading"><div><h2>{shop ? "Available " + label : "Collection"}</h2>
         {catalog.localPreview && <span>Local preview</span>}</div>
-        <button className="locker-refresh" onClick={() => setRefresh(value => value + 1)} disabled={pending} aria-label="Refresh wings"><RotateCw size={16}/></button>
+        <button className="locker-refresh" onClick={() => setRefresh(value => value + 1)} disabled={pending} aria-label={"Refresh " + label}><RotateCw size={16}/></button>
       </header>
       {catalog.items.length ? <div className="locker-grid">
         {catalog.items.map(offer => {
           const active = selected === offer.revision, worn = equipped?.revision === offer.revision;
-          return <article key={offer.revision} className={"locker-cape wing-card" + (active ? " selected" : "")}>
-            <button className="locker-art" type="button" aria-label={"Preview " + offer.name} aria-pressed={active}
-              aria-description={worn ? "Equipped" : undefined} disabled={pending}
-              onClick={() => { setSelected(offer.revision); setDraft(undefined); }}>
+          return <article key={offer.revision} className={"locker-cape wing-card" + ((shop ? active : worn) ? " selected" : "")} onClick={() => {
+                if (pending || (!shop && worn && active)) return;
+                setSelected(offer.revision);
+                setDraft(undefined);
+                setPreview(undefined);
+                if (!shop && !worn) equip({ id: offer.id, revision: offer.revision, colors: offer.configured ?? offer.defaults });
+              }}>
+            <button className="locker-art" type="button" aria-label={(shop ? "Preview " : "Wear ") + offer.name} aria-pressed={shop ? active : worn}
+              aria-description={worn ? "Equipped" : undefined} disabled={pending}>
               <WingPreview item={offer} colors={offer.configured ?? offer.defaults} motion={motion} cosmeticOnly/>
             </button>
             <div className="locker-cape-name"><div className="locker-cape-identity"><strong>{offer.name}</strong></div>
               </div>
           </article>;
         })}
-      </div> : <div className="locker-inline-state">{shop ? "No wings are available for this build." : "Wings you add from Shop appear here."}</div>}
+      </div> : <div className="locker-inline-state">{shop ? "No " + label + " are available for this build." : hats ? "Hats you add from Shop appear here." : category === "back" ? "Back cosmetics you add from Shop appear here." : "Wings you add from Shop appear here."}</div>}
     </section>
     {item && finish && <aside className="locker-detail wing-detail" aria-label={item.name + " preview"}>
-      <WingPreview key={item.revision} item={item} motion={motion} accountId={accountId}
+      <WingPreview item={item} motion={motion} accountId={accountId}
         colors={preview ? { ...finish, [preview.key]: preview.color } : finish}/>
       <div className="locker-detail-copy"><h2>{item.name}</h2></div>
       {shop ? <button className={item.owned ? "locker-equip wing-open-locker" : "locker-equip"} disabled={pending || !accountId} onClick={() => item.owned ? onOpenLocker(item.id) : claim(item)}>
@@ -117,9 +156,13 @@ export function WingsShelf({ mode, accountId, motion, initialId, onOpenLocker, o
       </button> : <>
         <fieldset className="wing-colors" disabled={pending}>
           <legend>Colors</legend>
-          {tintKeys.map(key => <div className="wing-color" key={key}>
-            <span>{wingLabels[key]}</span>
-            <CustomAccentPicker label={wingLabels[key] + " color"} value={finish[key]} onApply={color => setDraft({ ...finish, [key]: color })}
+          {colorControls.map(([key, name]) => <div className="wing-color" key={item.revision + key}>
+            <span>{name}</span>
+            <CustomAccentPicker label={name + " color"} value={finish[key] ?? "#ffffff"} onApply={color => {
+              const colors = { ...finish, [key]: color };
+              setDraft(colors);
+              if (wearing) equip({ id: item.id, revision: item.revision, colors });
+            }}
               onPreview={color => setPreview(current => color ? { key, color } : current?.key === key ? undefined : current)}/>
           </div>)}
           <button type="button" className="wing-reset" onClick={() => setDraft(item.defaults)}>Restore default colors</button>

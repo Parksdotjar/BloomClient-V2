@@ -184,7 +184,7 @@ export function MinecraftWardrobe({ accountId, tab, motion, onNotify, heading, g
       </>}
     </div>
     <aside className="locker-detail">
-      <div className="locker-preview"><CapePreview texture={tab === "capes" ? cape?.texture : cloak?.textureUrl || capes.find(item => item.active)?.texture} animation={tab === "skins" ? cloak?.animation : undefined} skinTexture={tab === "skins" ? skin?.texture : data?.currentSkin?.texture} skinUuid={accountId} variant={tab === "skins" ? variant : data?.currentSkin?.variant} front={tab === "skins"} motion={motion} /></div>
+      <div className="locker-preview"><CapePreview focus={tab === "skins" ? "body" : "back"} texture={tab === "capes" ? cape?.texture : cloak?.textureUrl || capes.find(item => item.active)?.texture} animation={tab === "skins" ? cloak?.animation : undefined} skinTexture={tab === "skins" ? skin?.texture : data?.currentSkin?.texture} skinUuid={accountId} variant={tab === "skins" ? variant : data?.currentSkin?.variant} front={tab === "skins"} motion={motion} /></div>
       {tab === "skins" ? skin && skin.id !== "current" && <div className="locker-skin-model" role="group" aria-label="Skin arm model">
         {(["classic", "slim"] as const).map(model => <button key={model} aria-pressed={variant === model} onClick={() => wearSkin(skin, model)}>{model === "classic" ? "Classic" : "Slim"}</button>)}
       </div> : <div className="locker-detail-base">

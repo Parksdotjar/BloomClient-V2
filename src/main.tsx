@@ -4151,7 +4151,12 @@ export function App() {
   const sectionButton = ([Icon, label]: typeof settingTabs[number]) => <button key={label} aria-current={!settingsQuery && settingsTarget === label ? "location" : undefined} onClick={() => openSettings(label)}><Icon size={17} />{settingsLabel(label)}</button>;
   if (!accountHydrated) return <OnboardingSplash />;
   if (onboardingOpen) {
-    return <OnboardingFlow clientId={MICROSOFT_CLIENT_ID} onComplete={(nextProfile) => {
+    return <OnboardingFlow clientId={MICROSOFT_CLIENT_ID} onPreviewCosmetics={import.meta.env.DEV ? () => {
+      localStorage.setItem(ONBOARDING_COMPLETE_STORAGE_KEY, "complete");
+      setOnboardingOpen(false);
+      setLockerSection("Hats");
+      setPage("locker");
+    } : undefined} onComplete={(nextProfile) => {
       localStorage.setItem(ONBOARDING_COMPLETE_STORAGE_KEY, "complete");
       setProfile(nextProfile);
       setOnboardingOpen(false);

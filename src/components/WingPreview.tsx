@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AmbientLight, Box3, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, DirectionalLight, DoubleSide,
-  Group, Matrix4, Mesh, MeshStandardMaterial, NearestFilter, PerspectiveCamera, Scene, SRGBColorSpace, Vector3, WebGLRenderer,
+  Group, LinearSRGBColorSpace, NoColorSpace, Matrix4, Mesh, MeshStandardMaterial, NearestFilter, PerspectiveCamera, Scene, SRGBColorSpace, Vector3, WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { SkinObject } from "skinview3d";
-import { inferModelType, loadSkinToCanvas } from "skinview-utils";
+import { CapeObject, SkinObject } from "skinview3d";
+import { inferModelType, loadCapeToCanvas, loadSkinToCanvas } from "skinview-utils";
 import { invoke } from "../services/invoke";
+import type { CapeAnimation } from "./CapePreview";
 import type { Wardrobe } from "./MinecraftWardrobe";
-import { readWingRuntime, wingThumbnail, type Tint, type WingColors, type WingRevision } from "../services/delight-wings";
+import { readWingRuntime, type Tint, type WingColors, type WingRevision } from "../services/delight-wings";
+
+import { lockerAnchors, lockerPreviewZoom } from "./locker-preview-zoom";
+import { cosmeticDaylightMaterial } from "../services/cosmetic-daylight";
+import { cosmeticShade } from "../services/cosmetic-shading";
 
 const mannequin = [
   [[8, 8, 8], [0, 28, 0]], [[8, 12, 4], [0, 18, 0]],
@@ -35,21 +40,24 @@ function wingGeometry(data: number[]) {
   return geometry;
 }
 
-function visibleTint(color: string) {
-  const hex = color.slice(1).match(/../g) ?? ["ff", "ff", "ff"];
-  return "#" + hex.map(value => Math.max(16, parseInt(value, 16)).toString(16).padStart(2, "0")).join("");
-}
-
-export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = false, skinTexture, variant, front = false }: {
+export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = false, skinTexture, variant, front = false, additional, capeTexture, capeAnimation }: {
+  additional?: { item: WingRevision; colors: WingColors };
+  capeTexture?: string;
+  capeAnimation?: CapeAnimation | null;
   item: WingRevision; colors: WingColors; motion: boolean; accountId?: string; cosmeticOnly?: boolean; front?: boolean; skinTexture?: string; variant?: "classic" | "slim";
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const state = useRef({ colors, motion });
+  const state = useRef({ colors, motion, additional, revision: item.revision });
+  const swap = useRef<((item: WingRevision, extra?: WingRevision) => () => void) | undefined>(undefined);
+  const hat = item.slot === "hat";
+  const hasHat = hat || additional?.item.slot === "hat";
+  const additionalItem = additional?.item;
+  const faceFront = front || hat;
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [avatar, setAvatar] = useState<{ texture: string; variant?: "classic" | "slim" }>();
   const [skinReady, setSkinReady] = useState(false);
   const skinTarget = useRef<{ mesh: SkinObject; surface: HTMLCanvasElement; texture: CanvasTexture; fallback: Group } | undefined>(undefined);
-  state.current = { colors, motion };
+  state.current = { colors, motion, additional, revision: item.revision };
 
   useEffect(() => {
     let active = true;
@@ -83,9 +91,9 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
     catch { setStatus("error"); return; }
     const stop = new AbortController();
     const scene = new Scene(), camera = new PerspectiveCamera(35, 1, 1, 180);
-    camera.position.set(-7, 25, front ? 55 : -55);
+    camera.position.set(-7, hasHat ? 29 : 25, faceFront ? 55 : -55);
     const key = new DirectionalLight("#fff8f0", 1.6);
-    key.position.set(-10, 30, -15);
+    key.position.set(-10, 30, hat ? 15 : -15);
     scene.add(key, new AmbientLight("#dce5fa", 1.55));
     const rig = new MeshStandardMaterial({ color: "#798697", roughness: .9 });
     const dispose: {dispose(): void}[] = [rig];
@@ -118,28 +126,77 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
       }
     });
     dispose.push(skinMap, ...skinResources);
+    let drawCape: ((now: number) => void) | undefined;
+    if (capeTexture && !cosmeticOnly) {
+      const cape = new CapeObject();
+      cape.position.set(0, 32, -2);
+      cape.rotation.x = Math.PI * .06;
+      cape.visible = false;
+      scene.add(cape);
+      const surface = document.createElement("canvas");
+      const map = new CanvasTexture(surface);
+      map.colorSpace = SRGBColorSpace;
+      map.minFilter = map.magFilter = NearestFilter;
+      map.generateMipmaps = false;
+      cape.map = map;
+      dispose.push(map, cape.cape.geometry, cape.cape.material as MeshStandardMaterial);
+      const paint = (source: HTMLImageElement | HTMLCanvasElement) => {
+        loadCapeToCanvas(surface, source);
+        map.needsUpdate = true;
+        cape.visible = true;
+      };
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      image.src = capeTexture;
+      void image.decode().then(() => { if (!stop.signal.aborted) paint(image); }).catch(() => {});
+      if (capeAnimation) {
+        const atlas = new Image();
+        atlas.crossOrigin = "anonymous";
+        atlas.src = capeAnimation.atlasUrl;
+        void atlas.decode().then(() => {
+          if (stop.signal.aborted) return;
+          const frame = document.createElement("canvas");
+          const { frameWidth, frameHeight, frameCount, columns, fps, loop } = capeAnimation;
+          frame.width = frameWidth;
+          frame.height = frameHeight;
+          const context = frame.getContext("2d")!;
+          const started = performance.now();
+          let previous = -1;
+          drawCape = now => {
+            if (!state.current.motion) return;
+            const elapsed = Math.floor((now - started) / 1000 * fps);
+            const index = loop ? elapsed % frameCount : Math.min(elapsed, frameCount - 1);
+            if (index === previous) return;
+            previous = index;
+            context.clearRect(0, 0, frameWidth, frameHeight);
+            context.drawImage(atlas, index % columns * frameWidth, Math.floor(index / columns) * frameHeight,
+              frameWidth, frameHeight, 0, 0, frameWidth, frameHeight);
+            paint(frame);
+          };
+        }).catch(() => {});
+      }
+    }
     const controls = new OrbitControls(camera, target);
     controls.enabled = !cosmeticOnly;
     controls.enablePan = controls.enableZoom = false;
     controls.rotateSpeed = .65;
     controls.minPolarAngle = .55;
     controls.maxPolarAngle = 1.91;
-    controls.target.set(0, cosmeticOnly ? 25 : 18, 0);
-    const wear = new Group();
-    wear.position.set(0, 19, -2);
-    scene.add(wear);
+    controls.target.set(0, cosmeticOnly ? 25 : hasHat ? 20 : 18, 0);
+    const zoom = cosmeticOnly ? undefined : lockerPreviewZoom(target, camera, controls,
+      new Vector3(...lockerAnchors[front ? "body" : hat ? "head" : "back"]));
     let cardSize: Vector3 | undefined;
     function fit() {
       const width = target.clientWidth, height = target.clientHeight;
       if (!width || !height) return;
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
-      const distance = Math.max(55, 23 / (Math.tan(camera.fov * Math.PI / 360) * camera.aspect) + 5);
+      const distance = Math.max(hasHat ? 70 : 55, 23 / (Math.tan(camera.fov * Math.PI / 360) * camera.aspect) + 5);
       if (cosmeticOnly) {
         const tangent = Math.tan(camera.fov * Math.PI / 360);
         const cardDistance = cardSize ? Math.max(cardSize.y / 2, cardSize.x / (2 * camera.aspect)) / tangent * 1.12 + cardSize.z / 2 : distance;
-        camera.position.copy(controls.target).add(new Vector3(0, 0, -cardDistance));
-      } else camera.position.sub(controls.target).setLength(distance).add(controls.target);
+        camera.position.copy(controls.target).add(new Vector3(0, 0, hat ? cardDistance : -cardDistance));
+      } else zoom?.resize(distance);
       camera.updateProjectionMatrix();
       controls.update();
     }
@@ -148,38 +205,43 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
     resize.observe(target);
     fit();
     let handle = 0;
-    void readWingRuntime(item, stop.signal).then(async ({ model, files }) => {
+    async function loadCosmetic(revision: WingRevision, secondary: boolean, group: Group, signal: AbortSignal, resources: {dispose(): void}[]) {
+      const { model, files } = await readWingRuntime(revision, signal);
+      if (signal.aborted) throw new Error("Preview canceled");
+      const wear = new Group();
+      if (model.slot === "hat") wear.position.set(0, 31.375, 0);
+      else wear.position.set(0, 19, -2);
+      group.add(wear);
       const textures = new Map<string, CanvasTexture>();
       for (const path of new Set(model.batches.map(batch => batch.texture))) {
         const image = await createImageBitmap(new Blob([new Uint8Array(files[path])], { type: "image/png" }));
-        if (stop.signal.aborted) { image.close(); return; }
+        if (signal.aborted) { image.close(); throw new Error("Preview canceled"); }
         const surface = document.createElement("canvas");
         surface.width = image.width;
         surface.height = image.height;
         surface.getContext("2d")!.drawImage(image, 0, 0);
         image.close();
         const texture = new CanvasTexture(surface);
-        texture.colorSpace = SRGBColorSpace;
+        texture.colorSpace = NoColorSpace;
         texture.magFilter = texture.minFilter = NearestFilter;
         texture.generateMipmaps = false;
         textures.set(path, texture);
-        dispose.push(texture);
+        resources.push(texture);
       }
-      const materials = new Map<string, { finish: MeshStandardMaterial; tint: Tint | "fixed" }>();
+      const materials = new Map<string, { finish: ReturnType<typeof cosmeticDaylightMaterial>; tint: Tint | "fixed"; shade?: string; shineRow?: number }>();
       const bodies = model.batches.map(batch => {
-        const key = [batch.texture, batch.tint, batch.color].join(":");
+        const key = [batch.texture, batch.tint, batch.color, batch.shineRow].join(":");
         if (!materials.has(key)) {
-          const finish = new MeshStandardMaterial({ map: textures.get(batch.texture), color: batch.color,
-            alphaTest: .5, side: DoubleSide, roughness: 1 });
-          materials.set(key, { finish, tint: batch.tint });
-          dispose.push(finish);
+          const finish = cosmeticDaylightMaterial(textures.get(batch.texture)!, batch.color);
+          materials.set(key, { finish, tint: batch.tint, shade: batch.color, shineRow: batch.shineRow });
+          resources.push(finish);
         }
         const geometry = wingGeometry(batch.vertices);
         const mesh = new Mesh(geometry, materials.get(key)!.finish);
         mesh.matrixAutoUpdate = false;
         mesh.frustumCulled = false;
         wear.add(mesh);
-        dispose.push(geometry);
+        resources.push(geometry);
         return { mesh, joint: batch.matrix };
       });
       const matrices = model.frames[0].matrices.map(() => new Matrix4());
@@ -191,35 +253,78 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
         cardSize = bounds.getSize(new Vector3());
         fit();
       }
-      setStatus("ready");
-      const started = performance.now();
-      function draw(now: number) {
-        const { colors, motion } = state.current;
-        const time = motion ? (now - started) % model.duration : Math.min(825, model.duration);
+      return (elapsed: number) => {
+        const { colors, motion, additional } = state.current;
+        const palette = secondary ? additional?.colors : colors;
+        if (!palette) return;
+        const time = motion ? elapsed % model.duration : Math.min(825, model.duration);
         const upper = Math.max(1, model.frames.findIndex(frame => frame.time >= time));
         const a = model.frames[upper - 1], b = model.frames[upper];
         const ratio = (time - a.time) / (b.time - a.time);
         matrices.forEach((matrix, joint) => {
           matrix.fromArray(a.matrices[joint].map((value, axis) => value + ratio * (b.matrices[joint][axis] - value)));
         });
-        for (const { finish, tint } of materials.values()) if (tint !== "fixed") finish.color.set(visibleTint(colors[tint]));
+        for (const { finish, tint, shade, shineRow } of materials.values()) {
+          if (tint === "fixed") continue;
+          const color = palette[tint] ?? "#ffffff";
+          if (shade) {
+            const center = Math.floor((elapsed % 5000) / 45) - 2;
+            const distance = motion && shineRow !== undefined ? Math.abs(shineRow - center) : 3;
+            const shine = [0.23, 0.14, 0.07][distance] ?? 0;
+            const rgb = (hex: string) => Number.parseInt(hex.slice(1), 16);
+            const chosen = rgb(color), base = rgb(revision.defaults[tint]!), original = rgb(shade);
+            finish.uniforms.tint.value.setHex(cosmeticShade(chosen, base, original, shine), LinearSRGBColorSpace);
+          } else finish.uniforms.tint.value.setHex(parseInt(color.slice(1), 16), LinearSRGBColorSpace);
+        }
         for (const { mesh, joint } of bodies) {
           mesh.matrix.copy(matrices[joint]);
           mesh.matrixWorldNeedsUpdate = true;
         }
-        renderer.render(scene, camera);
-        handle = requestAnimationFrame(draw);
-      }
+      };
+    }
+    let active: { group: Group; update: ((elapsed: number) => void)[]; release: () => void; revision: string } | undefined;
+    swap.current = (primary, extra) => {
+      const request = new AbortController();
+      const group = new Group();
+      const resources: {dispose(): void}[] = [];
+      const release = () => { group.removeFromParent(); resources.splice(0).forEach(resource => resource.dispose()); };
+      const models = [loadCosmetic(primary, false, group, request.signal, resources)];
+      if (extra) models.push(loadCosmetic(extra, true, group, request.signal, resources));
+      void Promise.all(models).then(update => {
+        if (request.signal.aborted) { release(); return; }
+        active?.release();
+        scene.add(group);
+        active = { group, update, release, revision: primary.revision };
+        setStatus("ready");
+      }).catch(() => {
+        const canceled = request.signal.aborted;
+        request.abort();
+        release();
+        if (!canceled) setStatus("error");
+      });
+      return () => request.abort();
+    };
+    const started = performance.now();
+    function draw(now: number) {
+      if (active?.revision === state.current.revision) active.update.forEach(pose => pose(now - started));
+      drawCape?.(now);
+      renderer.render(scene, camera);
       handle = requestAnimationFrame(draw);
-    }).catch(() => { if (!stop.signal.aborted) setStatus("error"); });
+    }
+    handle = requestAnimationFrame(draw);
     return () => {
+      swap.current = undefined;
+      active?.release();
+      zoom?.dispose();
       stop.abort(); resize.disconnect(); cancelAnimationFrame(handle);
       skinTarget.current = undefined;
       controls.dispose();
       dispose.forEach(resource => resource.dispose());
       renderer.dispose();
     };
-  }, [item.id, item.revision, cosmeticOnly, front]);
+  }, [cosmeticOnly, front, faceFront, hat, hasHat, capeTexture, capeAnimation]);
+
+  useEffect(() => swap.current?.(item, additionalItem), [item.revision, additionalItem?.revision, cosmeticOnly, front, faceFront, hat, hasHat, capeTexture, capeAnimation]);
 
   useEffect(() => {
     const rig = skinTarget.current;
@@ -243,12 +348,11 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
       }).catch(() => {});
     }
     return () => { active = false; };
-  }, [avatar, item.revision, cosmeticOnly]);
+  }, [avatar, cosmeticOnly, front, faceFront, hat, hasHat, capeTexture, capeAnimation]);
 
   return <div className={cosmeticOnly ? "wing-preview wing-card-preview" : "locker-preview wing-preview"}>
-    <canvas ref={canvas} aria-label="Live wing preview" data-ready={status === "ready"} data-skin={skinReady}
-      title={cosmeticOnly ? undefined : "Drag to rotate the player"}/>
-    {!cosmeticOnly && status !== "ready" && <img alt={item.name} src={wingThumbnail(item)}/>}
+    <canvas ref={canvas} aria-label={hat ? "Live hat preview" : item.slot === "back" ? "Live back cosmetic preview" : "Live wing preview"} data-ready={status === "ready"} data-skin={skinReady}
+      title={cosmeticOnly ? undefined : "Drag to rotate, scroll to zoom"}/>
     {!cosmeticOnly && status === "error" && <small role="status">Live preview unavailable</small>}
   </div>;
 }

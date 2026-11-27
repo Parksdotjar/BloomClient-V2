@@ -23,7 +23,11 @@ public final class DelightWings {
     private static final UUID PREVIEW_PLAYER = UUID.nameUUIDFromBytes(
         "OfflinePlayer:DelightPreview".getBytes(StandardCharsets.UTF_8));
     private static final String PREVIEW_BASE = "http://127.0.0.1:19192";
-    private static final DelightWings INSTANCE = new DelightWings();
+    private static final DelightWings INSTANCE = new DelightWings(false);
+    private static final DelightWings HATS = new DelightWings(true);
+    private final boolean hat;
+
+    private DelightWings(boolean hat) { this.hat = hat; }
     private final boolean localPreview = "1".equals(System.getenv("DELIGHT_WINGS_GAME_PREVIEW"));
     private final ConcurrentHashMap<UUID, Long> observed = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletableFuture<Renderable>> loaded = new ConcurrentHashMap<>();
@@ -43,13 +47,20 @@ public final class DelightWings {
     record Equipped(DelightWingData.Model model, Map<String, Identifier> textures, DelightWingData.Colors colors) {}
 
     public static DelightWings get() { return INSTANCE; }
+    static DelightWings hats() { return HATS; }
 
     public static boolean rendersOnEntity(int entityId) {
         return DelightWingLayer.equipped(entityId) != null;
     }
 
     public void start() {
-        try { catalog = DelightWingData.catalog(); }
+        try {
+            Map<String, DelightWingData.Item> matching = new HashMap<>();
+            DelightWingData.catalog().forEach((key, item) -> {
+                if (item.hat() == hat) matching.put(key, item);
+            });
+            catalog = Map.copyOf(matching);
+        }
         catch (IOException | RuntimeException error) { LOG.warn("Could not load the bundled wing catalog"); }
         if (!catalog.isEmpty()) BloomCosmeticsRuntime.scheduleRefresh(this::refresh);
     }
@@ -78,7 +89,7 @@ public final class DelightWings {
             source.refreshing.set(false);
             return;
         }
-        String remoteUrl = BloomCosmeticsRuntime.equippedUrl("wings", players);
+        String remoteUrl = BloomCosmeticsRuntime.equippedUrl(hat ? "hats" : "wings", players);
         String url = base + remoteUrl.substring(BloomCosmeticsRuntime.API_BASE.length());
         final var request = BloomCosmeticsRuntime.get(url, "application/json", 5);
         CapeHttp.get(request, 64 * 1024)
@@ -106,7 +117,9 @@ public final class DelightWings {
             UUID player = BloomCosmeticsRuntime.parseUuid(selected.uuid);
             var item = catalog.get(selected.revision);
             if (!asked.contains(player) || item == null || !item.id().equals(selected.id)) continue;
-            selected.colors.validate();
+            if (selected.colors == null) continue;
+            selected.colors.validate(hat);
+            if ("back".equals(item.slot())) { selected.colors.forTint("rightOuter"); selected.colors.forTint("plunger"); }
             next.put(player, selected);
             loaded.computeIfAbsent(item.revision(), unused -> load(item));
         }

@@ -198,6 +198,7 @@ stonecutter {
         replace('.getSession().getUuidOrNull()', '.getUser().getProfileId()')
         replace('.getUuid()', '.getUUID()')
         replace('.world', '.level')
+        replace('net.minecraft.entity.EquipmentSlot', 'net.minecraft.world.entity.EquipmentSlot')
         replace('.getTextureManager().registerTexture(', '.getTextureManager().register(')
         replace('.destroyTexture(', '.release(')
         replace('.setColorArgb(', '.setPixel(')

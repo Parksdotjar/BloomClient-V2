@@ -38,7 +38,9 @@ export function readWing(bytes) {
   const wing = JSON.parse(strFromU8(files['wing.json']));
   need(wing.format === 1 && typeof wing.id === 'string' && id.test(wing.id), 'Unsupported wing format or ID.');
   need(typeof wing.name === 'string' && !!wing.name.trim() && wing.name.length <= 120, 'Invalid wing name.');
-  need(Object.keys(wing.defaults ?? {}).length === 3 && tints.every(tint => /^#[a-fA-F0-9]{6}$/.test(wing.defaults[tint])), 'Invalid wing color controls.');
+  need(wing.slot === undefined || wing.slot === 'hat' || wing.slot === 'back', 'Invalid cosmetic slot.');
+  const palette = wing.slot === 'back' ? [...tints, 'rightOuter', 'plunger'] : wing.slot === 'hat' ? [...tints, 'rightOuter'] : tints;
+  need(Object.keys(wing.defaults ?? {}).length === palette.length && palette.every(tint => /^#[a-fA-F0-9]{6}$/.test(wing.defaults[tint])), 'Invalid wing color controls.');
   need(Number.isInteger(wing.duration) && wing.duration >= 1 && wing.duration <= 10000, 'Invalid flap duration.');
   need(Array.isArray(wing.frames) && wing.frames.length >= 2 && wing.frames.length <= 800, 'Invalid flap frames.');
   const matrixCount = wing.frames[0].matrices?.length;
@@ -54,18 +56,22 @@ export function readWing(bytes) {
   let vertices = 0;
   for (const batch of wing.batches) {
     need(Number.isInteger(batch.matrix) && batch.matrix >= 0 && batch.matrix < matrixCount &&
-      (tints.includes(batch.tint) || batch.tint === 'fixed' && /^#[a-fA-F0-9]{6}$/.test(batch.color)), 'Invalid wing batch binding.');
+      (palette.includes(batch.tint) || batch.tint === 'fixed' && /^#[a-fA-F0-9]{6}$/.test(batch.color)), 'Invalid wing batch binding.');
+    if (wing.slot === 'back') {
+      need(/^#[a-fA-F0-9]{6}$/.test(batch.color), 'Invalid source shade.');
+      need(batch.shineRow === undefined || (Number.isInteger(batch.shineRow) && batch.shineRow >= 0 && batch.shineRow < 21 && batch.tint === 'rightOuter'), 'Invalid liquid shine row.');
+    }
     need(texture.test(batch.texture) && files[batch.texture], 'Wing batch references a missing texture.');
     need(Array.isArray(batch.vertices) && batch.vertices.length > 0 && batch.vertices.length % 32 === 0 &&
       batch.vertices.every(finite), 'Invalid wing geometry.');
     vertices += batch.vertices.length / 8;
   }
-  need(vertices <= 9216 && ['left', 'right'].every(side => wing.batches.some(batch => batch.tint === side)), 'Invalid wing sides or vertex count.');
+  need(vertices <= 9216 && (wing.slot ? palette : ['left', 'right']).every(side => wing.batches.some(batch => batch.tint === side)), 'Invalid wing sides or vertex count.');
   for (const file of Object.keys(files).filter(name => texture.test(name))) picture(files[file], 1024);
   picture(files['preview.png'], 1200);
   need(files['preview.png'].length <= 1024 * 1024, 'Shop thumbnail exceeds 1 MB.');
   return {
-    id: wing.id, name: wing.name, defaults: wing.defaults,
+    id: wing.id, name: wing.name, defaults: wing.defaults, slot: wing.slot,
     revision: createHash('sha256').update(bytes).digest('hex'),
     preview: files['preview.png'],
   };
@@ -76,12 +82,12 @@ function catalog(root) {
   for (const name of readdirSync(root).sort()) {
     if (!name.endsWith('.zip')) continue;
     need(revisionPattern.test(basename(name, '.zip')), 'A wing package must be named by its revision.');
-    const { id, name: title, defaults, revision } = readWing(readFileSync(join(root, name)));
+    const { id, name: title, defaults, revision, slot } = readWing(readFileSync(join(root, name)));
     need(name === revision + '.zip', 'A wing package changed after staging.');
     const preview = readFileSync(join(root, revision + '.png'));
     picture(preview, 1200);
     need(preview.length <= 1024 * 1024, 'Shop thumbnail exceeds 1 MB.');
-    entries.push({ id, name: title, defaults, revision, previewRevision: createHash('sha256').update(preview).digest('hex') });
+    entries.push({ id, name: title, defaults, revision, ...(slot ? { slot } : {}), previewRevision: createHash('sha256').update(preview).digest('hex') });
   }
   need(entries.length <= 80, 'A build may contain up to 80 wing revisions.');
   return entries;

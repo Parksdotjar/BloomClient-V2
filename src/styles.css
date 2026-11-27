@@ -725,7 +725,7 @@ nav button.active svg {
   white-space: pre-line;
 }
 .accent-picker-popover {
-  position: fixed; z-index: 12000; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  position: fixed; z-index: 12000; display: grid; grid-template-columns: minmax(0, 1fr) 34px auto;
   gap: 12px; width: min(296px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
   padding: 9px 10px 11px; border: 1px solid var(--launcher-menu-line); border-radius: 10px;
   background: var(--launcher-menu); color: var(--text); box-shadow: 0 8px 24px var(--theme-shadow-soft);
@@ -3456,3 +3456,6 @@ button[aria-expanded="true"] {
 .instance-java-editor textarea { min-height: 112px; resize: vertical; font-family: monospace; line-height: 1.6; }
 .instance-preferences :is(input, textarea, summary, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 760px) { .instance-preference-row { grid-template-columns: minmax(0, 1fr) 28px; gap: 10px; } .instance-preference-row > :nth-child(2) { grid-row: 2; grid-column: 1 / -1; } .instance-preference-row > .info-tip-trigger { grid-row: 1; grid-column: 2; } .instance-preferences-heading { flex-wrap: wrap; padding: 18px; } .instance-preferences-fields { padding: 0 18px 18px; } }
+
+.color-picker-dropper { display: grid; place-items: center; border: 1px solid var(--launcher-menu-line); border-radius: 6px; color: var(--text); background: var(--launcher-menu-hover); cursor: crosshair; }
+.color-picker-dropper:hover { border-color: var(--muted); }

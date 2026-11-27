@@ -21,28 +21,55 @@ final class DelightWingData {
     private static final int MIB = 1024 * 1024;
     private static final Gson JSON = new Gson();
 
-    record Colors(String left, String right, String trim) {
+    record Colors(String left, String right, String trim, String rightOuter, String plunger) {
+        Colors(String left, String right, String trim, String rightOuter) { this(left, right, trim, rightOuter, null); }
         private static int parse(String hex) {
-            if (hex == null || !hex.matches("#[a-fA-F0-9]{6}")) throw new IllegalArgumentException("Invalid wing color");
-            return Integer.parseInt(hex.substring(1), 16);
+            if (hex == null || hex.length() != 7 || hex.charAt(0) != '#') throw new IllegalArgumentException("Invalid wing color");
+            return Integer.parseUnsignedInt(hex, 1, 7, 16);
         }
-        void validate() { parse(left); parse(right); parse(trim); }
+        void validate(boolean hat) {
+            parse(left); parse(right); parse(trim);
+            if (hat) parse(rightOuter);
+        }
         int forTint(String tint) {
             return parse(switch (tint) {
                 case "left" -> left;
                 case "right" -> right;
                 case "trim" -> trim;
+                case "rightOuter" -> rightOuter;
+                case "plunger" -> plunger;
                 default -> throw new IllegalArgumentException("Invalid tint slot");
             });
         }
     }
-    record Item(String id, String revision, String name, Colors defaults) {}
+    record Item(String id, String revision, String name, Colors defaults, String slot) {
+        boolean hat() { return "hat".equals(slot); }
+    }
     record Catalog(int format, List<Item> entries) {}
     record Frame(int time, float[][] matrices) {}
-    record Batch(int matrix, String texture, String tint, String color, float[] vertices) {
+    record Batch(int matrix, String texture, String tint, String color, Integer shineRow, float[] vertices) {
+        private static double brightness(int rgb) {
+            return (rgb >> 16 & 255) * .2126 + (rgb >> 8 & 255) * .7152 + (rgb & 255) * .0722;
+        }
+        int accentColor(Colors selected, Colors defaults, long milliseconds) {
+            int chosen = selected.forTint(tint), base = defaults.forTint(tint), shade = Colors.parse(color);
+            int center = (int) (Math.floorMod(milliseconds, 5000L) / 45L) - 2;
+            int distance = shineRow == null ? 3 : Math.abs(shineRow - center);
+            double shine = distance == 0 ? .23 : distance == 1 ? .14 : distance == 2 ? .07 : 0;
+            double reference = brightness(base), delta = brightness(shade) - reference;
+            double shadow = 1 + Math.min(0, delta) / Math.max(1, reference);
+            double highlight = Math.min(.30, Math.max(0, delta) / 255);
+            int result = 0xff000000;
+            for (int shift = 0; shift <= 16; shift += 8) {
+                int c = chosen >> shift & 255;
+                double value = chosen == base ? (shade >> shift & 255) : c * shadow + (255 - c) * highlight;
+                result |= (int)Math.round(value + (255 - value) * shine) << shift;
+            }
+            return result;
+        }
         int rgb(Colors selected) { return "fixed".equals(tint) ? Colors.parse(color) : selected.forTint(tint); }
     }
-    record Model(int format, String id, int duration, List<Frame> frames, List<Batch> batches) {
+    record Model(int format, String id, String slot, Colors defaults, int duration, List<Frame> frames, List<Batch> batches) {
         Matrix4f[] pose(long timeMs) {
             int time = (int) Math.floorMod(timeMs, duration);
             int lo = 0, hi = frames.size() - 1;
@@ -71,7 +98,9 @@ final class DelightWingData {
         for (Item item : catalog.entries) {
             if (!item.id.matches("[a-z0-9][a-z0-9_-]{0,63}") || !item.revision.matches("[0-9a-f]{64}") ||
                 byRevision.putIfAbsent(item.revision, item) != null) throw new IOException("Invalid Wing entry");
-            item.defaults.validate();
+            if (item.slot != null && !item.hat() && !"back".equals(item.slot)) throw new IOException("Invalid cosmetic slot");
+            item.defaults.validate(item.hat());
+            if ("back".equals(item.slot)) { Colors.parse(item.defaults.rightOuter); Colors.parse(item.defaults.plunger); }
         }
         return Map.copyOf(byRevision);
     }
@@ -94,7 +123,7 @@ final class DelightWingData {
         }
         Model model = JSON.fromJson(new String(files.remove("wing.json"), StandardCharsets.UTF_8), Model.class);
         files.remove("preview.png");
-        if (model.format != 1 || !item.id.equals(model.id) || model.duration < 1 || model.duration > 10_000 ||
+        if (model.format != 1 || !item.id.equals(model.id) || !java.util.Objects.equals(item.slot, model.slot) || model.duration < 1 || model.duration > 10_000 ||
             model.frames.size() < 2 || model.frames.size() > 800 || model.frames.getFirst().time != 0 ||
             model.frames.getLast().time != model.duration || model.batches.size() > 300)
             throw new IOException("Invalid wing runtime data");

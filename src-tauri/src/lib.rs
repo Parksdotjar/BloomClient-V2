@@ -4619,10 +4619,12 @@ fn repair_minecraft_installation(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
-    #[cfg(desktop)]
+    #[cfg(all(desktop, not(feature = "local-cosmetics-test")))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
         player_links::show_main_window(app);
-    })).plugin(tauri_plugin_deep_link::init());
+    }));
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_deep_link::init());
     let builder = builder
         .manage(player_links::PendingLinks::default())
         .manage(LauncherState::default())
