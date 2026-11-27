@@ -1,6 +1,6 @@
 [package]
 name = "bloomclient"
-version = "1.3.6"
+version = "1.3.7"
 description = "An open-source Minecraft desktop client"
 authors = ["Delight Client contributors"]
 edition = "2021"
