@@ -54,9 +54,11 @@ export function OnboardingSplash() {
 export function OnboardingFlow({
   clientId,
   onComplete,
+  onPreviewCosmetics,
 }: {
   clientId: string;
   onComplete: (profile: OnboardingProfile) => void;
+  onPreviewCosmetics?: () => void;
 }) {
   const attempt = useRef(0);
   const [phase, setPhase] = useState<Phase>("welcome");
@@ -66,6 +68,18 @@ export function OnboardingFlow({
   const [copying, setCopying] = useState(false);
   const [profile, setProfile] = useState<OnboardingProfile | null>(null);
   const [error, setError] = useState("");
+  const [localPreview, setLocalPreview] = useState(false);
+  const checkLocalPreview = Boolean(onPreviewCosmetics);
+  useEffect(() => {
+    if (!checkLocalPreview) return;
+    let active = true;
+    void invoke<{ localPreview?: boolean; items: unknown[] }>("cosmetics_request", {
+      method: "GET", path: "/v1/hats/shop", accountId: null, body: null,
+    }).then(catalog => {
+      if (active) setLocalPreview(catalog.localPreview === true && catalog.items.length > 0);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [checkLocalPreview]);
 
   useEffect(() => () => { attempt.current += 1; }, []);
 
@@ -131,6 +145,9 @@ export function OnboardingFlow({
               <span><img src={new URL("microsoft-logo.svg", document.baseURI).href} alt="" /></span>
               Connect Microsoft
             </button>
+            {localPreview && <button className="onboarding-preview" onClick={onPreviewCosmetics}>
+              Preview local cosmetics <ArrowRight size={16} />
+            </button>}
           </div>}
 
           {phase === "requesting" && <div className="onboarding-step onboarding-requesting">

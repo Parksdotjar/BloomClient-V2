@@ -2,6 +2,33 @@
   "format": 1,
   "entries": [
     {
+      "id": "bunny-ears",
+      "name": "Bunny Ears",
+      "defaults": {
+        "left": "#eab6ce",
+        "right": "#eab6ce",
+        "trim": "#ffffff",
+        "rightOuter": "#ffffff"
+      },
+      "revision": "0d880704191dbaedc7135637bb59869073d6305c743138d198ba3e84a6a27a69",
+      "slot": "hat",
+      "previewRevision": "4568597cca1b24e9b351e575a7e5a83e3ff6dab84aa53579f587227b4b79cca2"
+    },
+    {
+      "id": "green-syringe",
+      "name": "Green Syringe",
+      "defaults": {
+        "left": "#83849b",
+        "right": "#87c790",
+        "trim": "#554a50",
+        "rightOuter": "#24c855",
+        "plunger": "#585668"
+      },
+      "revision": "5e7d7bbd1b55800e6d5e08e6a58670fe71621716dc99c4d3ba2f66423bc29776",
+      "slot": "back",
+      "previewRevision": "754448fe516e581d714dc97a2f6a9bc057b5bc84973be76141e23b78f236ffb3"
+    },
+    {
       "id": "eclipse-angel-wings",
       "name": "Eclipse Angel Wings",
       "defaults": {
@@ -11,6 +38,32 @@
       },
       "revision": "ae3f5ac43d3026425121a0f5b370c6fbbc0c6d80aef519b0f38009615b38a3b1",
       "previewRevision": "0b5c0fc90700de1a349a99f724572127e0d1abc3a4a072d978863ccc76920bf0"
+    },
+    {
+      "id": "miners-helmet",
+      "name": "Miner's Helmet",
+      "defaults": {
+        "left": "#f2bd4b",
+        "right": "#e3ab39",
+        "trim": "#f8e3a4",
+        "rightOuter": "#a19b89"
+      },
+      "revision": "b7eb2662a48c8399f3b0b47403b0634cdeb9a5c0a7b0f3e0d097d3dd20fb392f",
+      "slot": "hat",
+      "previewRevision": "37da226a98c0c5dc4df9f88fdc84da99c8d20e5def3a155f053ab5daca427b22"
+    },
+    {
+      "id": "mushroom-cap",
+      "name": "Mushroom Cap",
+      "defaults": {
+        "left": "#9b2a22",
+        "right": "#f3dcb5",
+        "trim": "#b43929",
+        "rightOuter": "#a17d59"
+      },
+      "revision": "fa1982133bdd6a026e5e29ebbc58eb3515d7cda7c2dbb988ec7553fd3b7ca513",
+      "slot": "hat",
+      "previewRevision": "30c0d93440e903baa95a847898a29de14496b7f7985e04c1052269b3174f8d8a"
     }
   ]
 }

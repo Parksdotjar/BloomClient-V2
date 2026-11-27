@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "../services/invoke";
+import { Vector3 } from "three";
+import { lockerAnchors, lockerPreviewZoom } from "./locker-preview-zoom";
 import { SkinViewer } from "skinview3d";
 
 // Keep recently displayed images decoded so revisiting a skin takes one texture swap.
@@ -7,7 +9,7 @@ const skinImages = new Map<string, HTMLImageElement>();
 window.addEventListener("bloom-clear-transient-caches", () => skinImages.clear());
 
 export type CapeAnimation = { atlasUrl: string; frameCount: number; columns: number; rows: number; frameWidth: number; frameHeight: number; fps: number; loop: boolean };
-export function CapePreview({ texture, animation, skinUuid, skinTexture, variant, front = false, motion = true }: { texture?: string; animation?: CapeAnimation | null; skinUuid?: string; skinTexture?: string; variant?: "classic" | "slim"; front?: boolean; motion?: boolean }) {
+export function CapePreview({ texture, animation, skinUuid, skinTexture, variant, front = false, focus = "back", motion = true }: { texture?: string; animation?: CapeAnimation | null; skinUuid?: string; skinTexture?: string; variant?: "classic" | "slim"; front?: boolean; focus?: keyof typeof lockerAnchors; motion?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const fallback = useRef<HTMLCanvasElement | null>(null);
   const renderer = useRef<SkinViewer | null>(null);
@@ -47,9 +49,13 @@ export function CapePreview({ texture, animation, skinUuid, skinTexture, variant
       viewer.controls.rotateSpeed = 0.78;
       viewer.autoRotate = false;
 
-    } catch { setError("3D preview unavailable on this device"); }
-    return () => { renderer.current = null; viewer?.dispose(); };
-  }, [front, motion]);
+    } catch { setError("3D preview unavailable on this device"); return; }
+    const anchor = new Vector3(...lockerAnchors[focus]);
+    anchor.y -= 16;
+    viewer.playerObject.localToWorld(anchor);
+    const zoom = lockerPreviewZoom(viewer.canvas, viewer.camera, viewer.controls, anchor);
+    return () => { zoom.dispose(); renderer.current = null; viewer.dispose(); };
+  }, [front, motion, focus]);
 
   useEffect(() => {
     const viewer = renderer.current;
@@ -83,7 +89,7 @@ export function CapePreview({ texture, animation, skinUuid, skinTexture, variant
       };
       void load().catch(() => { if (!stopped) setError("Preview unavailable"); });
     return () => { stopped = true; clearInterval(timer); };
-  }, [texture, animation, front, motion]);
+  }, [texture, animation, front, motion, focus]);
 
   useEffect(() => {
     const viewer = renderer.current;
@@ -112,6 +118,6 @@ export function CapePreview({ texture, animation, skinUuid, skinTexture, variant
     image.onerror = () => { if (current) setError("Preview unavailable"); };
     image.src = source;
     return () => { current = false; };
-  }, [skinTexture, accountSkin, variant, front, motion]);
-  return <div className="cape-preview"><canvas ref={canvas} aria-label="Drag to rotate your Minecraft player and cape" />{error && <p role="status">{error}</p>}</div>;
+  }, [skinTexture, accountSkin, variant, front, motion, focus]);
+  return <div className="cape-preview"><canvas ref={canvas} aria-label="Drag to rotate, scroll to zoom" />{error && <p role="status">{error}</p>}</div>;
 }

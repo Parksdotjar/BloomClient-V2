@@ -1,3 +1,4 @@
+import { copyTextWithFeedback } from "../services/clipboard";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, Copy, PackagePlus } from "lucide-react";
 import { PackContentsReview, type ReleaseDraft } from "./PackContentsReview";
@@ -77,7 +78,7 @@ export function SharedPackOverview({ instance, page, sharing, onNavigate, Select
   const copyLink = async () => {
     if (!publication) return;
     try {
-      await navigator.clipboard.writeText(publication.playerUrl);
+      await copyTextWithFeedback(publication.playerUrl);
       setCopyStatus("copied");
     } catch {
       linkInput.current?.focus();

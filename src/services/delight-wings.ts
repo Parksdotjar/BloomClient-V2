@@ -1,24 +1,28 @@
 import { strFromU8, unzipSync } from "fflate";
 import { invoke } from "./invoke";
 
-export type Tint = "left" | "right" | "trim";
-export type WingColors = Record<Tint, string>;
-export type WingRevision = { id: string; revision: string; name: string; defaults: WingColors; previewRevision?: string };
+export type CosmeticCategory = "wings" | "hats" | "back";
+export type Tint = "left" | "right" | "trim" | "rightOuter" | "plunger";
+export type WingColors = Record<Exclude<Tint, "rightOuter" | "plunger">, string> & { rightOuter?: string; plunger?: string };
+export type WingRevision = { id: string; revision: string; name: string; defaults: WingColors; previewRevision?: string; slot?: "hat" | "back" };
 export type WingOffer = WingRevision & { owned: boolean; configured?: WingColors | null };
 export type EquippedWing = Pick<WingRevision, "id" | "revision"> & { colors: WingColors };
 export type WingCatalog = { items: WingOffer[]; equipped?: EquippedWing | null; localPreview?: boolean };
-export type WingBatch = { matrix: number; texture: string; tint: Tint | "fixed"; color?: string; vertices: number[] };
+export type WingBatch = { matrix: number; texture: string; tint: Tint | "fixed"; color?: string; shineRow?: number; vertices: number[] };
 export type WingRuntime = {
-  id: string; duration: number;
+  id: string; duration: number; slot?: "hat" | "back";
   frames: { time: number; matrices: number[][] }[];
   batches: WingBatch[];
 };
-export const wingLabels = { left: "Left wing", right: "Right wing", trim: "Metal trim" };
-export const tintKeys = Object.keys(wingLabels) as Tint[];
+export const cosmeticColorLabels = {
+  back: { left: "Needle tip", right: "Nozzle", trim: "Casing", rightOuter: "Liquid", plunger: "Plunger" },
+  wings: { left: "Left wing", right: "Right wing", trim: "Metal trim" },
+  hats: { left: "Left inner ear", trim: "Left outer ear", right: "Right inner ear", rightOuter: "Right outer ear" },
+};
 const assets = "./delight-wings/";
 
-export function wingRequest<T>(method: string, endpoint: string, accountId?: string, body?: unknown) {
-  return invoke<T>("cosmetics_request", { method, path: "/v1/wings/" + endpoint, accountId: accountId ?? null, body: body ?? null });
+export function wingRequest<T>(method: string, endpoint: string, accountId?: string, body?: unknown, category: CosmeticCategory = "wings") {
+  return invoke<T>("cosmetics_request", { method, path: "/v1/" + (category === "back" ? "wings" : category) + "/" + endpoint, accountId: accountId ?? null, body: body ?? null });
 }
 
 let installedRequest: Promise<Map<string, WingRevision>> | undefined;
@@ -49,6 +53,6 @@ export async function readWingRuntime(item: WingRevision, signal: AbortSignal) {
   if (bytes.byteLength > 4 * 1024 * 1024) throw new Error("The wing preview is too large.");
   const files = unzipSync(new Uint8Array(bytes), { filter: item => item.name !== "preview.png" });
   const model: WingRuntime = JSON.parse(strFromU8(files["wing.json"]));
-  if (model.id !== item.id || !model.frames.length) throw new Error("The wing preview has a different revision.");
+  if (model.id !== item.id || model.slot !== item.slot || !model.frames.length) throw new Error("The wing preview has a different revision.");
   return { model, files };
 }

@@ -8,7 +8,7 @@ const VERSIONS: &[&str] = &["1.21.11", "26.1", "26.2", "26.3"];
 const WINGS_GAME_PREVIEW: &str = "DELIGHT_WINGS_GAME_PREVIEW";
 
 fn local_wings_preview() -> bool {
-    cfg!(debug_assertions) && std::env::var("DELIGHT_WINGS_LOCAL_PREVIEW").as_deref() != Ok("0")
+    cfg!(any(debug_assertions, feature = "local-cosmetics-test")) && std::env::var("DELIGHT_WINGS_LOCAL_PREVIEW").as_deref() != Ok("0")
 }
 
 fn legacy_file() -> String {
@@ -366,18 +366,22 @@ pub async fn cosmetics_request(
         ("GET", "/v1/cosmetics/me")
             | ("GET", "/v1/capes/locker")
             | ("GET", "/v1/wings/locker")
+            | ("GET", "/v1/hats/locker")
+            | ("POST", "/v1/hats/claim")
+            | ("PUT", "/v1/hats/equipped")
             | ("POST", "/v1/wings/claim")
             | ("PUT", "/v1/wings/equipped")
             | ("POST", "/v1/capes/redeem")
             | ("POST", "/v1/capes/claim")
             | ("PUT", "/v1/capes/equipped")
             | ("PUT", "/v1/cosmetics/badge")
-    ) || (method == "GET" && matches!(path.as_str(), "/v1/capes/shop" | "/v1/wings/shop") && account_id.is_some());
-    if !authorized && !(method == "GET" && matches!(path.as_str(), "/v1/capes" | "/v1/capes/shop" | "/v1/wings/shop")) {
+    ) || (method == "GET" && matches!(path.as_str(), "/v1/capes/shop" | "/v1/wings/shop" | "/v1/hats/shop") && account_id.is_some());
+    if !authorized && !(method == "GET" && matches!(path.as_str(), "/v1/capes" | "/v1/capes/shop" | "/v1/wings/shop" | "/v1/hats/shop")) {
         return Err("Unsupported cosmetics operation".into());
     }
-    #[cfg(debug_assertions)]
-    if path.starts_with("/v1/wings/") && local_wings_preview() {
+    let model_cosmetic = path.starts_with("/v1/wings/") || path.starts_with("/v1/hats/");
+    #[cfg(any(debug_assertions, feature = "local-cosmetics-test"))]
+    if model_cosmetic && local_wings_preview() {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(std::time::Duration::from_secs(5))
@@ -441,7 +445,7 @@ pub async fn cosmetics_request(
                 }
                 return Err("The cape service could not be reached.".into());
             }
-            Err(_) => return Err("The cape service could not be reached.".into()),
+            Err(_) => return Err("The cosmetics service could not be reached.".into()),
         };
         if response.status() == 401 && attempt == 0 {
             if let Some(ref s) = session {
@@ -452,13 +456,13 @@ pub async fn cosmetics_request(
             }
         }
         if !response.status().is_success() {
-            if path.starts_with("/v1/wings/") {
+            if model_cosmetic {
                 return Err(match response.status().as_u16() {
-                    401 => "Sign in to Minecraft again to manage your wings.",
-                    403 => "Add these wings to your Locker before equipping them.",
-                    404 => "This wing revision is unavailable.",
+                    401 => "Sign in to Minecraft again to manage cosmetics.",
+                    403 => "Add this cosmetic to Locker before equipping it.",
+                    404 => "This cosmetic revision is unavailable.",
                     429 => "Too many requests. Wait a minute and try again.",
-                    _ => "The Wings service could not complete this action.",
+                    _ => "The cosmetics service could not complete this action.",
                 }.into());
             }
             if path == "/v1/capes/claim" {

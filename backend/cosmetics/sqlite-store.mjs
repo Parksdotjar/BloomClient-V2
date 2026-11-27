@@ -38,6 +38,7 @@ export class SqliteCosmeticsStore {
       CREATE TABLE IF NOT EXISTS cape_shop_settings(id INTEGER PRIMARY KEY CHECK(id=1),featured_id TEXT REFERENCES capes(id));
       CREATE TABLE IF NOT EXISTS cape_migrations(id TEXT PRIMARY KEY);`);
     this.wings = new WingStorage(this.db, work => this.transaction(work));
+    this.hats = new WingStorage(this.db, work => this.transaction(work), true);
     this.transaction(() => {
       if(this.db.prepare('SELECT 1 FROM cape_migrations WHERE id=?').get('owned-locker-v1'))return;
       // Preserve legitimately equipped public capes; never grant an unclaimed code-only cape.

@@ -134,7 +134,9 @@ try {
     await focus(); await enabled();
     assert.equal(await progressBar.count(), 0, "Terminal launch states clear the progress bar");
     if (terminal === "error") {
-      const toast = page.locator(".launch-toast");
+      const toast = page.locator('.desktop-notification-center[data-face="notice"]');
+      assert.equal(await page.locator(".launch-toast").count(), 0);
+      await toast.locator(".desktop-island-notice-trigger").click();
       assert((await toast.textContent()).includes("Minecraft crashed (exit code 1)."));
       const count = () => page.evaluate(() => launchTest.calls.filter(x => x.command === "ask_delight_remote" && x.args?.body).length);
       const before = await count();
@@ -195,6 +197,11 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.dataset.animations), "off", "Recovery respects the user's motion/performance settings");
   }
   assert.deepEqual(errors, []);
+  await page.evaluate(() => window.dispatchEvent(new Event("delight-clipboard-copied")));
+  const copyNotice = page.getByRole("button", { name: "Copied to clipboard.", exact: true });
+  await copyNotice.waitFor();
+  assert.equal(await page.locator(".launch-toast").count(), 0);
+  await copyNotice.waitFor({ state: "hidden", timeout: 10000 });
   console.log("Launch recovery passed: motion/navigation during launch and gameplay; dropped exit/error/cancel/complete events; stale snapshots and idle timers; pending commands; temporary polling errors; listener cleanup and retained preferences.");
 } catch (error) {
   console.error("Browser errors", errors);

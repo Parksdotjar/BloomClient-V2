@@ -1,3 +1,5 @@
+import { copyTextWithFeedback } from "./services/clipboard";
+import type { IslandFeedback } from "./components/DesktopNotificationCenter";
 import { captureAppearance, normalizeIslandColor } from "./services/appearance-presets";
 import { KeyboardShortcuts } from "./components/KeyboardShortcuts";
 import { ShortcutContext, binding, shortcuts, chord, recording, shortcutMatches, type Bindings } from "./services/shortcuts";
@@ -846,7 +848,8 @@ function SignInPanel({
   );
   const copyCode = async () => {
     if (!code) return;
-    await navigator.clipboard?.writeText(code);
+    try { await copyTextWithFeedback(code); }
+    catch { setStatus("Could not copy the code. Select it and copy manually."); return; }
     setHandoffReady(true);
     setCopied(true);
   };
@@ -2700,7 +2703,7 @@ function LogsPage({ entries, running, onClear, onShare }: { onShare?: () => void
   const first = entries[0]?.timestamp;
   const last = entries.at(-1)?.timestamp;
   useEffect(() => { consoleEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [entries.length]);
-  const copyLogs = () => void navigator.clipboard.writeText(filtered.map(entry => `[${new Date(entry.timestamp).toLocaleTimeString()}] [${entry.level.toUpperCase()}] ${entry.message}`).join("\n"));
+  const copyLogs = () => void copyTextWithFeedback(filtered.map(entry => `[${new Date(entry.timestamp).toLocaleTimeString()}] [${entry.level.toUpperCase()}] ${entry.message}`).join("\n"));
   return <div className="logs-page">
     <header className="logs-heading"><div><h1>Live Logs</h1></div><span className={`logs-live ${running ? "active" : ""}`}><i />{running ? "Live session" : "Console idle"}</span></header>
     <section className="log-stats">
@@ -3096,10 +3099,19 @@ export function App() {
   const [gameRunning, setGameRunning] = useState(false);
   const titleBarLaunch = useTitleBarLaunchProgress();
   const launchRequestPending = useRef(false);
-  const [toast, setToast] = useState("");
-  const toolToastTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(toolToastTimer.current), []);
-  const [toastKind, setToastKind] = useState<"notification" | "error">("notification");
+  const [feedbackQueue, setFeedbackQueue] = useState<IslandFeedback[]>([]);
+  const feedbackSequence = useRef(0);
+  const feedback = feedbackQueue[0];
+  const dismissFeedback = useCallback((id: string) => setFeedbackQueue(items => items.filter(item => item.id !== id)), []);
+  const showToolMessage = useCallback((message: string, kind: "notification" | "error" = "notification") => {
+    const item = { id: "feedback-" + ++feedbackSequence.current, message: userError(message), kind };
+    setFeedbackQueue(items => items.at(-1)?.message === item.message && items.at(-1)?.kind === kind ? items : [...items, item]);
+  }, []);
+  useEffect(() => {
+    const copied = () => showToolMessage("Copied to clipboard.");
+    window.addEventListener("delight-clipboard-copied", copied);
+    return () => window.removeEventListener("delight-clipboard-copied", copied);
+  }, [showToolMessage]);
   const addCompletedDownloads = (additions: CompletedDownload[]) => {
     // Persist before acknowledging a native snapshot, including bursts batched by React.
     const saved = readCompletedDownloads();
@@ -3419,17 +3431,15 @@ export function App() {
       const update = await updateCheck.current;
       if (manual && update && !fromConfirmation) openUpdateConfirmation();
       else if (manual && !update && !fromConfirmation) {
-        setToastKind("notification");
-        setToast("Delight Client is already up to date.");
-        window.setTimeout(() => setToast(""), 3200);
+        showToolMessage("Delight Client is already up to date.", "notification");
+
       }
       return Boolean(update);
     } catch (error) {
       if (fromConfirmation) setUpdateError("Couldn’t check for updates. Try again.");
       else if (manual) {
-        setToastKind("error");
-        setToast(`Could not check for updates: ${String(error)}`);
-        window.setTimeout(() => setToast(""), 4200);
+        showToolMessage(`Could not check for updates: ${String(error)}`, "error");
+
       }
       return false;
     }
@@ -3582,8 +3592,8 @@ export function App() {
     if (gameRunning || download.active) return;
     const timer = window.setTimeout(() => {
       void invoke<string[]>("reconcile_cosmetics").then(problems => {
-        if (problems.length) { setToastKind("error"); setToast(problems.join("\n")); }
-      }).catch(error => { setToastKind("error"); setToast(String(error)); });
+        if (problems.length) { showToolMessage(problems.join("\n"), "error"); }
+      }).catch(error => { showToolMessage(String(error), "error"); });
     }, 750);
     return () => window.clearTimeout(timer);
   }, [instances, gameRunning, download.active]);
@@ -3621,10 +3631,9 @@ export function App() {
           taskIcon: current.instanceId === next.instanceId ? current.taskIcon : undefined,
         }));
         if (next.state === "error") {
-          setToastKind("error");
-          setToast(userError(next.message));
+          showToolMessage(userError(next.message), "error");
           setLogs(current => [...current, { id: `${Date.now()}-launch-error`, instanceId: next.instanceId || "launcher", instanceName: instances.find(item => item.id === next.instanceId)?.name || next.instanceId || "Launcher", stream: "launcher", level: "error" as const, message: next.message, timestamp: Date.now() }].slice(-600));
-          window.setTimeout(() => setToast(""), 5000);
+
         }
         if (next.state === "running") {
           if (settings.closeAfterLaunch) void invoke("exit_application");
@@ -3721,9 +3730,8 @@ export function App() {
   }, [gameDownload.state, gameDownload.instanceId, gameDownload.progress, gameDownload.active]);
   const launch = async (instance: InstanceDraft, portalTarget?: PortalTarget, reviewed = false) => {
     if (launchRequestPending.current || download.active || gameRunning || applyingUpdate.current || modMaintenance.active || updateInFlight.current) {
-      setToastKind("notification");
-      setToast("Something is already downloading or running. Please wait.");
-      window.setTimeout(() => setToast(""), 3500);
+      showToolMessage("Something is already downloading or running. Please wait.", "notification");
+
       return;
     }
     launchRequestPending.current = true;
@@ -3762,14 +3770,13 @@ export function App() {
         setDownload({active: false, progress: 0, state: "idle", message: ""});
         return;
       }
-      setToastKind("error");
       if (message.includes("Sign in with Microsoft") || message.toLowerCase().includes("needs to reconnect")) {
         setSignInOpen(true);
-        setToast("Your saved profile needs a quick Microsoft reconnect before launching.");
-      } else setToast(message);
+        showToolMessage("Your saved profile needs a quick Microsoft reconnect before launching.", "error");
+      } else showToolMessage(message, "error");
       setLogs(current => [...current, { id: `${Date.now()}-invoke-error`, instanceId: instance.id, instanceName: instance.name, stream: "launcher", level: "error" as const, message, timestamp: Date.now() }].slice(-600));
       setDownload({ active: false, progress: 0, state: "idle", message: "" });
-      window.setTimeout(() => setToast(""), 5000);
+
     } finally {
       launchRequestPending.current = false;
     }
@@ -3976,12 +3983,6 @@ export function App() {
     finally { setSwitchingAccount(false); }
   };
   const openSettings = (target = "Appearance", adding = false) => { setSettingsQuery(""); setAddAccount(adding); setSettingsTarget(target); setSettingsNavigationKey(value => value + 1); setPage("settings"); };
-  const showToolMessage = (message: string, kind: "notification" | "error" = "notification") => {
-    window.clearTimeout(toolToastTimer.current);
-    setToastKind(kind);
-    setToast(userError(message));
-    toolToastTimer.current = window.setTimeout(() => setToast(""), 4000);
-  };
   const contentTransfer = useContentTransferController(instances, (targetId, category, message) => {
     const target = instances.find(instance => instance.id === targetId);
     if (target) void refreshInstalledContent(target, category, true);
@@ -4151,7 +4152,12 @@ export function App() {
   const sectionButton = ([Icon, label]: typeof settingTabs[number]) => <button key={label} aria-current={!settingsQuery && settingsTarget === label ? "location" : undefined} onClick={() => openSettings(label)}><Icon size={17} />{settingsLabel(label)}</button>;
   if (!accountHydrated) return <OnboardingSplash />;
   if (onboardingOpen) {
-    return <OnboardingFlow clientId={MICROSOFT_CLIENT_ID} onComplete={(nextProfile) => {
+    return <OnboardingFlow clientId={MICROSOFT_CLIENT_ID} onPreviewCosmetics={import.meta.env.DEV ? () => {
+      localStorage.setItem(ONBOARDING_COMPLETE_STORAGE_KEY, "complete");
+      setOnboardingOpen(false);
+      setLockerSection("Hats");
+      setPage("locker");
+    } : undefined} onComplete={(nextProfile) => {
       localStorage.setItem(ONBOARDING_COMPLETE_STORAGE_KEY, "complete");
       setProfile(nextProfile);
       setOnboardingOpen(false);
@@ -4206,7 +4212,7 @@ export function App() {
           phase: updatePhase, progress: updateProgress, error: updateError, blockedReason: updateNeedsCheck ? undefined : updateBlockedReason,
           checking: updateChecking, needsCheck: updateNeedsCheck, request: updateRequest,
           onAction: updateNeedsCheck ? () => { void checkForUpdates(true, true); } : installUpdate } : undefined}
-        notificationCenter={{ items: notifications.items, loadError: notifications.loadError, onShow: notifications.refresh, onRetry: notifications.refresh,
+        notificationCenter={{ feedback, dismissFeedback, shareCrash: feedback?.kind === "error" && failure && userError(failure.message) === feedback.message ? previewFailure : undefined, items: notifications.items, loadError: notifications.loadError, onShow: notifications.refresh, onRetry: notifications.refresh,
           onOpenItem: openNotification, onMarkAllRead: () => notifications.markRead() }} />
       <div className="desktop-rail"><div className="rail-scroll"><nav className="rail-destinations" aria-label="Main navigation">
         {primaryNavigation.map(([Icon, label, destination, action]) => (
@@ -4505,7 +4511,6 @@ export function App() {
       }} />}
       {floatingInstance && <FloatingInstancePlayer instance={floatingInstance} busy={download.active || gameRunning} onPlay={() => void launch(floatingInstance)} onClose={() => { setFloatingInstanceId(null); document.querySelector<HTMLButtonElement>(".instance-more")?.focus(); }} />}
       {crashPreview && <CrashDetails {...crashPreview} close={() => setCrashPreview(undefined)} />}
-      {toast && <div className={`launch-toast ${toastKind}`} role={toastKind === "error" ? "alert" : "status"} aria-live={toastKind === "error" ? "assertive" : "polite"}><span>{toast}</span>{toastKind === "error" && failure && userError(failure.message) === toast && <button className="share-crash" onClick={previewFailure}>Share crash details</button>}</div>}
       <PlayerInstallBar link={installingPlayerLink} />
       {settings.snowfall === true && settings.animations && !settings.ultraPerformance && <LauncherSnowfall light={resolvedTheme === "light"} settings={settings.snowfallOptions} />}
     </div>

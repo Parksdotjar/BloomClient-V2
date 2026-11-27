@@ -32,31 +32,40 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 
 //? if <26.1 {
 final class DelightWingLayer extends FeatureRenderer<PlayerEntityRenderState, PlayerEntityModel> {
-    DelightWingLayer(FeatureRendererContext<PlayerEntityRenderState, PlayerEntityModel> context) { super(context); }
+    private final boolean hat;
+    DelightWingLayer(FeatureRendererContext<PlayerEntityRenderState, PlayerEntityModel> context, boolean hat) {
+        super(context);
+        this.hat = hat;
+    }
 
     @SuppressWarnings("unchecked")
     static void register() {
         LivingEntityFeatureRendererRegistrationCallback.EVENT.register((entityType, renderer, helper, context) -> {
-            if (renderer instanceof PlayerEntityRenderer player) helper.register(new DelightWingLayer(player));
+            if (renderer instanceof PlayerEntityRenderer player) {
+                helper.register(new DelightWingLayer(player, false));
+                helper.register(new DelightWingLayer(player, true));
+            }
         });
     }
 
     @Override
     public void render(MatrixStack matrices, OrderedRenderCommandQueue queue, int light, PlayerEntityRenderState state, float limbAngle, float limbDistance) {
-        DelightWings.Equipped asset = equipped(state.id);
+        DelightWings.Equipped asset = equipped(state.id, hat);
         if (asset == null) return;
         matrices.push();
         try {
             getContextModel().getRootPart().applyTransform(matrices);
-            getContextModel().body.applyTransform(matrices);
+            (hat ? getContextModel().head : getContextModel().body).applyTransform(matrices);
             matrices.scale(.0625f, -.0625f, -.0625f);
-            matrices.translate(0, -5, -2);
-            var animated = asset.model().pose(System.nanoTime() / 1_000_000L);
+            if (hat) matrices.translate(0, 7.375f, 0);
+            else matrices.translate(0, -5, -2);
+            long milliseconds = System.nanoTime() / 1_000_000L;
+            var animated = asset.model().pose(milliseconds);
             for (var batch : asset.model().batches()) {
                 var texture = asset.textures().get(batch.texture());
                 if (texture == null) continue;
                 var transform = animated[batch.matrix()];
-                int tint = gameColor(batch.rgb(asset.colors()));
+                int tint = (asset.model().defaults() != null && batch.color() != null && !"fixed".equals(batch.tint())) ? batch.accentColor(asset.colors(), asset.model().defaults(), milliseconds) : 0xff000000 | batch.rgb(asset.colors());
                 queue.submitCustom(matrices, RenderLayers.entityCutoutNoCull(texture), (entry, consumer) ->
                     emit(batch.vertices(), transform, (point, normal, u, v) ->
                         consumer.vertex(entry, point.x, point.y, point.z).color(tint)
@@ -67,30 +76,39 @@ final class DelightWingLayer extends FeatureRenderer<PlayerEntityRenderState, Pl
     }
 //?} else {
 /*final class DelightWingLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
-    DelightWingLayer(RenderLayerParent<AvatarRenderState, PlayerModel> context) { super(context); }
+    private final boolean hat;
+    DelightWingLayer(RenderLayerParent<AvatarRenderState, PlayerModel> context, boolean hat) {
+        super(context);
+        this.hat = hat;
+    }
 
     static void register() {
         LivingEntityRenderLayerRegistrationCallback.EVENT.register((entityType, renderer, helper, context) -> {
-            if (renderer instanceof AvatarRenderer<?> player) helper.register(new DelightWingLayer(player));
+            if (renderer instanceof AvatarRenderer<?> player) {
+                helper.register(new DelightWingLayer(player, false));
+                helper.register(new DelightWingLayer(player, true));
+            }
         });
     }
 
     @Override
     public void submit(PoseStack matrices, SubmitNodeCollector queue, int light, AvatarRenderState state, float limbAngle, float limbDistance) {
-        DelightWings.Equipped asset = equipped(state.id);
+        DelightWings.Equipped asset = equipped(state.id, hat);
         if (asset == null) return;
         matrices.pushPose();
         try {
             getParentModel().root().translateAndRotate(matrices);
-            getParentModel().body.translateAndRotate(matrices);
+            (hat ? getParentModel().head : getParentModel().body).translateAndRotate(matrices);
             matrices.scale(.0625f, -.0625f, -.0625f);
-            matrices.translate(0, -5, -2);
-            var animated = asset.model().pose(System.nanoTime() / 1_000_000L);
+            if (hat) matrices.translate(0, 7.375f, 0);
+            else matrices.translate(0, -5, -2);
+            long milliseconds = System.nanoTime() / 1_000_000L;
+            var animated = asset.model().pose(milliseconds);
             for (var batch : asset.model().batches()) {
                 var texture = asset.textures().get(batch.texture());
                 if (texture == null) continue;
                 var transform = animated[batch.matrix()];
-                int tint = gameColor(batch.rgb(asset.colors()));
+                int tint = (asset.model().defaults() != null && batch.color() != null && !"fixed".equals(batch.tint())) ? batch.accentColor(asset.colors(), asset.model().defaults(), milliseconds) : 0xff000000 | batch.rgb(asset.colors());
                 queue.submitCustomGeometry(matrices, RenderTypes.entityCutout(texture), (entry, consumer) ->
                     emit(batch.vertices(), transform, (point, normal, u, v) ->
                         consumer.addVertex(entry, point).setColor(tint)
@@ -101,6 +119,10 @@ final class DelightWingLayer extends FeatureRenderer<PlayerEntityRenderState, Pl
 *///?}
 
     static DelightWings.Equipped equipped(int entityId) {
+        return equipped(entityId, false);
+    }
+
+    private static DelightWings.Equipped equipped(int entityId, boolean hat) {
         MinecraftClient client = MinecraftClient.getInstance();
         //? if <26.1 {
         if (client.world == null || !(client.world.getEntityById(entityId) instanceof AbstractClientPlayerEntity player)) return null;
@@ -108,12 +130,12 @@ final class DelightWingLayer extends FeatureRenderer<PlayerEntityRenderState, Pl
         /*if (client.world == null || !(client.world.getEntity(entityId) instanceof AbstractClientPlayerEntity player)) return null;
         *///?}
         if (player.isInvisible()) return null;
-        return DelightWings.get().forPlayer(BloomCosmeticsRuntime.stableIdentity(client, player), player == client.player);
-    }
-
-    private static int gameColor(int rgb) {
-        int r = Math.max(16, rgb >> 16 & 255), g = Math.max(16, rgb >> 8 & 255), b = Math.max(16, rgb & 255);
-        return 0xff000000 | (r << 16) | (g << 8) | b;
+        //? if <26.1 {
+        if (hat && !player.getEquippedStack(net.minecraft.entity.EquipmentSlot.HEAD).isEmpty()) return null;
+        //?} else {
+        /*if (hat && !player.getItemBySlot(net.minecraft.entity.EquipmentSlot.HEAD).isEmpty()) return null;
+        *///?}
+        return (hat ? DelightWings.hats() : DelightWings.get()).forPlayer(BloomCosmeticsRuntime.stableIdentity(client, player), player == client.player);
     }
 
     private interface VertexWriter { void write(Vector3f point, Vector3f normal, float u, float v); }

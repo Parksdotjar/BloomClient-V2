@@ -1,5 +1,18 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
+import { Pipette } from "lucide-react";
+
+type UndoColor = { owner: symbol; undo: () => boolean };
+const colorHistory: UndoColor[] = [];
+function undoColor(event: KeyboardEvent) {
+  if (event.key.toLowerCase() !== "z" || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
+  if (event.target instanceof Element && event.target.closest('textarea,input:not([type="range"]),[contenteditable="true"]')) return;
+  while (colorHistory.length) {
+    if (colorHistory.pop()!.undo()) { event.preventDefault(); event.stopPropagation(); break; }
+  }
+}
+document.addEventListener("keydown", undoColor, true);
+
 type HsvColor = { hue: number; saturation: number; value: number };
 
 function clampColorChannel(value: number, minimum = 0, maximum = 100) {
@@ -61,6 +74,46 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
   useEffect(() => { preview.current?.(open && hexValid ? currentHex : undefined); }, [open, hexValid, currentHex]);
   useEffect(() => () => preview.current?.(undefined), []);
 
+  const owner = useRef(Symbol());
+  const latest = useRef({ value, onApply });
+  latest.current = { value, onApply };
+  const sample = useRef<AbortController | undefined>(undefined);
+  const nativeColor = useRef<HTMLInputElement>(null);
+  const draftRef = useRef(hexDraft);
+  draftRef.current = hexDraft;
+  useEffect(() => () => {
+    sample.current?.abort();
+    for (let i = colorHistory.length - 1; i >= 0; i--) {
+      if (colorHistory[i].owner === owner.current) colorHistory.splice(i, 1);
+    }
+  }, []);
+  function commit(hex = draftRef.current) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) return;
+    const before = latest.current.value.toLowerCase(), after = hex.toLowerCase();
+    if (before === after) return;
+    colorHistory.push({ owner: owner.current, undo: () => {
+      if (latest.current.value.toLowerCase() !== after) return false;
+      changeHex(before);
+      latest.current.onApply(before);
+      return true;
+    } });
+    if (colorHistory.length > 100) colorHistory.shift();
+    latest.current.onApply(after);
+  }
+  async function pickPixel() {
+    const Dropper = (window as Window & { EyeDropper?: new () => {
+      open(options: { signal: AbortSignal }): Promise<{ sRGBHex: string }>;
+    } }).EyeDropper;
+    if (!Dropper) { nativeColor.current?.click(); return; }
+    const controller = new AbortController();
+    sample.current = controller;
+    try {
+      const picked = await new Dropper().open({ signal: controller.signal });
+      if (!controller.signal.aborted) { changeHex(picked.sRGBHex); commit(picked.sRGBHex); }
+    } catch (error) {
+      if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) nativeColor.current?.click();
+    } finally { sample.current = undefined; }
+  }
   const setHsv = (next: HsvColor) => {
     const normalized = {
       hue: ((next.hue % 360) + 360) % 360,
@@ -68,7 +121,8 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
       value: clampColorChannel(next.value),
     };
     setColor(normalized);
-    setHexDraft(hsvToHex(normalized).toUpperCase());
+    draftRef.current = hsvToHex(normalized).toUpperCase();
+    setHexDraft(draftRef.current);
   };
   const placePicker = () => {
     const bounds = triggerRef.current?.getBoundingClientRect();
@@ -106,7 +160,8 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
   };
   const changeHex = (next: string) => {
     const prefixed = next.startsWith("#") ? next : `#${next}`;
-    setHexDraft(prefixed.toUpperCase());
+    draftRef.current = prefixed.toUpperCase();
+    setHexDraft(draftRef.current);
     if (/^#[0-9a-f]{6}$/i.test(prefixed)) setColor(hexToHsv(prefixed));
   };
 
@@ -124,9 +179,9 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
     if (pickerRef.current) observer.observe(pickerRef.current);
     const closeOutside = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!triggerRef.current?.contains(target) && !pickerRef.current?.contains(target)) closePicker();
+      if (!sample.current && !triggerRef.current?.contains(target) && !pickerRef.current?.contains(target)) { commit(); closePicker(); }
     };
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); closePicker(true); } };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => { if (!sample.current && event.key === "Escape") { event.stopPropagation(); closePicker(true); } };
     window.addEventListener("resize", placePicker);
     window.addEventListener("scroll", placePicker, true);
     document.addEventListener("pointerdown", closeOutside);
@@ -143,7 +198,7 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
   return <>
     <button ref={triggerRef} type="button" className="appearance-color-chip"
       aria-label={`Choose ${label.toLowerCase()}`} aria-expanded={open} aria-haspopup="dialog"
-      onClick={() => open ? closePicker() : openPicker()}>
+      onClick={() => { if (open) { commit(); closePicker(); } else openPicker(); }}>
       <span aria-hidden="true" style={{ background: value }} />{value.toUpperCase()}
     </button>
     {open && createPortal(
@@ -172,6 +227,8 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
           aria-valuenow={Math.round(color.saturation)}
           aria-valuetext={`${Math.round(color.saturation)}% saturation, ${Math.round(color.value)}% brightness`}
           onPointerDown={event => { event.currentTarget.setPointerCapture(event.pointerId); updateFromSquare(event); }}
+          onPointerUp={() => commit()}
+          onKeyUp={event => { if (event.key.startsWith("Arrow")) commit(); }}
           onPointerMove={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) updateFromSquare(event); }}
           onKeyDown={event => {
             const step = event.shiftKey ? 10 : 2;
@@ -192,6 +249,8 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
             max="359"
             value={Math.round(color.hue)}
             aria-label="Hue"
+            onPointerUp={() => commit()}
+            onKeyUp={() => commit()}
             onChange={event => setHsv({ ...color, hue: Number(event.target.value) })}
           />
         </label>
@@ -206,11 +265,13 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
             aria-label="Hex color"
             onChange={event => changeHex(event.target.value)}
             onKeyDown={event => {
-              if (event.key === "Enter" && hexValid) { onApply(currentHex); closePicker(true); }
+              if (event.key === "Enter" && hexValid) { commit(currentHex); closePicker(true); }
             }}
           />
         </label>
-        <button type="button" className="color-picker-apply" disabled={!hexValid} onClick={() => { onApply(currentHex); closePicker(true); }}>Apply color</button>
+        <button type="button" className="color-picker-dropper" aria-label="Pick a color from the screen" title="Pick a color from the screen" onClick={() => void pickPixel()}><Pipette size={16}/></button>
+        <input hidden ref={nativeColor} type="color" value={currentHex} aria-label="System color picker" onChange={event => { changeHex(event.target.value); commit(event.target.value); }}/>
+        <button type="button" className="color-picker-apply" disabled={!hexValid} onClick={() => { commit(currentHex); closePicker(true); }}>Apply color</button>
       </div>,
       document.body,
     )}

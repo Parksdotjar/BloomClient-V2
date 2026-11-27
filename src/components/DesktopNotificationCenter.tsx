@@ -27,7 +27,12 @@ function previewNotice(message: string) {
   return words.length > NOTICE_PREVIEW_WORDS ? `${preview}…` : preview;
 }
 
+export type IslandFeedback = { id: string; message: string; kind: "notification" | "error" };
+
 export type DesktopNotifications = {
+  feedback?: IslandFeedback;
+  dismissFeedback?: (id: string) => void;
+  shareCrash?: () => void;
   items: NotificationItem[];
   onShow?: () => void;
   onOpenItem: (item: NotificationItem) => void | Promise<void>;
@@ -86,7 +91,7 @@ type IslandPanel = { kind: "update"; version: string } | { kind: "notifications"
 type IslandDetail = "notifications" | "notice";
 
 export function DesktopNotificationCenter({
-  center, notificationRequest, launcherUpdate, launchProgress, onCancelLaunch, clientNotice,
+  center, notificationRequest, launcherUpdate, launchProgress, onCancelLaunch, clientNotice: serverNotice,
   cosmeticUnlock, onDismissCosmeticUnlock, onOpenUnlockedCloak,
   nowPlaying, onNowPlayingControl, nowPlayingVolume, onNowPlayingVolumeChange, onNowPlayingDetailsChange, motion,
 }: {
@@ -106,6 +111,10 @@ export function DesktopNotificationCenter({
   onNowPlayingDetailsChange?: (sessionId: string | null) => void;
   motion: boolean;
 }) {
+  const feedback = center.feedback;
+  const clientNotice = feedback ?? serverNotice;
+  const NoticeIcon = feedback?.kind === "notification" ? CheckCheck : TriangleAlert;
+  const noticeLabel = feedback ? feedback.message : "Delight notice";
   const panelId = useId();
   const volumeId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -161,6 +170,12 @@ export function DesktopNotificationCenter({
   const pcVolume = nowPlayingVolume?.scope === "system";
   const noticeId = clientNotice?.id;
   const noticePreview = clientNotice ? previewNotice(clientNotice.message) : "";
+  const dismissFeedback = center.dismissFeedback;
+  useEffect(() => {
+    if (!feedback || face !== "notice" || expanded) return;
+    const timer = window.setTimeout(() => dismissFeedback?.(feedback.id), feedback.kind === "error" ? 7000 : 3200);
+    return () => window.clearTimeout(timer);
+  }, [feedback, face, expanded, dismissFeedback]);
   const cosmeticSequence = cosmeticUnlock?.sequence;
   const cosmeticReceivedAt = cosmeticUnlock?.receivedAt;
   const faceIdentity = face === "notice" ? noticeId : face === "media" ? nowPlaying?.sessionId
@@ -317,7 +332,7 @@ export function DesktopNotificationCenter({
       }
     }}
   >
-    <div className="desktop-island-notice-announcement" role="status">
+    <div className="desktop-island-notice-announcement" role={feedback?.kind === "error" ? "alert" : "status"}>
       {face === "notice" && clientNotice ? `Delight notice: ${clientNotice.message}` : ""}
     </div>
     {face === "cosmetic" && <CosmeticConfetti key={cosmeticSequence} motion={motion} />}
@@ -346,9 +361,9 @@ export function DesktopNotificationCenter({
           </div> :
           face === "notice" && clientNotice ? <button key={`notice-${clientNotice.id}`} ref={node => { trigger.current = node; }}
             type="button" className="desktop-notification-trigger desktop-island-notice-trigger"
-            aria-label="Delight notice" aria-expanded={showingNotice} aria-controls={showingNotice ? panelId : undefined}
+            aria-label={noticeLabel} aria-expanded={showingNotice} aria-controls={showingNotice ? panelId : undefined}
             onClick={() => setPanel(showingNotice ? null : { kind: "notice", id: clientNotice.id })}>
-            <TriangleAlert className="desktop-island-notice-icon" size={16} aria-hidden="true" />
+            <NoticeIcon className="desktop-island-notice-icon" size={16} aria-hidden="true" />
             <span className="desktop-island-notice-preview">{noticePreview}</span>
           </button> :
           face === "media" && nowPlaying ? <div key={nowPlaying.sessionId}
@@ -428,7 +443,7 @@ export function DesktopNotificationCenter({
       <div className="desktop-island-details" ref={detailContent} inert={!expanded}>
         {visibleDetail && <section id={panelId} className="desktop-notification-panel"
           aria-label={visibleDetail === "notice" ? "Delight notice" : "Notifications"}>
-          {visibleDetail === "notice" && clientNotice ? <div className="desktop-island-notice-message" tabIndex={0}>{clientNotice.message}</div>
+          {visibleDetail === "notice" && clientNotice ? <div className="desktop-island-notice-message" tabIndex={0}>{clientNotice.message}{feedback && center.shareCrash && <button type="button" className="desktop-notification-text-button" onClick={() => { setPanel(null); center.shareCrash?.(); }}>Share crash details</button>}</div>
             : visibleDetail === "notifications" && <>
             {center.loadError && <div className="desktop-notification-empty">
               <p role="status">Couldn’t load notifications.</p>

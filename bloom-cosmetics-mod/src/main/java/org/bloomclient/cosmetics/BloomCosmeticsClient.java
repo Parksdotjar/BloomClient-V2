@@ -8,6 +8,7 @@ public final class BloomCosmeticsClient implements ClientModInitializer {
     public void onInitializeClient() {
         BloomCapeService.get().start();
         DelightWings.get().start();
+        DelightWings.hats().start();
         DelightWingLayer.register();
         DelightWingPreview.register();
         BloomPresence.start();

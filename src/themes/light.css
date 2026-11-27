@@ -69,6 +69,3 @@
 :root[data-theme="light"] .comparison-divider { background: #566172; box-shadow: none; }
 :root[data-theme="light"] .comparison-handle span { background: #ffffffed; border-color: #566172; color: #171b22; }
 :root[data-theme="light"] .comparison-side { background: #ffffffdf; color: #171b22; }
-:root[data-theme="light"] .launch-toast { background: var(--theme-success-surface); border-color: #bbdcca; }
-:root[data-theme="light"] .launch-toast.error { background: var(--theme-danger-surface); border-color: #ecc2c9; }
-:root[data-theme="light"] .launch-toast > span { color: var(--text); }

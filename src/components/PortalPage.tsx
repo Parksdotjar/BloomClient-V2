@@ -1,3 +1,4 @@
+import { announceClipboardCopy } from "../services/clipboard";
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowLeft, ArrowUpRight, Check, Copy, Globe2, Layers3, SlidersHorizontal, MoreHorizontal, Play, Plus, RefreshCw, Search, Server, Star, TriangleAlert, Trash2, X } from "lucide-react";
@@ -111,7 +112,7 @@ export function PortalPage({ filter, instances, busy, onPlay, onOpenInstance, on
   </button>;
   const copyAddress = async (entry: PortalEntry) => {
     setMessage("");
-    try { await invoke("copy_text_to_clipboard", { text: entry.target }); setMessage(`Address copied for ${entry.name}.`); return true; }
+    try { await invoke("copy_text_to_clipboard", { text: entry.target }); announceClipboardCopy(); return true; }
     catch (reason) { setError(String(reason)); return false; }
   };
 

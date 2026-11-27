@@ -725,7 +725,7 @@ nav button.active svg {
   white-space: pre-line;
 }
 .accent-picker-popover {
-  position: fixed; z-index: 12000; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  position: fixed; z-index: 12000; display: grid; grid-template-columns: minmax(0, 1fr) 34px auto;
   gap: 12px; width: min(296px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
   padding: 9px 10px 11px; border: 1px solid var(--launcher-menu-line); border-radius: 10px;
   background: var(--launcher-menu); color: var(--text); box-shadow: 0 8px 24px var(--theme-shadow-soft);
@@ -2539,42 +2539,11 @@ body,
 .download-ring.complete svg { animation: check-in 260ms 110ms ease both; }
 .download-ring.complete::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--theme-success-surface, #55d86a); pointer-events: none; animation: download-ghost-pop 760ms cubic-bezier(.16, 1, .3, 1) both; }
 .play-instance:disabled { opacity: .5; cursor: wait; transform: scale(.9); }
-.launch-toast {
-  --notice-color: #34a96d;
-  position: fixed;
-  z-index: 700;
-  inset: auto 0 0;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--notice-color) 72%, var(--theme-edge, #ffffff24));
-  border-radius: 0;
-  background: color-mix(in srgb, var(--notice-color) 78%, var(--theme-surface, #07110c));
-  box-shadow: 0 -13px 30px var(--theme-shadow-soft, #0007), inset 0 1px var(--theme-highlight, #ffffff12);
-  animation: toast-rise .38s cubic-bezier(.16, 1, .3, 1) both;
-}
-.launch-toast.error { --notice-color: #c64f57; }
-.launch-toast > span {
-  min-width: 0;
-  max-width: min(920px, calc(100vw - 40px));
-  padding: 13px 20px;
-  color: var(--theme-ink, #fff);
-  font-size: 12px;
-  font-weight: 850;
-  line-height: 1.45;
-  text-align: center;
-  overflow-wrap: anywhere;
-  white-space: pre-line;
-}
 .signin-error { margin: 8px 4px 0; color: var(--theme-danger-ink, #f28a8a); font-size: 11px; line-height: 1.35; }
 @keyframes download-badge-in { from { transform: scale(.45); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes download-complete { 0% { transform: scale(.78); opacity: .45; } 10% { transform: scale(1.16); opacity: 1; } 18%, 82% { transform: scale(1); opacity: 1; } 100% { transform: scale(.55); opacity: 0; } }
 @keyframes download-ghost-pop { 0% { transform: scale(.8); opacity: .42; } 35% { opacity: .22; } 100% { transform: scale(2.35); opacity: 0; } }
 @keyframes check-in { from { opacity: 0; transform: scale(.45); } to { opacity: 1; transform: scale(1); } }
-@keyframes toast-rise { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
 
 /* Final compact account handoff placement */
 .profile { position: relative; }
@@ -3456,3 +3425,6 @@ button[aria-expanded="true"] {
 .instance-java-editor textarea { min-height: 112px; resize: vertical; font-family: monospace; line-height: 1.6; }
 .instance-preferences :is(input, textarea, summary, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 760px) { .instance-preference-row { grid-template-columns: minmax(0, 1fr) 28px; gap: 10px; } .instance-preference-row > :nth-child(2) { grid-row: 2; grid-column: 1 / -1; } .instance-preference-row > .info-tip-trigger { grid-row: 1; grid-column: 2; } .instance-preferences-heading { flex-wrap: wrap; padding: 18px; } .instance-preferences-fields { padding: 0 18px 18px; } }
+
+.color-picker-dropper { display: grid; place-items: center; border: 1px solid var(--launcher-menu-line); border-radius: 6px; color: var(--text); background: var(--launcher-menu-hover); cursor: crosshair; }
+.color-picker-dropper:hover { border-color: var(--muted); }

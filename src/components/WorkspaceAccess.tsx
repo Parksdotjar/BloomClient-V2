@@ -1,3 +1,4 @@
+import { copyTextWithFeedback } from "../services/clipboard";
 import { useEffect, useId, useRef, useState, type ComponentType, type FormEvent } from "react";
 import { Copy, Plus, RefreshCw } from "lucide-react";
 import { invoke } from "../services/invoke";
@@ -104,7 +105,7 @@ export function WorkspaceAccess({instance, SelectControl}: {instance: WorkspaceI
   };
   const copy = async () => {
     if (!createdLink) return;
-    try { await navigator.clipboard.writeText(createdLink.url); setCopied(true); }
+    try { await copyTextWithFeedback(createdLink.url); setCopied(true); }
     catch { field.current?.focus(); field.current?.select(); }
   };
   const connect = async () => {

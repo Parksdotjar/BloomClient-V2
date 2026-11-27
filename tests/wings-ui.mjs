@@ -8,8 +8,13 @@ const url = process.env.BLOOM_TEST_URL || 'http://localhost:1420';
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 await page.route('**/*', route => route.request().url().startsWith(url) || route.request().url().startsWith('data:') ? route.continue() : route.abort());
-const offer = JSON.parse(await readFile(new URL('../public/delight-wings/catalog.json', import.meta.url), 'utf8')).entries[0];
-await page.addInitScript(offer => {
+const back = process.argv.includes('--back');
+const mushroom = process.argv.includes('--mushroom');
+const category = mushroom ? 'Hats' : back ? 'Back' : 'Wings';
+const entries = JSON.parse(await readFile(new URL('../public/delight-wings/catalog.json', import.meta.url), 'utf8')).entries;
+const secondHat = mushroom && entries.find(item => item.id === 'bunny-ears');
+const offer = entries.find(item => mushroom ? item.id === 'mushroom-cap' : item.slot === (back ? "back" : undefined));
+await page.addInitScript(({offer,secondHat}) => {
   const profile = {id:'wing-ui-account',name:'Wing Check'};
   localStorage.setItem('bloom-profile',JSON.stringify(profile));
   localStorage.setItem('bloom-onboarding-complete-v1','complete');
@@ -26,12 +31,15 @@ await page.addInitScript(offer => {
     async invoke(command,args){
       state.calls.push({command,args});
       if(command==='cosmetics_request'){
-        if(args.path==='/v1/wings/claim'){state.owned=true;return {id:offer.id,revision:offer.revision}}
-        if(args.path==='/v1/wings/equipped'){
+        const api = offer.slot === 'hat' ? '/v1/hats/' : '/v1/wings/';
+        if(args.path===api+'claim'){state.owned=true;return {id:offer.id,revision:offer.revision}}
+        if(args.path===api+'equipped'){
+          if (state.hold) await new Promise(resolve=>state.resume=resolve);
+          if (state.rejectNext) {state.rejectNext=false;throw Error('Test equip failed');}
           state.equipped=args.body.id===null?null:args.body;
           return {equipped:state.equipped};
         }
-        if(args.path.startsWith('/v1/wings/'))return {items:args.path.endsWith('/shop')||state.owned?[{...offer,owned:state.owned,configured:state.equipped?.colors}]:[],equipped:state.equipped};
+        if(args.path.startsWith(api))return {items:args.path.endsWith('/shop')||state.owned?[{...offer,owned:state.owned,configured:state.equipped?.id===offer.id?state.equipped.colors:null},...(secondHat && state.owned?[{...secondHat,owned:true}]:[])]:[],equipped:state.equipped};
         if(args.path==='/v1/cosmetics/me')return {capeId:null,badgeVisible:true};
         return {items:[]};
       }
@@ -47,13 +55,13 @@ await page.addInitScript(offer => {
       return null;
     }
   };
-},offer);
+},{offer,secondHat});
 const tab=name=>page.getByRole('navigation',{name:'Locker categories'}).getByRole('button',{name,exact:true}).click();
 try {
   await page.goto(url);
   await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Locker',exact:true}).click();
   await tab('Shop');
-  await page.getByRole('group',{name:'Shop categories'}).getByRole('button',{name:'Wings',exact:true}).click();
+  await page.getByRole('group',{name:'Shop categories'}).getByRole('button',{name:category,exact:true}).click();
   await page.getByRole('button',{name:'Add to Locker',exact:true}).click();
   const openLocker = page.getByRole('button', { name: 'In Locker', exact: true });
   assert.ok(await openLocker.evaluate(button => {
@@ -69,14 +77,71 @@ try {
   await openLocker.click();
   await page.locator('.wing-detail canvas[data-ready="true"][data-skin="true"]').waitFor();
   const card=page.locator('.wing-card-preview canvas[data-ready="true"]');
-  await card.waitFor();
+  await card.first().waitFor();
   assert.equal(await page.locator('.wing-card img,.wing-card svg').count(),0);
-  await page.getByRole('button',{name:'Equip',exact:true}).click();
-  await page.getByRole('button',{name:'Choose left wing color',exact:true}).click();
+  const detail = page.locator('.wing-detail canvas');
+  const beforeZoom = await detail.screenshot();
+  await detail.hover();
+  await page.mouse.wheel(0, -420);
+  await page.waitForTimeout(120);
+  assert.ok(!beforeZoom.equals(await detail.screenshot()), 'wheel zoom changes the worn preview');
+  const wear = page.getByRole('button',{name:'Wear ' + offer.name,exact:true});
+  await wear.click();
+  await page.waitForFunction(()=>window.wingUi.equipped?.id);
+  assert.equal(await wear.getAttribute('aria-description'),'Equipped');
+  assert.equal(await page.locator('.wing-detail img').count(),0);
+  if (mushroom) {
+    const bunny = page.getByRole('button',{name:'Wear Bunny Ears',exact:true});
+    await page.evaluate(()=>{window.savedCanvas=document.querySelector('.wing-detail canvas');window.wingUi.hold=true});
+    await bunny.click();
+    assert.equal(await bunny.getAttribute('aria-description'),'Equipped');
+    assert.equal(await wear.getAttribute('aria-description'),null);
+    assert.ok(await page.evaluate(()=>window.savedCanvas===document.querySelector('.wing-detail canvas')));
+    assert.equal(await page.locator('.wing-detail img').count(),0);
+    await page.evaluate(()=>{window.wingUi.hold=false;window.wingUi.rejectNext=true;window.wingUi.resume()});
+    await page.waitForFunction(()=>document.querySelector('[aria-label="Wear Mushroom Cap"]').getAttribute('aria-description')==='Equipped');
+    await bunny.click();
+    await page.waitForFunction(()=>window.wingUi.equipped?.id==='bunny-ears');
+    await wear.click();
+    await page.waitForFunction(()=>window.wingUi.equipped?.id==='mushroom-cap');
+    assert.deepEqual(offer.defaults,{left:'#9b2a22',right:'#f3dcb5',trim:'#b43929',rightOuter:'#a17d59'});
+    for (const color of Object.values(offer.defaults)) assert.ok((await page.locator('.wing-colors').innerText()).toLowerCase().includes(color));
+  }
+  const labels = mushroom ? ['crown','spores','brim','stem'] : back ? ['needle tip','nozzle','casing','liquid','plunger'] : ['left wing'];
+  const picker = page.getByRole('button',{name:'Choose '+labels[0]+' color',exact:true});
+  await picker.click();
+  const field = page.getByRole('slider',{name:'Saturation and brightness'});
+  await page.evaluate(()=>{window.wingUi.hold=true});
+  await field.click({position:{x:51,y:29}});
+  await page.waitForFunction(()=>typeof window.wingUi.resume==='function');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+z');
+  await page.evaluate(()=>{window.wingUi.hold=false;window.wingUi.resume()});
+  await page.waitForFunction(()=>!document.querySelector('.wing-colors').disabled);
+  assert.equal(await page.evaluate(()=>window.wingUi.equipped.colors.left),offer.defaults.left);
+  await picker.click();
+  await page.getByRole('textbox',{name:'Hex color'}).fill('#18265d');
+  await page.locator('.locker-detail-copy').click();
+  await page.waitForFunction(()=>window.wingUi.equipped.colors.left==='#18265d');
+  await picker.click();
+  await page.evaluate(()=>{ window.EyeDropper=class {async open(){return {sRGBHex:'#538fe7'}}}; });
+  await page.getByRole('button',{name:'Pick a color from the screen'}).click();
+  await page.waitForFunction(()=>window.wingUi.equipped.colors.left==='#538fe7');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(()=>window.wingUi.equipped.colors.left==='#18265d');
+  for (const label of labels) {
+    await page.getByRole('button',{name:'Choose ' + label + ' color',exact:true}).click();
   await page.getByRole('textbox',{name:'Hex color',exact:true}).fill('#123456');
   await page.getByRole('button',{name:'Apply color',exact:true}).click();
-  await page.getByRole('button',{name:'Save colors',exact:true}).click();
+  }
   await page.waitForFunction(()=>window.wingUi.equipped?.colors.left==='#123456');
+  if (back || mushroom) {
+    assert.deepEqual(await page.evaluate(()=>Object.values(window.wingUi.equipped.colors)),Array(labels.length).fill('#123456'));
+    await page.getByRole('button',{name:'Restore default colors'}).click();
+    await page.getByRole('button',{name:'Save colors',exact:true}).click();
+    assert.deepEqual(await page.evaluate(()=>window.wingUi.equipped.colors),offer.defaults);
+  }
   await tab('Equipped look');
   const character=page.locator('.locker-detail .wing-preview canvas[data-ready="true"][data-skin="true"]');
   await character.waitFor();
@@ -85,7 +150,7 @@ try {
   assert.ok((await page.locator('.look-slots').innerText()).includes(offer.name));
   await mkdir('logs/wings-ui',{recursive:true});
   await page.locator('.locker-workspace').screenshot({path:'logs/wings-ui/equipped-look.png'});
-  await tab('Wings');
+  await tab(category);
   await page.getByRole('button',{name:'Unequip',exact:true}).click();
   await page.waitForFunction(()=>window.wingUi.equipped===null);
   await tab('Equipped look');
