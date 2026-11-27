@@ -848,7 +848,8 @@ function SignInPanel({
   );
   const copyCode = async () => {
     if (!code) return;
-    await navigator.clipboard?.writeText(code);
+    try { await copyTextWithFeedback(code); }
+    catch { setStatus("Could not copy the code. Select it and copy manually."); return; }
     setHandoffReady(true);
     setCopied(true);
   };
