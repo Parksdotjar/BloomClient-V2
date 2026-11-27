@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Ticket } from "lucide-react";
+import { TicketIcon as Ticket } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { LockerInlineAction } from "./LockerInlineAction";
 
@@ -23,7 +23,6 @@ export function CapeRedemption({ accountId, onClaim, onCosmeticUnlock, onNotify 
         onCosmeticUnlock({ accountId, id: result.id, name: result.name });
       } else if (alive.current) {
         onClaim(result.id);
-        onNotify(result.alreadyClaimed ? `“${result.name}” is already in your locker.` : `Cape claimed: “${result.name}”`, "success");
       }
       return result.alreadyClaimed ? "Already claimed" : "Redeemed";
     }} onError={message => {

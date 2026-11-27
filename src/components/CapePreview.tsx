@@ -1,5 +1,5 @@
+import { playerSkin } from "../services/player-skin";
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "../services/invoke";
 import { Vector3 } from "three";
 import { lockerAnchors, lockerPreviewZoom } from "./locker-preview-zoom";
 import { SkinViewer } from "skinview3d";
@@ -20,7 +20,7 @@ export function CapePreview({ texture, animation, skinUuid, skinTexture, variant
     let stopped = false;
     setAccountSkin(null);
     if (!skinUuid || skinTexture) return;
-    void invoke<string>("get_minecraft_skin", { accountId: skinUuid })
+    void playerSkin(skinUuid)
       .then(skin => { if (!stopped) setAccountSkin(skin); })
       .catch(() => { if (!stopped) setAccountSkin(null); });
     return () => { stopped = true; };

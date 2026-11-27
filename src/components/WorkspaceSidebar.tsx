@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowRightLeft, Crop, X } from "lucide-react";
+import { ArrowsLeftRightIcon as ArrowRightLeft, CropIcon as Crop, XIcon as X } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { Avatar, socialDirectoryChanged, userLabel, type SocialUser } from "./SocialPage";
 import { defaultSidebarCrop, SidebarImageCrop, type SidebarCrop } from "./SidebarImageCrop";

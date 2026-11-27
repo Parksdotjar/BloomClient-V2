@@ -1,3 +1,4 @@
+import { playerSkin } from "../services/player-skin";
 import { useEffect, useRef, useState } from "react";
 import {
   AmbientLight, Box3, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, DirectionalLight, DoubleSide,
@@ -11,6 +12,7 @@ import type { CapeAnimation } from "./CapePreview";
 import type { Wardrobe } from "./MinecraftWardrobe";
 import { readWingRuntime, type Tint, type WingColors, type WingRevision } from "../services/delight-wings";
 
+import { registerLockerCard } from "./locker-card-renderer";
 import { lockerAnchors, lockerPreviewZoom } from "./locker-preview-zoom";
 import { cosmeticDaylightMaterial } from "../services/cosmetic-daylight";
 import { cosmeticShade } from "../services/cosmetic-shading";
@@ -75,7 +77,7 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
         setAvatar({ texture: wardrobe.currentSkin.texture, variant: wardrobe.currentSkin.variant });
         return;
       }
-      const texture = await invoke<string>("get_minecraft_skin", { accountId }).catch(() => "");
+      const texture = await playerSkin(accountId!).catch(() => "");
       if (active && texture) setAvatar({ texture });
     }
     void lookup();
@@ -85,9 +87,25 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
   useEffect(() => {
     if (!canvas.current) return;
     const target = canvas.current;
-    let renderer: WebGLRenderer;
+    const ratio = Math.min(2, window.devicePixelRatio);
+    let renderer: WebGLRenderer | undefined;
+    let unregister: (() => void) | undefined;
+    let dirty = true;
+    let animated = false;
+    let lastColors: WingColors | undefined;
+    let lastMotion: boolean | undefined;
     setStatus("loading");
-    try { renderer = new WebGLRenderer({ canvas: target, alpha: true, antialias: true, powerPreference: "low-power" }); }
+    try {
+      if (cosmeticOnly) {
+        unregister = registerLockerCard(target, draw, () => {
+          const { colors, motion } = state.current;
+          return dirty || colors !== lastColors || motion !== lastMotion || (motion && animated);
+        });
+      } else {
+        renderer = new WebGLRenderer({ canvas: target, alpha: true, antialias: true, powerPreference: "low-power" });
+        renderer.setPixelRatio(ratio);
+      }
+    }
     catch { setStatus("error"); return; }
     const stop = new AbortController();
     const scene = new Scene(), camera = new PerspectiveCamera(35, 1, 1, 180);
@@ -95,37 +113,39 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
     const key = new DirectionalLight("#fff8f0", 1.6);
     key.position.set(-10, 30, hat ? 15 : -15);
     scene.add(key, new AmbientLight("#dce5fa", 1.55));
-    const rig = new MeshStandardMaterial({ color: "#798697", roughness: .9 });
-    const dispose: {dispose(): void}[] = [rig];
-    const fallback = new Group();
-    fallback.visible = !cosmeticOnly;
-    scene.add(fallback);
-    for (const [size, point] of mannequin) {
-      const geometry = new BoxGeometry(...size);
-      dispose.push(geometry);
-      const mesh = new Mesh(geometry, rig);
-      mesh.position.set(point[0], point[1], point[2]);
-      fallback.add(mesh);
-    }
-    const skin = new SkinObject();
-    skin.position.y = 24;
-    skin.visible = false;
-    scene.add(skin);
-    const skinCanvas = document.createElement("canvas");
-    const skinMap = new CanvasTexture(skinCanvas);
-    skinMap.magFilter = skinMap.minFilter = NearestFilter;
-    skinMap.generateMipmaps = false;
-    skinMap.colorSpace = SRGBColorSpace;
-    skin.map = skinMap;
-    skinTarget.current = { mesh: skin, surface: skinCanvas, texture: skinMap, fallback };
-    const skinResources = new Set<{dispose(): void}>();
-    skin.traverse(part => {
-      if (part instanceof Mesh) {
-        skinResources.add(part.geometry);
-        (Array.isArray(part.material) ? part.material : [part.material]).forEach(material => skinResources.add(material));
+    const dispose: {dispose(): void}[] = [];
+    if (!cosmeticOnly) {
+      const rig = new MeshStandardMaterial({ color: "#798697", roughness: .9 });
+      dispose.push(rig);
+      const fallback = new Group();
+      scene.add(fallback);
+      for (const [size, point] of mannequin) {
+        const geometry = new BoxGeometry(...size);
+        dispose.push(geometry);
+        const mesh = new Mesh(geometry, rig);
+        mesh.position.set(point[0], point[1], point[2]);
+        fallback.add(mesh);
       }
-    });
-    dispose.push(skinMap, ...skinResources);
+      const skin = new SkinObject();
+      skin.position.y = 24;
+      skin.visible = false;
+      scene.add(skin);
+      const skinCanvas = document.createElement("canvas");
+      const skinMap = new CanvasTexture(skinCanvas);
+      skinMap.magFilter = skinMap.minFilter = NearestFilter;
+      skinMap.generateMipmaps = false;
+      skinMap.colorSpace = SRGBColorSpace;
+      skin.map = skinMap;
+      skinTarget.current = { mesh: skin, surface: skinCanvas, texture: skinMap, fallback };
+      const skinResources = new Set<{dispose(): void}>();
+      skin.traverse(part => {
+        if (part instanceof Mesh) {
+          skinResources.add(part.geometry);
+          (Array.isArray(part.material) ? part.material : [part.material]).forEach(material => skinResources.add(material));
+        }
+      });
+      dispose.push(skinMap, ...skinResources);
+    }
     let drawCape: ((now: number) => void) | undefined;
     if (capeTexture && !cosmeticOnly) {
       const cape = new CapeObject();
@@ -189,7 +209,12 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
     function fit() {
       const width = target.clientWidth, height = target.clientHeight;
       if (!width || !height) return;
-      renderer.setSize(width, height, false);
+      if (renderer) renderer.setSize(width, height, false);
+      else {
+        target.width = Math.floor(width * ratio);
+        target.height = Math.floor(height * ratio);
+        dirty = true;
+      }
       camera.aspect = width / height;
       const distance = Math.max(hasHat ? 70 : 55, 23 / (Math.tan(camera.fov * Math.PI / 360) * camera.aspect) + 5);
       if (cosmeticOnly) {
@@ -200,7 +225,6 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
       camera.updateProjectionMatrix();
       controls.update();
     }
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
     const resize = new ResizeObserver(fit);
     resize.observe(target);
     fit();
@@ -246,6 +270,9 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
       });
       const matrices = model.frames[0].matrices.map(() => new Matrix4());
       if (cosmeticOnly) {
+        animated = model.batches.some(batch => batch.shineRow !== undefined) ||
+          model.frames.some(frame => frame.matrices.some((matrix, joint) =>
+            matrix.some((value, axis) => value !== model.frames[0].matrices[joint][axis])));
         for (const { mesh, joint } of bodies) mesh.matrix.fromArray(model.frames[0].matrices[joint]);
         wear.updateMatrixWorld(true);
         const bounds = new Box3().setFromObject(wear);
@@ -295,6 +322,7 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
         active?.release();
         scene.add(group);
         active = { group, update, release, revision: primary.revision };
+        dirty = true;
         setStatus("ready");
       }).catch(() => {
         const canceled = request.signal.aborted;
@@ -305,13 +333,22 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
       return () => request.abort();
     };
     const started = performance.now();
-    function draw(now: number) {
+    function draw(output: WebGLRenderer, now: number) {
+      lastColors = state.current.colors;
+      lastMotion = state.current.motion;
+      dirty = false;
       if (active?.revision === state.current.revision) active.update.forEach(pose => pose(now - started));
       drawCape?.(now);
-      renderer.render(scene, camera);
-      handle = requestAnimationFrame(draw);
+      output.render(scene, camera);
     }
-    handle = requestAnimationFrame(draw);
+    if (renderer) {
+      const detailRenderer = renderer;
+      const frame = (now: number) => {
+        draw(detailRenderer, now);
+        handle = requestAnimationFrame(frame);
+      };
+      handle = requestAnimationFrame(frame);
+    }
     return () => {
       swap.current = undefined;
       active?.release();
@@ -320,7 +357,8 @@ export function WingPreview({ item, colors, motion, accountId, cosmeticOnly = fa
       skinTarget.current = undefined;
       controls.dispose();
       dispose.forEach(resource => resource.dispose());
-      renderer.dispose();
+      unregister?.();
+      renderer?.dispose();
     };
   }, [cosmeticOnly, front, faceFront, hat, hasHat, capeTexture, capeAnimation]);
 

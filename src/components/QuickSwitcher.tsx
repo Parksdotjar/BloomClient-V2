@@ -1,6 +1,6 @@
 import { ShortcutContext, shortcutMatches } from "../services/shortcuts";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Search, X, Layers3, Settings, ArrowUpRight } from "lucide-react";
+import { MagnifyingGlassIcon as Search, XIcon as X, StackIcon as Layers3, GearSixIcon as Settings, ArrowUpRightIcon as ArrowUpRight } from "@phosphor-icons/react";
 import "./library-navigation.css";
 export type SwitchTarget = {
     id: string;

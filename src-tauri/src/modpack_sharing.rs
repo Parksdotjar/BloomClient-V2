@@ -220,13 +220,13 @@ fn resolve_modrinth_file(
     Ok((file.filename.clone(), file.url.clone()))
 }
 
-fn create_manifest(instance_id: &str) -> Result<ShareManifest, String> {
+fn create_manifest(app: &tauri::AppHandle, instance_id: &str) -> Result<ShareManifest, String> {
     let config = super::load_instance(instance_id)?;
     if !config.loader.eq_ignore_ascii_case("fabric") {
         return Err("Pack sharing currently supports Fabric instances only.".into());
     }
     let loader_version = super::fabric_loader::resolve(&config)?;
-    super::fabric_loader::remember(&config, &loader_version)?;
+    super::fabric_loader::remember(app, &config, &loader_version)?;
     let mods = std::path::PathBuf::from(&config.directory).join("mods");
     let mut entries = std::fs::read_dir(&mods)
         .map_err(|_| "This instance has no readable mods folder.".to_string())?
@@ -299,8 +299,8 @@ fn create_manifest(instance_id: &str) -> Result<ShareManifest, String> {
     })
 }
 
-fn create_modpack_share_blocking(instance_id: String) -> Result<ModpackShareCreated, String> {
-    let manifest = create_manifest(&instance_id)?;
+fn create_modpack_share_blocking(app: tauri::AppHandle, instance_id: String) -> Result<ModpackShareCreated, String> {
+    let manifest = create_manifest(&app, &instance_id)?;
     reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .user_agent(concat!("BloomClient/", env!("CARGO_PKG_VERSION")))
@@ -321,9 +321,10 @@ fn create_modpack_share_blocking(instance_id: String) -> Result<ModpackShareCrea
 
 #[tauri::command]
 pub(crate) async fn create_modpack_share(
+    app: tauri::AppHandle,
     instance_id: String,
 ) -> Result<ModpackShareCreated, String> {
-    tauri::async_runtime::spawn_blocking(move || create_modpack_share_blocking(instance_id))
+    tauri::async_runtime::spawn_blocking(move || create_modpack_share_blocking(app, instance_id))
         .await
         .map_err(|error| format!("The pack sharing task stopped unexpectedly: {error}"))?
 }
@@ -417,7 +418,7 @@ fn import_channel_manifest(
 }
 
 #[tauri::command]
-pub(crate) async fn create_pack_channel(instance_id: String) -> Result<PackChannelCreated, String> {
+pub(crate) async fn create_pack_channel(app: tauri::AppHandle, instance_id: String) -> Result<PackChannelCreated, String> {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Created {
@@ -428,7 +429,7 @@ pub(crate) async fn create_pack_channel(instance_id: String) -> Result<PackChann
         editor_count: u32,
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let manifest = create_manifest(&instance_id)?;
+        let manifest = create_manifest(&app, &instance_id)?;
         let created = reqwest::blocking::Client::new()
             .post(format!(
                 "{}/v1/pack-channels",
@@ -565,6 +566,7 @@ pub(crate) async fn join_pack_as_editor(
 
 #[tauri::command]
 pub(crate) async fn publish_pack_channel(
+    app: tauri::AppHandle,
     instance_id: String,
 ) -> Result<PackChannelCreated, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -576,7 +578,7 @@ pub(crate) async fn publish_pack_channel(
             return Err("Members cannot publish. Join with an editor code first.".into());
         }
         let token = load_channel_token(&record.code)?;
-        let manifest = create_manifest(&instance_id)?;
+        let manifest = create_manifest(&app, &instance_id)?;
         let response = reqwest::blocking::Client::new()
             .put(format!(
                 "{}/v1/pack-channels/{}",

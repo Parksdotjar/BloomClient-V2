@@ -1,5 +1,5 @@
 import { type Ref } from "react";
-import { Layers3, Puzzle, WandSparkles, type LucideIcon } from "lucide-react";
+import { StackIcon as Layers3, PuzzlePieceIcon as Puzzle, MagicWandIcon as WandSparkles, type Icon as PhosphorIcon } from "@phosphor-icons/react";
 
 export const packContentCategories = [
   { category: "mods", label: "Mods", icon: Puzzle },
@@ -16,7 +16,7 @@ export function PackContentTabs({ id, selected, onSelect, tabsRef }: {
 
 export function PackTabs({id, panelId, label, tabs, selected, onSelect, tabsRef}: {
   id: string; panelId: string; label: string;
-  tabs: readonly {category: string; label: string; icon: LucideIcon}[];
+  tabs: readonly {category: string; label: string; icon: PhosphorIcon}[];
   selected: number; onSelect: (index: number) => void; tabsRef?: Ref<HTMLDivElement>;
 }) {
   return <div className="instance-tabbar">

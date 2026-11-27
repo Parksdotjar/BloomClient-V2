@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ExternalLink, FileArchive, Puzzle, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { ArrowSquareOutIcon as ExternalLink, FileZipIcon as FileArchive, PuzzlePieceIcon as Puzzle, ArrowsClockwiseIcon as RefreshCw, ShieldCheckIcon as ShieldCheck, XIcon as X } from "@phosphor-icons/react";
 import "./mod-detail-drawer.css";
 
 export type ModProjectDetails = {

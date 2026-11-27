@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { animate } from "animejs";
-import { ArrowRight, Upload, type LucideIcon } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, UploadIcon as Upload, type Icon as PhosphorIcon } from "@phosphor-icons/react";
 
 type Props = {
-  label: string; icon: LucideIcon; field: string; placeholder?: string; submitLabel: string;
+  label: string; icon: PhosphorIcon; field: string; placeholder?: string; submitLabel: string;
   pending: string; maxLength: number; disabled?: boolean; signedOut?: boolean;
   submit: (value: string) => Promise<string | null>;
   upload?: () => Promise<string | null>;

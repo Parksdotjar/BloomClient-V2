@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Copy, Minus, PanelLeftOpen, Square, X } from "lucide-react";
+import { CopyIcon as Copy, MinusIcon as Minus, SidebarSimpleIcon as PanelLeftOpen, SquareIcon as Square, XIcon as X } from "@phosphor-icons/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "../services/invoke";
 import { DesktopNotificationCenter, type DesktopNotifications } from "./DesktopNotificationCenter";

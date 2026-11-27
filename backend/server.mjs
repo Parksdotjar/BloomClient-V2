@@ -201,7 +201,7 @@ const server = tlsKeyPath && tlsCertPath
 
 const emotes = attachEmoteRelay(server, { authenticate: request => cosmetics.authenticateGameSession(request) });
 
-server.listen(port, "0.0.0.0", () => console.log(`${service} listening on ${port}${tlsKeyPath ? " with TLS" : ""}`));
+server.listen(port, process.env.BLOOM_BIND_ADDRESS || "0.0.0.0", () => console.log(`${service} listening on ${port}${tlsKeyPath ? " with TLS" : ""}`));
 const shutdown = () => { emotes.close(); server.close(() => process.exit(0)); };
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);

@@ -12,6 +12,7 @@ public final class BloomCosmeticsClient implements ClientModInitializer {
         DelightWingLayer.register();
         DelightWingPreview.register();
         BloomPresence.start();
+        PartyConnection.start();
         org.bloomclient.cosmetics.emote.BloomEmotes.init();
     }
 }

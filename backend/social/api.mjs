@@ -1,3 +1,5 @@
+import { createAskDelight } from "../ask-delight/api.mjs";
+import { createParties } from "./parties.mjs";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -45,7 +47,7 @@ const randomToken = (bytes = 32) => crypto.randomBytes(bytes).toString("base64ur
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const uuid = () => crypto.randomUUID();
 const now = () => Date.now();
-const MESSAGE_RETENTION_MS = 24 * 60 * 60_000;
+const MESSAGE_RETENTION_MS = 7 * 24 * 60 * 60_000;
 const PINNED_BLOB_EXPIRY = 253402300799000;
 const text = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
 const validUsername = (value) => /^[A-Za-z0-9_]{3,20}$/.test(value);
@@ -296,11 +298,27 @@ function initializeSchema(database) {
   database.exec("CREATE INDEX IF NOT EXISTS social_envelope_recipient ON social_envelopes(recipient_device_id, sequence); CREATE INDEX IF NOT EXISTS social_group_envelope_recipient ON social_group_envelopes(recipient_device_id, sequence);");
 }
 
-export function createSocialApi({ auth, database: accountDatabase, siteOrigin, env = process.env, onInstanceInviteClosed = () => {} } = {}) {
+async function verifyJavaPlayer(token) {
+  const result = await fetch("https://api.minecraftservices.com/minecraft/profile", {
+    headers: { authorization: "Bearer " + token }, redirect: "error", signal: AbortSignal.timeout(8000),
+  });
+  if (!result.ok) throw Object.assign(new Error("Profile verification failed"), {status: [401,403,404].includes(result.status) ? 401 : 503});
+  return result.json();
+}
+
+export function createSocialApi({ auth, database: accountDatabase, siteOrigin, siteOrigins = [siteOrigin], env = process.env, verifyPlayer = verifyJavaPlayer, onInstanceInviteClosed = () => {} } = {}) {
   const dataDirectory = path.resolve(env.BLOOM_SOCIAL_DATA_DIR || env.BLOOM_AUTH_DATA_DIR || path.join(process.cwd(), ".bloom-auth"));
   fs.mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
   const database = new DatabaseSync(path.join(dataDirectory, "social.sqlite"));
   initializeSchema(database);
+  // Extend surviving screenshot blobs written under the former one-day policy.
+  database.prepare("UPDATE social_blobs SET expires_at = created_at + ? WHERE expires_at = created_at + 86400000 AND expires_at > ?").run(MESSAGE_RETENTION_MS, now());
+  database.exec(`CREATE TABLE IF NOT EXISTS player_links (
+    player_id TEXT PRIMARY KEY REFERENCES social_users(id), website_id TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS player_link_codes (
+    digest TEXT PRIMARY KEY, player_id TEXT NOT NULL UNIQUE REFERENCES social_users(id), expires INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS player_visibility (player_id TEXT PRIMARY KEY REFERENCES social_users(id), hidden INTEGER NOT NULL DEFAULT 0);`);
+
   const blobDirectory = path.join(dataDirectory, "social-blobs");
   fs.mkdirSync(blobDirectory, { recursive: true, mode: 0o700 });
   let lastRetentionSweep = 0;
@@ -403,6 +421,9 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
   const findUser = database.prepare("SELECT * FROM social_users WHERE id = ?");
   const findUserByAccount = database.prepare("SELECT * FROM social_users WHERE account_user_id = ?");
   const findUserByName = database.prepare("SELECT * FROM social_users WHERE username_lower = ?");
+  const lookupFriend = (session,name) => session.minecraft_uuid
+    ? database.prepare("SELECT * FROM social_users WHERE provider='minecraft' AND minecraft_username=? COLLATE NOCASE ORDER BY updated_at DESC LIMIT 1").get(name)
+    : findUserByName.get(name.toLowerCase());
   const findDevice = database.prepare("SELECT * FROM social_devices WHERE id = ? AND user_id = ? AND revoked_at IS NULL");
 
   const availableUsername = (displayName, accountUserId) => {
@@ -457,6 +478,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
     return row || null;
   };
 
+  const alula = createAskDelight({ authenticate: bearerSession, env });
   const requireSession = (request, response) => {
     const session = bearerSession(request);
     if (!session) sendJson(response, 401, { error: "not_authenticated" });
@@ -469,6 +491,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
   };
   const isBlocked = (first, second) => Boolean(database.prepare("SELECT 1 FROM social_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)").get(first, second, second, first));
   const acceptedFriends = (first, second) => friendship(first, second)?.status === "accepted" && !isBlocked(first, second);
+  const parties = createParties(database, {acceptedFriends, isBlocked});
   const groupMember = (groupId, userId) => database.prepare("SELECT * FROM social_group_members WHERE group_id = ? AND user_id = ?").get(groupId, userId);
   const groupUserIds = (groupId) => database.prepare("SELECT user_id FROM social_group_members WHERE group_id = ?").all(groupId).map((row) => row.user_id);
   const identityAudience = (userId) => database.prepare(`SELECT DISTINCT user_id FROM (
@@ -550,7 +573,59 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
     async handle(request, response, pathname, url) {
       purgeExpiredData();
       if (!pathname.startsWith("/v1/social/")) return false;
+      if (pathname.startsWith("/v1/social/ask-delight/")) return alula.handle(request, response, pathname);
       try {
+        if (pathname === "/v1/social/native/player" && request.method === "POST") {
+          if (!allowRate("player-login:" + (request.socket?.remoteAddress || "local"), 120, 60000)) { sendJson(response,429,{error:"rate_limited"}); return true; }
+          const credential = /^Bearer ([^\s]{1,8192})$/.exec(request.headers.authorization || "");
+          const body = await readBody(request,4096);
+          if (!credential || !validDeviceId(body.deviceId) || !validKey(body.curve25519Key) || !validKey(body.ed25519Key)) {
+            sendJson(response,400,{error:"invalid_player_login"}); return true;
+          }
+          const profile = await verifyPlayer(credential[1]);
+          if (!/^[a-f0-9]{32}$/i.test(profile.id) || !/^[a-z0-9_]{1,16}$/i.test(profile.name)) { sendJson(response,401,{error:"invalid_profile"}); return true; }
+          const id = profile.id.toLowerCase().replace(/^(........)(....)(....)(....)(............)$/, "$1-$2-$3-$4-$5");
+          const account = "minecraft:" + id, timestamp = now();
+          database.exec("BEGIN IMMEDIATE");
+          try {
+            // Keep legacy website handles in their own namespace.
+            const handle = "mc:" + id;
+            database.prepare(`INSERT INTO social_users(id,account_user_id,username,username_lower,display_name,minecraft_uuid,minecraft_username,provider,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,'minecraft',?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,display_name=excluded.display_name,
+              minecraft_username=excluded.minecraft_username,updated_at=excluded.updated_at WHERE account_user_id=excluded.account_user_id`)
+              .run(id, account,profile.name,handle,profile.name,profile.id.toLowerCase(),profile.name,timestamp,timestamp);
+            if (findUser.get(id).account_user_id !== account) throw new Error("Player ID conflict");
+            const device = database.prepare("SELECT * FROM social_devices WHERE id=?").get(body.deviceId);
+            if (device && (device.user_id !== id || device.curve25519_key !== body.curve25519Key || device.ed25519_key !== body.ed25519Key)) throw Object.assign(new Error("Device conflict"),{status:409});
+            database.prepare(`INSERT INTO social_devices(id,user_id,name,curve25519_key,ed25519_key,created_at,last_seen_at) VALUES(?,?,?,?,?,?,?)
+              ON CONFLICT(id) DO UPDATE SET last_seen_at=excluded.last_seen_at,revoked_at=NULL`).run(body.deviceId,id,text(body.deviceName,80),body.curve25519Key,body.ed25519Key,timestamp,timestamp);
+            const bundle=issueTokens(id,body.deviceId);
+            database.exec("COMMIT");
+            sendJson(response,200,{...bundle,user:publicUser(findUser.get(id)),needsUsername:false});
+          } catch(error) { database.exec("ROLLBACK"); throw error; }
+          return true;
+        }
+        if (pathname === "/v1/social/player-links") {
+          const web = await sessionForBrowser(request);
+          if (!web) { sendJson(response,401,{error:"sign_in_required"}); return true; }
+          if (request.method === "GET") {
+            sendJson(response,200,{players:database.prepare("SELECT u.id,u.minecraft_username AS name FROM player_links l JOIN social_users u ON u.id=l.player_id WHERE l.website_id=?").all(web.user.id)}); return true;
+          }
+          if (!siteOrigins.includes(request.headers.origin) || !request.headers["content-type"]?.startsWith("application/json")) {sendJson(response,403,{error:"invalid_origin"});return true;}
+          const body=await readBody(request,1024);
+          if (request.method === "DELETE") {
+            database.prepare("DELETE FROM player_links WHERE website_id=? AND player_id=?").run(web.user.id,text(body.id,36));
+            sendJson(response,200,{ok:true}); return true;
+          }
+          if (request.method === "POST") {
+            if (!allowRate("links:"+web.user.id,8,300000) || !allowRate("link-attempts:"+request.socket?.remoteAddress,80,300000)) {sendJson(response,429,{error:"rate_limited"});return true;}
+            const code=database.prepare("SELECT * FROM player_link_codes WHERE digest=? AND expires>?").get(hash(text(body.code,128)),now());
+            if (!code) {sendJson(response,400,{error:"invalid_or_expired_code"});return true;}
+            const inserted=database.prepare("INSERT OR IGNORE INTO player_links VALUES(?,?)").run(code.player_id,web.user.id);
+            database.prepare("DELETE FROM player_link_codes WHERE digest=?").run(code.digest);
+            sendJson(response,inserted.changes?200:409,{ok:!!inserted.changes});return true;
+          }
+        }
         if (pathname === "/v1/social/native/authorize" && request.method === "GET") {
           const challenge = text(url.searchParams.get("challenge"), 160);
           const state = text(url.searchParams.get("state"), 160);
@@ -696,6 +771,36 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
 
         const session = requireSession(request, response);
         if (!session) return true;
+        if (pathname === "/v1/social/party" && session.minecraft_uuid && ["GET","POST"].includes(request.method)) {
+          const body = request.method === "POST" ? await readBody(request,1024) : null;
+          if (body?.action === "invite" && !allowRate("party-invite:"+session.user_id,60,60000)) {
+            sendJson(response,429,{error:"Too many invitations."}); return true;
+          }
+          const result = parties.handle(session.user_id,body);
+          sendJson(response,result.error ? 409 : 200,result); return true;
+        }
+        if (pathname === "/v1/social/me/link-status" && request.method === "GET" && session.minecraft_uuid) {
+          const link = database.prepare("SELECT 1 FROM player_links WHERE player_id=?").get(session.user_id);
+          sendJson(response, 200, { linked: Boolean(link) });
+          return true;
+        }
+        if (pathname === "/v1/social/me/link-code" && request.method === "POST" && session.minecraft_uuid) {
+          if (!allowRate("issue-link:"+session.user_id,10,300000)) { sendJson(response,429,{error:"rate_limited"}); return true; }
+          database.prepare("DELETE FROM player_link_codes WHERE expires<=?").run(now());
+          let code;
+          do { code=crypto.randomInt(100000000).toString().padStart(8,"0"); }
+          while(database.prepare("SELECT 1 FROM player_link_codes WHERE digest=?").get(hash(code)));
+          database.prepare("INSERT OR REPLACE INTO player_link_codes VALUES(?,?,?)").run(hash(code),session.user_id,now()+300000);
+          sendJson(response,200,{code});return true;
+        }
+        if (pathname === "/v1/social/me/visibility" && session.minecraft_uuid) {
+          if (request.method === "PUT") {
+            const body=await readBody(request,128);
+            if(typeof body.hidden !== "boolean"){sendJson(response,400,{error:"invalid_visibility"});return true;}
+            database.prepare("INSERT OR REPLACE INTO player_visibility VALUES(?,?)").run(session.user_id,+body.hidden);
+          }
+          sendJson(response,200,{hidden:!!database.prepare("SELECT hidden FROM player_visibility WHERE player_id=?").get(session.user_id)?.hidden});return true;
+        }
         const user = refreshAccountProfile(findUser.get(session.user_id));
 
         if (pathname === "/v1/social/changes" && request.method === "GET") {
@@ -715,6 +820,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
         if (pathname === "/v1/social/me" && request.method === "GET") {
           sendJson(response, 200, { user: publicUser(user), needsUsername: !user.username, deviceId: session.device_id }); return true;
         }
+        if (session.minecraft_uuid && pathname === "/v1/social/me/username") {sendJson(response,403,{error:"minecraft_name_managed"});return true;}
         if (pathname === "/v1/social/me/username" && request.method === "PUT") {
           const body = await readBody(request);
           const username = text(body.username, 20);
@@ -747,7 +853,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
         if (exactLookup) {
           const username = text(url.searchParams.get("username"), 20);
           if (!validUsername(username)) { sendJson(response, 404, { error: "user_not_found" }); return true; }
-          const found = findUserByName.get(username.toLowerCase());
+          const found = lookupFriend(session,username);
           if (!found || found.id === session.user_id || isBlocked(session.user_id, found.id)) { sendJson(response, 404, { error: "user_not_found" }); return true; }
           const relation = friendship(session.user_id, found.id);
           sendJson(response, 200, { user: publicUser(found), relationship: relation ? { status: relation.status, requestedByMe: relation.requested_by === session.user_id } : null }); return true;
@@ -760,11 +866,13 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
             AND NOT EXISTS (SELECT 1 FROM social_blocks b WHERE (b.blocker_id = ? AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = ?))
             ORDER BY lower(u.username)
           `).all(session.user_id, session.user_id, session.user_id, session.user_id, session.user_id);
-          sendJson(response, 200, { friends: rows.map(publicUser) }); return true;
+          const presence = database.prepare(`SELECT 1 FROM social_sessions s LEFT JOIN player_visibility v ON v.player_id=s.user_id
+            WHERE s.user_id=? AND s.revoked_at IS NULL AND s.last_used_at>? AND coalesce(v.hidden,0)=0 LIMIT 1`);
+          sendJson(response, 200, { friends: rows.map(row=>({...publicUser(row),online:!!presence.get(row.id,now()-45000)})) }); return true;
         }
         if (pathname === "/v1/social/friend-requests" && request.method === "GET") {
-          const rows = database.prepare(`SELECT f.*, u.* FROM social_friendships f JOIN social_users u ON u.id = f.requested_by
-            WHERE (f.user_low = ? OR f.user_high = ?) AND f.status = 'pending' ORDER BY f.created_at DESC`).all(session.user_id, session.user_id);
+          const rows = database.prepare(`SELECT u.*, f.requested_by FROM social_friendships f JOIN social_users u ON u.id = CASE WHEN f.user_low = ? THEN f.user_high ELSE f.user_low END
+            WHERE (f.user_low = ? OR f.user_high = ?) AND f.status = 'pending' ORDER BY f.created_at DESC`).all(session.user_id, session.user_id, session.user_id);
           sendJson(response, 200, {
             incoming: rows.filter((row) => row.requested_by !== session.user_id).map(publicUser),
             outgoing: rows.filter((row) => row.requested_by === session.user_id).map(publicUser),
@@ -773,7 +881,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
         if (pathname === "/v1/social/friend-requests" && request.method === "POST") {
           if (!allowRate(`friend:${session.user_id}`, 20, 60 * 60_000)) { sendJson(response, 429, { error: "friend_request_rate_limited" }); return true; }
           const body = await readBody(request);
-          const target = findUserByName.get(text(body.username, 20).toLowerCase());
+          const target = lookupFriend(session,text(body.username,20));
           if (!target || target.id === session.user_id || isBlocked(session.user_id, target?.id)) { sendJson(response, 404, { error: "user_not_found" }); return true; }
           const count = database.prepare("SELECT count(*) count FROM social_friendships WHERE requested_by = ? AND status = 'pending'").get(session.user_id).count;
           if (count >= 50) { sendJson(response, 429, { error: "pending_request_limit" }); return true; }
@@ -821,6 +929,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, e
           const [low, high] = canonicalPair(session.user_id, otherId);
           database.exec("BEGIN IMMEDIATE");
           try {
+            parties.separate(session.user_id, otherId);
             database.prepare("INSERT OR IGNORE INTO social_blocks(blocker_id, blocked_id, created_at) VALUES (?, ?, ?)").run(session.user_id, otherId, now());
             database.prepare("DELETE FROM social_friendships WHERE user_low = ? AND user_high = ?").run(low, high);
             database.exec("COMMIT");

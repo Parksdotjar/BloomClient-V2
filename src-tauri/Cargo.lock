@@ -518,6 +518,7 @@ dependencies = [
  "url",
  "uuid",
  "vodozemac",
+ "webview2-com",
  "windows 0.62.2",
  "zip 2.4.2",
 ]

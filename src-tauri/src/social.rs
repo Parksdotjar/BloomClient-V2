@@ -24,6 +24,16 @@ use vodozemac::{
 use super::bloom_data_dir;
 
 const SOCIAL_API: &str = "https://api.north.bloomclient.org/minecraft/v1/social";
+
+fn social_endpoint() -> &'static str {
+    if option_env!("DELIGHT_LOCAL_SOCIAL_CA").is_some() && PLAYER_SCOPE.with(|p|p.borrow().is_some()) {
+        static LOCAL_ENDPOINT: OnceLock<String> = OnceLock::new();
+        LOCAL_ENDPOINT.get_or_init(|| {
+            let port = option_env!("DELIGHT_LOCAL_SOCIAL_PORT").and_then(|port| port.parse::<u16>().ok()).unwrap_or(19194);
+            format!("https://127.0.0.1:{port}/v1/social")
+        })
+    } else { SOCIAL_API }
+}
 const SOCIAL_AUTH: &str = "https://delightproductions.org/v1/social/native/authorize";
 const KEYRING_SERVICE: &str = "Bloom Client Social";
 
@@ -62,6 +72,8 @@ pub struct SocialUser {
     minecraft_username: Option<String>,
     avatar_url: Option<String>,
     provider: Option<String>,
+    #[serde(default)]
+    online: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,7 +131,7 @@ struct AttachmentDescriptor {
     ciphertext_hash: String,
 }
 
-const MESSAGE_RETENTION_MS: u64 = 24 * 60 * 60 * 1_000;
+const MESSAGE_RETENTION_MS: u64 = 7 * 24 * 60 * 60 * 1_000;
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -399,7 +411,9 @@ fn random_urlsafe(bytes: usize) -> String {
 }
 
 fn credential(name: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, name).map_err(|error| error.to_string())
+    keyring::Entry::new(if PLAYER_SCOPE.with(|p| p.borrow().is_some()) {
+        if option_env!("DELIGHT_LOCAL_SOCIAL_CA").is_some() { "Delight Local Player Social" } else { "Delight Player Social" }
+    } else { KEYRING_SERVICE }, name).map_err(|error| error.to_string())
 }
 
 fn get_secret(name: &str) -> Option<String> {
@@ -417,7 +431,34 @@ fn delete_secret(name: &str) -> Result<(), String> {
     }
 }
 
+thread_local! { static PLAYER_SCOPE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) }; }
+
+fn selected_player() -> Option<String> {
+    Uuid::parse_str(&super::read_account_store().active_id?).ok().map(|id| id.to_string())
+}
+
 fn active_profile() -> Option<String> {
+    PLAYER_SCOPE.with(|p| p.borrow().clone()).or_else(legacy_active_profile)
+}
+
+// Pin keys, vaults and session refreshes to the initiating player for the entire
+// blocking operation, including time spent waiting for the network.
+fn player_task<F,T>(work: F) -> tauri::async_runtime::JoinHandle<Result<T,String>>
+where F: FnOnce() -> Result<T,String> + Send + 'static, T: Send + 'static {
+    let player = selected_player();
+    tauri::async_runtime::spawn_blocking(move || {
+        let player = player.ok_or("Sign in to Minecraft to use Friends.")?;
+        struct Reset;
+        impl Drop for Reset { fn drop(&mut self) { PLAYER_SCOPE.with(|p| p.replace(None)); } }
+        let _reset = Reset;
+        PLAYER_SCOPE.with(|p| p.replace(Some(player.clone())));
+        let result = work();
+        if selected_player().as_ref() != Some(&player) { return Err("Minecraft account changed.".into()); }
+        result
+    })
+}
+
+fn legacy_active_profile() -> Option<String> {
     get_secret("active-profile").filter(|value| Uuid::parse_str(value).is_ok())
 }
 
@@ -482,7 +523,9 @@ fn vault_key() -> Result<[u8; 32], String> {
 }
 
 fn social_root() -> Result<std::path::PathBuf, String> {
-    let root = bloom_data_dir()?.join("social");
+    let root = bloom_data_dir()?.join(if PLAYER_SCOPE.with(|p| p.borrow().is_some()) {
+        if option_env!("DELIGHT_LOCAL_SOCIAL_CA").is_some() { "local-player-social" } else { "player-social" }
+    } else { "social" });
     std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
     Ok(root)
 }
@@ -594,7 +637,11 @@ fn save_tokens(bundle: &TokenBundle) -> Result<(), String> {
 }
 
 fn http_client() -> Result<reqwest::blocking::Client, String> {
-    reqwest::blocking::Client::builder()
+    let mut builder = reqwest::blocking::Client::builder().redirect(reqwest::redirect::Policy::none());
+    if let Some(cert) = option_env!("DELIGHT_LOCAL_SOCIAL_CA").filter(|_|social_endpoint()!=SOCIAL_API) {
+        builder = builder.tls_built_in_root_certs(false).add_root_certificate(reqwest::Certificate::from_pem(cert.as_bytes()).map_err(|e| e.to_string())?);
+    }
+    builder
         .connect_timeout(Duration::from_secs(8))
         .timeout(Duration::from_secs(20))
         .user_agent(concat!(
@@ -608,7 +655,7 @@ fn http_client() -> Result<reqwest::blocking::Client, String> {
 
 fn refresh_tokens(tokens: &SavedTokens) -> Result<SavedTokens, String> {
     let response = http_client()?
-        .post(format!("{SOCIAL_API}/native/refresh"))
+        .post(format!("{}/native/refresh", social_endpoint()))
         .json(&serde_json::json!({ "refreshToken": tokens.refresh_token }))
         .send()
         .map_err(|error| format!("Delight Social could not refresh your sign-in: {error}"))?;
@@ -715,30 +762,26 @@ pub(super) fn workspace_request(
     }, |old| refresh_rejected_tokens(&name, old))
 }
 
-pub(crate) fn ask_delight_request(account: &str, body: Option<serde_json::Value>) -> Result<serde_json::Value, String> {
-    let (profile, tokens) = {
-        let _guard = social_credential_io().lock().map_err(|_| "offline")?;
-        let profile = active_profile().ok_or("signed_out")?;
-        if !account.ends_with(&format!("-{profile}")) { return Err("account_changed".into()); }
-        let tokens = load_tokens().ok_or("signed_out")?;
-        if tokens.refresh_expires_at <= timestamp() { return Err("signed_out".into()); }
-        let tokens = if tokens.access_expires_at <= timestamp() + 30_000 {
-            refresh_tokens(&tokens).map_err(|_| "offline")?
-        } else { tokens };
-        (profile, tokens)
-    };
-    let url = format!("{SOCIAL_API}/ask-delight/{}", if body.is_some() { "answer" } else { "usage" });
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(28))
-        .redirect(reqwest::redirect::Policy::none())
-        .build().map_err(|_| "offline")?;
-    let mut request = client.request(if body.is_some() { reqwest::Method::POST } else { reqwest::Method::GET }, url)
-        .bearer_auth(tokens.access_token);
-    if let Some(body) = body { request = request.json(&body); }
-    let response = request.send().map_err(|_| "offline")?;
-    if ask_delight_profile().as_deref() != Some(profile.as_str()) { return Err("account_changed".into()); }
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED { return Err("signed_out".into()); }
-    response.json().map_err(|_| "offline".into())
+pub(crate) async fn ask_delight_request(account: String, body: Option<serde_json::Value>) -> Result<serde_json::Value, String> {
+    let player = selected_player().ok_or("signed_out")?;
+    if !account.starts_with(&format!("{}-", player.replace('-', ""))) {
+        return Err("account_changed".into());
+    }
+    let session = social_session_state().await?;
+    if !session.signed_in || session.user.as_ref().map(|u| &u.id) != Some(&player) {
+        return Err("account_changed".into());
+    }
+    player_task(move || {
+        if active_profile().as_ref() != Some(&player) { return Err("account_changed".into()); }
+        let (method, route) = if body.is_some() {
+            (reqwest::Method::POST, "/ask-delight/answer")
+        } else {
+            (reqwest::Method::GET, "/ask-delight/usage")
+        };
+        let response = authenticated_request(method, route, body)?;
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED { return Err("signed_out".into()); }
+        response.json().map_err(|_| "offline".into())
+    }).await.map_err(|_| "offline")?
 }
 
 fn authenticated_request(
@@ -750,7 +793,7 @@ fn authenticated_request(
     let tokens = current_tokens()?;
     let client = http_client()?;
     authenticated_response(tokens, |tokens| {
-        let mut request = client.request(method.clone(), format!("{SOCIAL_API}{route}")).bearer_auth(&tokens.access_token);
+        let mut request = client.request(method.clone(), format!("{}{route}", social_endpoint())).bearer_auth(&tokens.access_token);
         if let Some(body) = &body { request = request.json(body); }
         request.send().map_err(|error| format!("Delight Social is unavailable: {error}"))
     }, |tokens| refresh_rejected_tokens(&name, tokens))
@@ -929,7 +972,7 @@ fn encryption_details(
 fn upload_blob(friend_id: &str, ciphertext: Vec<u8>) -> Result<serde_json::Value, String> {
     let tokens = current_tokens()?;
     let response = http_client()?
-        .post(format!("{SOCIAL_API}/blobs?recipientId={friend_id}"))
+        .post(format!("{}/blobs?recipientId={friend_id}", social_endpoint()))
         .bearer_auth(tokens.access_token)
         .header("content-type", "application/octet-stream")
         .body(ciphertext)
@@ -947,7 +990,7 @@ fn upload_blob(friend_id: &str, ciphertext: Vec<u8>) -> Result<serde_json::Value
 fn download_blob(blob_id: &str) -> Result<Vec<u8>, String> {
     let tokens = current_tokens()?;
     let response = http_client()?
-        .get(format!("{SOCIAL_API}/blobs/{blob_id}"))
+        .get(format!("{}/blobs/{blob_id}", social_endpoint()))
         .bearer_auth(tokens.access_token)
         .send()
         .map_err(|error| format!("Delight could not download an encrypted screenshot: {error}"))?;
@@ -1115,7 +1158,7 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
             let Some(attempt) = runtime.attempt.as_ref() else { return Ok(None); };
             (attempt.verifier.clone(), attempt.challenge.clone(), attempt.state.clone())
         };
-        let response = http_client()?.post(format!("{SOCIAL_API}/native/status")).json(&serde_json::json!({
+        let response = http_client()?.post(format!("{}/native/status", social_endpoint())).json(&serde_json::json!({
             "challenge": challenge, "state": state,
         })).send().map_err(|error| format!("Delight could not check account approval: {error}"))?;
         if response.status() == reqwest::StatusCode::ACCEPTED { return Ok(None); }
@@ -1138,7 +1181,7 @@ pub async fn social_poll_sign_in() -> Result<Option<SocialSessionState>, String>
         let credential_guard = social_credential_io().lock().map_err(|_| "Delight account restoration is busy.".to_string())?;
         activate_profile(&profile, false)?;
         let (curve, signing) = identity_keys()?;
-        let response = http_client()?.post(format!("{SOCIAL_API}/native/exchange")).json(&serde_json::json!({
+        let response = http_client()?.post(format!("{}/native/exchange", social_endpoint())).json(&serde_json::json!({
             "code": code, "verifier": verifier, "deviceId": device_id()?, "deviceName": crate::platform::DEVICE_NAME,
             "curve25519Key": curve, "ed25519Key": signing,
         })).send().map_err(|error| format!("Delight could not finish sign-in: {error}"))?;
@@ -1188,6 +1231,7 @@ fn restore_session() -> Result<SocialSessionState, String> {
             save_vault(&vault)?;
             Ok(SocialSessionState { signed_in: true, user: Some(me.user), needs_username: me.needs_username })
         }
+        Err(error) if error.contains("sign-in expired") => { delete_secret(&profile_secret("tokens"))?; Ok(signed_out()) }
         Err(error) => {
             // Preserve the last verified profile during temporary service/network failures.
             let cached = load_vault()?.profile;
@@ -1203,14 +1247,110 @@ fn restore_session() -> Result<SocialSessionState, String> {
 
 #[tauri::command]
 pub async fn social_session_state() -> Result<SocialSessionState, String> {
-    tauri::async_runtime::spawn_blocking(restore_session)
-    .await
-    .map_err(|error| error.to_string())?
+    let Some(stored) = super::saved_session() else {
+        return Ok(SocialSessionState { signed_in: false, user: None, needs_username: false });
+    };
+    let expected = Uuid::parse_str(&stored.uuid).map_err(|_| "Invalid Minecraft profile.")?.to_string();
+    let cached = player_task(|| Ok(load_tokens().is_some_and(|t| t.refresh_expires_at > timestamp()))).await.map_err(|e| e.to_string())??;
+    if cached {
+        let state=player_task(restore_session).await.map_err(|e|e.to_string())??;
+        if state.signed_in && state.user.as_ref().is_some_and(|u|u.id==expected) { return Ok(state); }
+    }
+    let session = super::launch_session(&stored).await?;
+    if Uuid::parse_str(&session.uuid).ok().map(|id| id.to_string()).as_ref()!=Some(&expected) {return Err("Minecraft account changed.".into());}
+    if stored.refresh_token != session.refresh_token && selected_player().as_ref()==Some(&expected) {
+        super::save_account_session(&session,false)?;
+    }
+    player_task(move || {
+        if active_profile().as_ref()!=Some(&expected) {return Err("Minecraft account changed.".into());}
+        let _vault=social_vault_io().lock().map_err(|_| "Friends is busy.")?;
+        let _guard=social_credential_io().lock().map_err(|_| "Friends is busy.")?;
+        let (curve,signing)=identity_keys()?;
+        let response=http_client()?.post(format!("{}/native/player",social_endpoint())).bearer_auth(&session.access_token)
+            .json(&serde_json::json!({"deviceId":device_id()?,"deviceName":crate::platform::DEVICE_NAME,"curve25519Key":curve,"ed25519Key":signing}))
+            .send().map_err(|_| "Friends is reconnecting.")?;
+        if !response.status().is_success(){return Err(format!("Friends sign-in unavailable ({}).",response.status().as_u16()));}
+        let bundle:TokenBundle=response.json().map_err(|_| "Invalid Friends session.")?;
+        if bundle.user.as_ref().map(|u|u.id.as_str()) != Some(expected.as_str()){return Err("Unexpected Minecraft player.".into());}
+        save_tokens(&bundle)?;
+        let mut vault=load_vault()?;vault.profile=bundle.user.clone();save_vault(&vault)?;
+        drop(_guard);drop(_vault);
+        upload_prekeys()?;
+        Ok(SocialSessionState{signed_in:true,user:bundle.user,needs_username:false})
+    }).await.map_err(|e|e.to_string())?
+}
+
+pub(super) fn party_connection_file(player: &str) -> Option<std::path::PathBuf> {
+    let id = Uuid::parse_str(player).ok()?;
+    Some(bloom_data_dir().ok()?.join(format!("party-connection-{id}.json")))
+}
+
+fn current_connection(player: &str) -> Option<serde_json::Value> {
+    let bytes = std::fs::read(party_connection_file(player)?).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let age = timestamp().checked_sub(value["time"].as_u64()?)?;
+    (age < 12000 && value["visit"].is_string() && value["server"].is_string()).then_some(value)
+}
+
+// Renew only the specific visit the player shared, even when the drawer is closed.
+fn monitor_party_share(player: String, party: String, connection: serde_json::Value, lease: String) {
+    std::thread::spawn(move || {
+        PLAYER_SCOPE.with(|scope| scope.replace(Some(player.clone())));
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            let live = selected_player().as_ref() == Some(&player) && current_connection(&player)
+                .is_some_and(|c| c["visit"] == connection["visit"] && c["server"] == connection["server"]);
+            let action = if live { "renew" } else { "stop" };
+            let update = serde_json::json!({"action":action,"partyId":party,"lease":lease});
+            if request::<serde_json::Value>(reqwest::Method::POST, "/party", Some(update)).is_err() || !live { break; }
+        }
+    });
+}
+
+#[tauri::command]
+pub async fn social_party(player: String, change: Option<serde_json::Value>) -> Result<serde_json::Value,String> {
+    player_task(move || {
+        if active_profile().as_ref() != Some(&player) { return Err("Minecraft account changed.".into()); }
+        let connection = current_connection(&player);
+        let mut change = change;
+        let mut monitor = None;
+        if let Some(body) = change.as_mut() {
+            if body["action"] == "share" {
+                let live = connection.as_ref().ok_or("Join a Minecraft server first.")?;
+                if body["visit"] != live["visit"] { return Err("Your Minecraft server changed. Reopen the player menu.".into()); }
+                let party = body["partyId"].as_str().ok_or("Your party changed.")?.to_owned();
+                let lease = Uuid::new_v4().to_string();
+                body["server"] = live["server"].clone();
+                body["lease"] = lease.clone().into();
+                monitor = Some((party,live.clone(),lease));
+            }
+        }
+        let method = if change.is_some() { reqwest::Method::POST } else { reqwest::Method::GET };
+        let mut state: serde_json::Value = request(method, "/party", change)?;
+        state["currentServer"] = connection.into();
+        if let Some((party,live,lease)) = monitor { monitor_party_share(player,party,live,lease); }
+        Ok(state)
+    }).await.map_err(|e|e.to_string())?
+}
+
+#[tauri::command]
+pub async fn social_player_settings(player: String, action: String, hidden: Option<bool>) -> Result<serde_json::Value,String> {
+    let player = Uuid::parse_str(&player).map_err(|_| "Invalid Minecraft player.")?.to_string();
+    player_task(move || {
+        if active_profile().as_ref()!=Some(&player){return Err("Minecraft account changed.".into());}
+        match action.as_str() {
+            "visibility" => request(reqwest::Method::GET,"/me/visibility",None),
+            "setVisibility" => request(reqwest::Method::PUT,"/me/visibility",Some(serde_json::json!({"hidden":hidden}))),
+            "linkStatus" => request(reqwest::Method::GET,"/me/link-status",None),
+            "linkCode" => request(reqwest::Method::POST,"/me/link-code",None),
+            _ => Err("Unknown player setting.".into()),
+        }
+    }).await.map_err(|e|e.to_string())?
 }
 
 #[tauri::command]
 pub async fn social_set_username(username: String) -> Result<SocialUser, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let value: serde_json::Value = request(
             reqwest::Method::PUT,
             "/me/username",
@@ -1590,7 +1730,7 @@ fn snapshot() -> Result<SocialSnapshot, String> {
 
 #[tauri::command]
 pub async fn social_snapshot() -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+    player_task(|| {
         let result = snapshot();
         if let Err(error) = &result {
             eprintln!("[Delight Social] snapshot failed: {error}");
@@ -1603,7 +1743,7 @@ pub async fn social_snapshot() -> Result<SocialSnapshot, String> {
 
 #[tauri::command]
 pub async fn social_wait_for_updates(cursor: Option<String>) -> Result<SocialChange, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let route = match cursor.filter(|value| !value.is_empty()) {
             Some(value) => format!("/changes?after={value}&waitMs=15000"),
             None => "/changes?waitMs=0".to_string(),
@@ -1616,7 +1756,7 @@ pub async fn social_wait_for_updates(cursor: Option<String>) -> Result<SocialCha
 
 #[tauri::command]
 pub async fn social_sync_messages() -> Result<SocialMessageSync, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+    player_task(|| {
         let _vault_guard = social_vault_io()
             .lock()
             .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
@@ -1644,7 +1784,7 @@ pub async fn social_sync_messages() -> Result<SocialMessageSync, String> {
 pub async fn social_encryption_details(
     friend_id: String,
 ) -> Result<SocialEncryptionDetails, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let _vault_guard = social_vault_io()
             .lock()
             .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
@@ -1662,7 +1802,7 @@ pub async fn social_acknowledge_identity(
     friend_id: String,
     verified: bool,
 ) -> Result<SocialEncryptionDetails, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let _vault_guard = social_vault_io()
             .lock()
             .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
@@ -1677,7 +1817,7 @@ pub async fn social_acknowledge_identity(
 
 #[tauri::command]
 pub async fn social_share_context() -> Result<SocialShareContext, String> {
-    tauri::async_runtime::spawn_blocking(|| share_context_with(restore_session, || request(reqwest::Method::GET, "/friends", None)))
+    player_task(|| share_context_with(restore_session, || request(reqwest::Method::GET, "/friends", None)))
     .await
     .map_err(|error| error.to_string())?
 }
@@ -1699,7 +1839,7 @@ fn share_context_with(
 
 #[tauri::command]
 pub async fn social_send_friend_request(username: String) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         request_empty(
             reqwest::Method::POST,
             "/friend-requests",
@@ -1713,7 +1853,7 @@ pub async fn social_send_friend_request(username: String) -> Result<SocialSnapsh
 
 #[tauri::command]
 pub async fn social_accept_friend_request(user_id: String) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let _: serde_json::Value = request(
             reqwest::Method::POST,
             &format!("/friend-requests/{user_id}/accept"),
@@ -1727,7 +1867,7 @@ pub async fn social_accept_friend_request(user_id: String) -> Result<SocialSnaps
 
 #[tauri::command]
 pub async fn social_decline_friend_request(user_id: String) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         request_empty(
             reqwest::Method::DELETE,
             &format!("/friend-requests/{user_id}"),
@@ -1741,7 +1881,7 @@ pub async fn social_decline_friend_request(user_id: String) -> Result<SocialSnap
 
 #[tauri::command]
 pub async fn social_remove_friend(user_id: String) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         request_empty(
             reqwest::Method::DELETE,
             &format!("/friends/{user_id}"),
@@ -1764,7 +1904,7 @@ pub async fn social_create_instance_invites(
     invites: Vec<SocialInstanceInviteTarget>,
     note: Option<String>,
 ) -> Result<SocialInstanceInviteSendResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let note = note.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
         if note.as_ref().is_some_and(|value| value.chars().count() > 280) {
             return Err("Keep the invite message under 280 characters.".into());
@@ -1814,7 +1954,7 @@ pub async fn social_create_instance_invites(
 pub async fn social_claim_instance_invite(
     invite_id: String,
 ) -> Result<InstanceInviteClaim, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         request(
             reqwest::Method::POST,
             &format!("/instance-invites/{invite_id}/claim"),
@@ -1843,7 +1983,7 @@ pub async fn social_complete_instance_invite(
     invite_id: String,
     claim_token: String,
 ) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         update_instance_invite(invite_id, "complete", Some(claim_token))
     })
     .await
@@ -1855,7 +1995,7 @@ pub async fn social_release_instance_invite(
     invite_id: String,
     claim_token: String,
 ) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         update_instance_invite(invite_id, "release", Some(claim_token))
     })
     .await
@@ -1864,14 +2004,14 @@ pub async fn social_release_instance_invite(
 
 #[tauri::command]
 pub async fn social_decline_instance_invite(invite_id: String) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || update_instance_invite(invite_id, "decline", None))
+    player_task(move || update_instance_invite(invite_id, "decline", None))
         .await
         .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 pub async fn social_revoke_instance_invite(invite_id: String) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || update_instance_invite(invite_id, "revoke", None))
+    player_task(move || update_instance_invite(invite_id, "revoke", None))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -2066,7 +2206,7 @@ pub async fn social_send_message(
     text: String,
     reply_to: Option<String>,
 ) -> Result<SocialMessage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let body = text.trim().to_string();
         if body.is_empty() || body.chars().count() > 2000 {
             return Err("Messages must contain between 1 and 2,000 characters.".into());
@@ -2100,7 +2240,7 @@ pub async fn social_react(
     emoji: String,
     add: bool,
 ) -> Result<SocialMessage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         if emoji.is_empty() || emoji.chars().count() > 8 {
             return Err("Choose one Unicode emoji reaction.".into());
         }
@@ -2132,7 +2272,7 @@ pub async fn social_edit_message(
     message_id: String,
     text: String,
 ) -> Result<SocialMessage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let body = text.trim().to_string();
         if body.is_empty() || body.chars().count() > 2000 {
             return Err("Messages must contain between 1 and 2,000 characters.".into());
@@ -2213,7 +2353,7 @@ pub async fn social_pin_message(
     message_id: String,
     pinned: bool,
 ) -> Result<SocialMessage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let _vault_guard = social_vault_io()
             .lock()
             .map_err(|_| "Delight Social's local message store is busy.".to_string())?;
@@ -2239,7 +2379,7 @@ pub async fn social_pin_message(
 
 #[tauri::command]
 pub async fn social_send_screenshot(friend_id: String) -> Result<Option<SocialMessage>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let Some(path) = rfd::FileDialog::new()
             .add_filter("Screenshot", &["png", "jpg", "jpeg", "webp"])
             .pick_file()
@@ -2276,7 +2416,7 @@ pub async fn social_create_group(
     name: String,
     member_ids: Vec<String>,
 ) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let _: serde_json::Value = request(
             reqwest::Method::POST,
             "/groups",
@@ -2294,7 +2434,7 @@ pub async fn social_update_group(
     name: Option<String>,
     icon_data_url: Option<String>,
 ) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let mut body = serde_json::Map::new();
         if let Some(name) = name {
             body.insert("name".into(), serde_json::Value::String(name));
@@ -2318,7 +2458,7 @@ pub async fn social_add_group_member(
     group_id: String,
     user_id: String,
 ) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let _: serde_json::Value = request(
             reqwest::Method::POST,
             &format!("/groups/{group_id}/members"),
@@ -2335,7 +2475,7 @@ pub async fn social_remove_group_member(
     group_id: String,
     user_id: String,
 ) -> Result<SocialSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let _: serde_json::Value = request(
             reqwest::Method::DELETE,
             &format!("/groups/{group_id}/members/{user_id}"),
@@ -2427,7 +2567,7 @@ pub async fn social_send_group_message(
     text: String,
     reply_to: Option<String>,
 ) -> Result<SocialMessage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let body = text.trim().to_string();
         if body.is_empty() || body.chars().count() > 2000 {
             return Err("Messages must contain between 1 and 2,000 characters.".into());
@@ -2460,7 +2600,7 @@ pub async fn social_react_group(
     emoji: String,
     add: bool,
 ) -> Result<SocialMessage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         if emoji.is_empty() || emoji.chars().count() > 8 {
             return Err("Choose one Unicode emoji reaction.".into());
         }
@@ -2491,7 +2631,7 @@ pub async fn social_edit_group_message(
     message_id: String,
     text: String,
 ) -> Result<SocialMessage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let body = text.trim().to_string();
         if body.is_empty() || body.chars().count() > 2000 {
             return Err("Messages must contain between 1 and 2,000 characters.".into());
@@ -2546,7 +2686,7 @@ pub async fn social_pin_group_message(
     message_id: String,
     pinned: bool,
 ) -> Result<SocialMessage, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    player_task(move || {
         let groups: GroupsResponse = request(reqwest::Method::GET, "/groups", None)?;
         let group = groups.groups.into_iter().find(|group| group.id == group_id).ok_or("Group chat not found.")?;
         let _vault_guard = social_vault_io()
@@ -2629,7 +2769,7 @@ mod security_tests {
         let restored = std::cell::Cell::new(false);
         let context = share_context_with(|| {
             restored.set(true);
-            Ok(SocialSessionState { signed_in: true, needs_username: false, user: Some(SocialUser { id: "test-user".into(), username: Some("test".into()), display_name: None, minecraft_uuid: None, minecraft_username: None, avatar_url: None, provider: None }) })
+            Ok(SocialSessionState { signed_in: true, needs_username: false, user: Some(SocialUser { id: "test-user".into(), username: Some("test".into()), display_name: None, minecraft_uuid: None, minecraft_username: None, avatar_url: None, provider: None, online: false }) })
         }, || {
             assert!(restored.get(), "sharing must restore the account without opening Social");
             Ok(FriendsResponse { friends: vec![] })

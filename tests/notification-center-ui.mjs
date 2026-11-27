@@ -1145,7 +1145,7 @@ async function checkClientNotice(theme, viewport, motion, target = url) {
     await settle();
     const compact = await islandFrame(page);
     assert.equal(await media.count(), 0, "The active notice gets the single island slot");
-    assert.equal(await trigger.locator("svg.lucide-triangle-alert").count(), 1);
+    assert.equal(await trigger.locator("svg.desktop-island-notice-icon").count(), 1);
     const previewText = await preview.textContent();
     assert.match(previewText, /(?:…|\.\.\.)$/, "A long notice ends its preview with an ellipsis");
     assert.equal(previewText.replace(/\s*(?:…|\.\.\.)$/, ""), firstTwelveWords,
@@ -1330,13 +1330,13 @@ async function checkNowPlaying(theme, viewport, motion, target) {
     await appIcon.waitFor();
     const iconSource = await appIcon.getAttribute("src");
     assert.ok(await appIcon.evaluate(image => image.complete && image.naturalWidth > 0), "The native app logo is shown in the row");
-    assert.equal(await media.locator("svg.lucide-music-2").count(), 0, "No generic glyph is painted behind the app logo");
+    assert.equal(await appIcon.locator("..").locator(":scope > svg").count(), 0, "No generic glyph is painted behind the app logo");
     await page.evaluate(() => window.notificationTest.setMedia({ appIcon: "data:image/png;base64,invalid" }));
     await appIcon.waitFor({ state: "hidden" });
     assert.equal(await appIcon.evaluate(image => image.getBoundingClientRect().width), 0, "An invalid image leaves no logo slot");
     await page.evaluate(() => window.notificationTest.setMedia({ appIcon: null }));
     await appIcon.waitFor({ state: "detached" });
-    assert.equal(await media.locator("svg.lucide-music-2").count(), 0, "An unresolved app has no placeholder logo");
+    assert.equal(await appIcon.locator("..").locator(":scope > svg").count(), 0, "An unresolved app has no placeholder logo");
     await page.evaluate(src => window.notificationTest.setMedia({ appIcon: src }), iconSource);
     await appIcon.waitFor();
     assert.ok(await media.getByRole("button", { name: "Previous track", exact: true }).isDisabled(),

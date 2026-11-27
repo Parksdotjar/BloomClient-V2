@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Info } from "lucide-react";
+import { InfoIcon as Info } from "@phosphor-icons/react";
 import "./info-tip.css";
 
 export function InfoTip({ label, children }: { label: string; children: string }) {

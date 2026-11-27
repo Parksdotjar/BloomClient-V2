@@ -20,6 +20,9 @@ pub(crate) fn show_main_window(app: &AppHandle) {
 
 #[cfg(desktop)]
 fn enqueue(app: &AppHandle, urls: Vec<url::Url>) {
+    if urls.iter().any(|url| url.as_str() == "delight://launcher") {
+        show_main_window(app);
+    }
     let state = app.state::<PendingLinks>();
     let mut pending = state.0.lock().unwrap_or_else(|e| e.into_inner());
     for url in urls.iter().filter(|url| crate::workspace_player::is_player_uri(url)

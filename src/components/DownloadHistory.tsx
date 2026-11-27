@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Check } from "lucide-react";
+import { CheckIcon as Check } from "@phosphor-icons/react";
 import "./download-feedback.css";
 
 function HistoryRow({ id, leaving, delay, motion, onExited, children }: {

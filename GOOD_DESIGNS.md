@@ -359,3 +359,15 @@ Parks called the slower eased delete animation “much better,” then requested
 Parks explicitly approved moving global Settings into the account menu and replacing its sidebar slot with **Portal**, combining servers and worlds, recent sessions and direct Play/Join. He explicitly required the existing instance header and everything else to stay the same. Approval covers this placement and scope; the new Portal page rendering still awaits visual review. The earlier instance-header redesign proposals were rejected and are not approved references.
 
 Parks approved the hat bases seated roughly half a model pixel into the head, the framing of hat cards, and previews showing the selected palette.
+
+Parks approved Northstar’s thick square brass buckle for the witch hat. Its open center shows the fabric band, and painted pixel clusters carry the highlights.
+
+Parks approved the five-section Cinder Horns with a forward-flaring elbow, twisted blade and upturned ember tip.
+
+2026-11-27 — Parks selected the Settings account-list bust as the reference for the global rail account picture.
+
+2026-11-27 — Parks rejected the plain Appear offline toggle and inline website code. The reference illustrates a status chooser. The local revision displays the current state, offers Online and Invisible, and puts pairing and copy feedback in a separate view. Visual review pending.
+
+2026-11-27 — Parks likes the size and rounded treatment of the Social tabs. This approval applies to button sizing and shape. He asked for equal vertical margins.
+
+2026-11-27 — Approved design direction: Phosphor for launcher controls with a filled icon on the active rail destination and outlined peers. Final implementation awaits visual feedback.

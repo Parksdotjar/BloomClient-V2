@@ -1,0 +1,36 @@
+.social-play {height:100%;min-height:0;overflow:auto;container-type:inline-size;color:var(--text)}
+.play-inner {max-width:1100px;margin:auto;padding:clamp(20px,4cqw,50px);display:grid;gap:18px}
+.play-heading h1 {margin:0;font-size:clamp(24px,4cqw,36px);letter-spacing:-.04em}
+.play-columns {display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.play-panel,.play-invite {border:1px solid var(--border);background:var(--sidebar-surface);border-radius:12px;padding:20px}
+.play-panel {display:grid;gap:16px;align-content:start;min-width:0}
+.play-panel header,.play-friends-heading,.play-invite,.party-members li {display:flex;align-items:center;gap:10px}
+.play-panel header small,.play-friends-heading button,.play-person svg:last-child {margin-left:auto}
+.social-play h2 {margin:0;font-size:17px}
+.social-play p,.social-play small {margin:0;color:var(--muted);line-height:1.5}
+.social-play button,.social-play select,.social-play input {font:inherit;color:inherit}
+.social-play button {display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border);border-radius:7px;background:var(--desktop-selection);padding:8px 12px;cursor:pointer}
+.social-play button:hover:not(:disabled) {background:var(--launcher-menu-hover,var(--desktop-selection));border-color:var(--muted)}
+.social-play button:disabled {opacity:.45;cursor:default}
+.social-play .play-primary {background:var(--text);color:var(--theme-base);font-weight:700;justify-self:start}
+.social-play .play-primary:hover:not(:disabled) {background:var(--text);opacity:.88}
+.social-play form,.social-play label {display:grid;gap:7px}
+.social-play label {font-size:12px;color:var(--muted)}
+.social-play input,.social-play select {min-width:0;width:100%;padding:8px 10px;background:var(--theme-base);border:1px solid var(--border);border-radius:6px;color:var(--text)}
+.social-play form button,.social-play .play-subtle {justify-self:start}
+.social-play .play-subtle {border:none;background:transparent;color:var(--muted);padding:4px 0}
+.party-members {list-style:none;padding:0;margin:0;display:grid;gap:8px}
+.play-friends-heading {margin-top:10px;border-bottom:1px solid var(--border);padding-bottom:10px}
+.social-play .play-person {justify-content:start}
+.social-play .play-error {color:var(--text);border-left:3px solid var(--danger,var(--accent));padding-left:12px}
+.play-invite {display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:7px;padding:12px;min-width:0}
+.play-invite-message {display:flex;align-items:baseline;gap:.3em;min-width:0;white-space:nowrap;font-size:13px}
+.play-invite-message strong {min-width:0;overflow:hidden;text-overflow:ellipsis}
+.play-invite-message > span {flex:none}
+.social-play .play-invite button {width:28px;height:28px;padding:0;border:0;box-shadow:none;color:white;border-radius:6px}
+.social-play .play-invite .play-accept {background:#75ab0b}
+.social-play .play-invite .play-decline {background:#cf2633}
+@container (max-width:590px) {.play-columns {grid-template-columns:1fr}}
+.social-friend-filters {display:flex;gap:5px;padding-block:10px}
+.social-friend-filters button {background:transparent;color:var(--muted);border:1px solid transparent;border-radius:6px;padding:6px 10px}
+.social-friend-filters button[aria-pressed=true] {color:var(--text);background:var(--desktop-selection);border-color:var(--border)}

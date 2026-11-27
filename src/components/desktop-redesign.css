@@ -700,6 +700,28 @@
 .desktop-redesign .rail-destinations > button:active {
   background: color-mix(in srgb, var(--text) 15%, var(--desktop-frame));
 }
+/* Filter the painted surface and its rim together, leaving the glyph and progress indicator at theme contrast. */
+:root[data-rail-brightness] .desktop-redesign .rail-destinations > button:is(:hover, [aria-current], :active) {
+  isolation: isolate;
+  background: transparent;
+  box-shadow: none !important;
+}
+:root[data-rail-brightness] .rail-destinations > button:is(:hover, [aria-current], :active)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(var(--desktop-selection), var(--desktop-selection)), var(--desktop-frame);
+  filter: var(--rail-material-filter);
+}
+:root[data-rail-brightness] .rail-destinations > button:active::before {
+  background: color-mix(in srgb, var(--text) 15%, var(--desktop-frame));
+}
+:root[data-rail-brightness]:not([data-performance="ultra"]) .rail-destinations > button[aria-current]::before {
+  box-shadow: var(--launcher-bevel);
+}
 .app-shell.desktop-redesign > :is(.desktop-context, .content, .workspace-rail) {
   margin-top: var(--desktop-title-height);
   height: calc(100dvh - var(--desktop-title-height) - var(--desktop-trailing-edge));

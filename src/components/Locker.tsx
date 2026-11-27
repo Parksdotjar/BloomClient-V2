@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { chooseEquipment, equipmentSlot, readEquipment, useEquipment } from "../services/locker-equipment";
 import { invoke } from "../services/invoke";
-import { ChevronLeft, ChevronRight, Shirt, RotateCw, Layers, PersonStanding, Flag, Store, Bird, Rabbit, Backpack } from "lucide-react";
+import { CaretLeftIcon as ChevronLeft, CaretRightIcon as ChevronRight, TShirtIcon as Shirt, ArrowClockwiseIcon as RotateCw, StackIcon as Layers, PersonArmsSpreadIcon as PersonStanding, FlagIcon as Flag, StorefrontIcon as Store, FeatherIcon, BaseballCapIcon, BackpackIcon as Backpack } from "@phosphor-icons/react";
 import { CapePreview, type CapeAnimation } from "./CapePreview";
 import { CapeDisplay } from "./CapeDisplay";
 import "./locker.css";
@@ -163,7 +163,7 @@ function CloakCollection({ profile, motion, onNotify, catalogRevision, claimedId
 }
 
 export const lockerSections = [
-  ["Equipped look", PersonStanding], ["Cloaks", Layers], ["Capes", Flag], ["Wings", Bird], ["Back", Backpack], ["Hats", Rabbit], ["Skins", Shirt], ["Shop", Store],
+  ["Equipped look", PersonStanding], ["Cloaks", Layers], ["Capes", Flag], ["Wings", FeatherIcon], ["Back", Backpack], ["Hats", BaseballCapIcon], ["Skins", Shirt], ["Shop", Store],
 ] as const;
 export type LockerSection = typeof lockerSections[number][0];
 
@@ -220,9 +220,9 @@ function EquippedLook({ accountId, motion, onSection }: { accountId: string; mot
       ["Skins", "Skin", skin?.name || "Default skin", Shirt],
       ["Cloaks", "Delight cloak", cloak?.name || "None equipped", Layers],
       ["Capes", "Minecraft cape", cape?.name || "None equipped", Flag],
-      ["Wings", "Wings", (look.wing?.item.slot !== "back" && look.wing?.item.name) || "None equipped", Bird],
+      ["Wings", "Wings", (look.wing?.item.slot !== "back" && look.wing?.item.name) || "None equipped", FeatherIcon],
       ["Back", "Back", (look.wing?.item.slot === "back" && look.wing.item.name) || "None equipped", Backpack],
-      ["Hats", "Hat", look.hat?.item.name || "None equipped", Rabbit],
+      ["Hats", "Hat", look.hat?.item.name || "None equipped", BaseballCapIcon],
     ] as const).map(([section, label, name, Icon]) => <button key={section} onClick={() => onSection(section)}><Icon size={19}/><span><small>{label}</small><strong>{name}</strong></span><ChevronRight size={16}/></button>)}</div>
     <aside className="locker-detail" aria-label="Equipped character">{model ? <WingPreview item={model.item} colors={model.colors} additional={look.wing ? look.hat : undefined} capeTexture={look.wing ? undefined : cloak?.textureUrl || cape?.texture} capeAnimation={cloak?.animation} accountId={accountId} skinTexture={skin?.texture} variant={skin?.variant} front motion={motion}/> : <div className="locker-preview"><CapePreview focus="body" skinUuid={accountId} skinTexture={skin?.texture} variant={skin?.variant} texture={cloak?.textureUrl || cape?.texture} animation={cloak?.animation} front={!cloak && !cape} motion={motion}/></div>}</aside>
   </div>;

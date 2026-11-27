@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { GripHorizontal, Minimize2, Play } from "lucide-react";
+import { DotsSixIcon as GripHorizontal, ArrowsInSimpleIcon as Minimize2, PlayIcon as Play } from "@phosphor-icons/react";
 import "./floating-instance-player.css";
 
 type Box = { x: number; y: number; width: number };
@@ -122,7 +122,7 @@ export function FloatingInstancePlayer({ instance, busy, onPlay, onClose }: {
     <div className="floating-player-body">
       <span className="floating-player-art" aria-hidden="true">{instance.icon ? <img src={instance.icon} alt="" draggable={false} /> : <b>?</b>}</span>
       <span className="floating-player-identity" title={instance.name}><strong>{instance.name}</strong></span>
-      <button className="floating-player-play instance-play" disabled={busy} onClick={onPlay} aria-label={`Play ${instance.name}`} title={`Play ${instance.name}`}><Play size={17} fill="currentColor" /><span>Play</span></button>
+      <button className="floating-player-play instance-play" disabled={busy} onClick={onPlay} aria-label={`Play ${instance.name}`} title={`Play ${instance.name}`}><Play size={17} weight="fill" /><span>Play</span></button>
     </div>
     <div role="separator" tabIndex={0} aria-label="Resize floating controls" aria-orientation="vertical" aria-valuemin={MIN} aria-valuemax={MAX} aria-valuenow={Math.round(box.width)}
       className="floating-player-resize" title="Drag to resize · Left/Right arrows · Home for icon only" onPointerDown={e => begin(e, "resize")}

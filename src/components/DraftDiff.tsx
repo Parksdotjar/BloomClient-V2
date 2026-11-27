@@ -1,4 +1,4 @@
-import { Minus, Plus } from "lucide-react";
+import { MinusIcon as Minus, PlusIcon as Plus } from "@phosphor-icons/react";
 import { workspaceChangeCategories, type WorkspaceChange } from "../services/workspace-release-changes";
 
 export function DraftDiff({changes}: {changes: WorkspaceChange[]}) {

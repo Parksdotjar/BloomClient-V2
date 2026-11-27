@@ -18,7 +18,7 @@ const call = async (api, { method = "GET", path: requestPath, body, token } = {}
   const request = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]);
   request.method = method;
   request.url = requestPath;
-  request.headers = { ...(token ? { authorization: `Bearer ${token}` } : {}), origin: "https://bloomclient.org" };
+  request.headers = { ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json", origin: "https://bloomclient.org" };
   const chunks = [];
   const response = {
     statusCode: 200,
@@ -140,6 +140,8 @@ test("exact-name requests become accepted friends without exposing a directory",
   assert.equal((await call(api, { method: "PUT", path: "/v1/social/me/username", token: first.accessToken, body: { username: "Parks" } })).status, 200);
   assert.equal((await call(api, { method: "PUT", path: "/v1/social/me/username", token: second.accessToken, body: { username: "Karsten" } })).status, 200);
   assert.equal((await call(api, { method: "POST", path: "/v1/social/friend-requests", token: first.accessToken, body: { username: "Karsten" } })).status, 201);
+  const sent = await call(api, { path: "/v1/social/friend-requests", token: first.accessToken });
+  assert.equal(sent.body.outgoing[0].username, "Karsten");
   const incoming = await call(api, { path: "/v1/social/friend-requests", token: second.accessToken });
   assert.equal(incoming.body.incoming[0].username, "Parks");
   const accepted = await call(api, { method: "POST", path: `/v1/social/friend-requests/${incoming.body.incoming[0].id}/accept`, token: second.accessToken });
@@ -148,7 +150,7 @@ test("exact-name requests become accepted friends without exposing a directory",
   assert.equal(friends.body.friends[0].username, "Karsten");
 });
 
-test("message envelopes expire after 24 hours while encrypted pins remain durable", async (t) => {
+test("message envelopes expire after seven days while encrypted pins remain durable", async (t) => {
   const directory = temporary();
   const api = createSocialApi({ auth, siteOrigin: "https://bloomclient.org", env: { BLOOM_SOCIAL_DATA_DIR: directory } });
   t.after(() => { api.database.close(); fs.rmSync(directory, { recursive: true, force: true }); });
@@ -163,6 +165,9 @@ test("message envelopes expire after 24 hours while encrypted pins remain durabl
   assert.equal((await send("edit", "edit-retention-nonce-0001")).status, 202);
   assert.equal((await send("pin", "pin-retention-nonce-0001")).status, 202);
   api.database.prepare("UPDATE social_envelopes SET created_at = ?").run(Date.now() - 25 * 60 * 60_000);
+  api.purgeExpiredData(true);
+  assert.equal(api.database.prepare("SELECT count(*) count FROM social_envelopes").get().count, 4);
+  api.database.prepare("UPDATE social_envelopes SET created_at = ?").run(Date.now() - 7 * 86400000 - 1000);
   const expiredBlob = crypto.randomUUID();
   const durableBlob = crypto.randomUUID();
   const blobDirectory = path.join(directory, "social-blobs");
@@ -329,4 +334,82 @@ test("group chats cap membership, require friendships, and deliver only to membe
   assert.equal(removed.status, 200);
   assert.equal(removed.body.group.members.length, 2);
   assert.equal((await call(api, { path: "/v1/social/groups", token: alex.accessToken })).body.groups.length, 0);
+});
+
+test("Java players keep separate social graphs when linked and unlinked from one website login", async t => {
+  const directory = temporary();
+  const people = Object.fromEntries(["MainPlayer","AltPlayer","Third"].map(name=>[name,{id:crypto.randomUUID().replaceAll("-",""),name}]));
+  let owner="web-account";
+  const api=createSocialApi({auth:{api:{getSession:async()=>({user:{id:owner}})}},siteOrigin:"https://bloomclient.org",env:{BLOOM_SOCIAL_DATA_DIR:directory},verifyPlayer:async(token)=>{
+    if(!people[token])throw Object.assign(new Error("Invalid proof"),{status:401});
+    return people[token];
+  }});
+  t.after(()=>{api.database.close();fs.rmSync(directory,{recursive:true,force:true});});
+  const login=async token=>call(api,{path:"/v1/social/native/player",method:"POST",token,body:{deviceId:crypto.randomUUID(),curve25519Key:"verified-device-curve-key",ed25519Key:"verified-device-sign-key"}});
+  assert.equal((await login("invalid")).status,401);
+  const first=(await login("MainPlayer")).body, second=(await login("AltPlayer")).body, third=(await login("Third")).body;
+  assert.ok(first.accessToken && second.accessToken && third.accessToken);
+  assert.notEqual(first.user.id,second.user.id);
+  const act=(p,path,body,method=body?"POST":"GET")=>call(api,{token:p.accessToken,path:"/v1/social/"+path,body,method});
+  for(const p of [first,second]){
+    assert.equal((await act(p,"me/link-status")).body.linked,false);
+    const {code}=(await act(p,"me/link-code",{})).body;
+    assert.match(code,/^[0-9]{8}$/);
+    assert.equal((await act(p,"player-links",{code})).status,200);
+    assert.equal((await act(p,"me/link-status")).body.linked,true);
+    assert.equal((await act(p,"player-links",{code})).status,400);
+  }
+  assert.equal((await act(first,"player-links")).body.players.length,2);
+  owner="another-owner";
+  assert.equal((await act(first,"player-links",{code:(await act(first,"me/link-code",{})).body.code})).status,409);
+  owner="web-account";
+  assert.equal((await act(first,"friend-requests",{username:"Third"})).status,201);
+  assert.equal((await act(third,"friend-requests/"+first.user.id+"/accept",{})).status,200);
+  assert.equal((await act(second,"friends")).body.friends.length,0);
+  const party = (await act(first,"party",{action:"create"})).body.party;
+  const change = (player,action,fields={}) => act(player,"party",{action,partyId:party.id,...fields});
+  assert.equal((await change(first,"invite",{friendId:second.user.id})).status,409);
+  assert.equal((await change(first,"invite",{friendId:third.user.id})).status,200);
+  assert.equal((await act(third,"party")).body.invites[0].name,"MainPlayer");
+  assert.equal((await change(second,"accept")).status,409);
+  assert.equal((await change(third,"accept")).body.party.members.length,2);
+  const lease = crypto.randomUUID();
+  const sharedAddress = async () => (await act(first,"party")).body.party.members.find(m=>m.id===third.user.id).server;
+  assert.equal((await change(third,"share",{lease,server:"https://example.org"})).status,409);
+  assert.equal((await change(third,"share",{lease,server:"play.example.org:25565"})).status,200);
+  assert.equal(await sharedAddress(),"play.example.org:25565");
+  assert.equal((await change(third,"renew",{lease})).status,200);
+  await change(third,"stop",{lease:crypto.randomUUID()});
+  assert.ok(await sharedAddress());
+  await change(third,"stop");
+  assert.equal(await sharedAddress(),null);
+  assert.equal((await change(third,"renew",{lease})).status,409);
+  await change(third,"share",{lease,server:"example.org"});
+  api.database.prepare("UPDATE play_shares SET expires=0").run();
+  assert.equal(await sharedAddress(),null);
+  assert.equal((await change(third,"renew",{lease})).status,409);
+  assert.equal((await change(first,"leave")).status,200);
+  assert.ok(!(await act(third,"party")).body.party);
+  const fresh = (await act(first,"party",{action:"create"})).body.party.id;
+  const inviteThird = () => act(first,"party",{action:"invite",partyId:fresh,friendId:third.user.id});
+  await inviteThird();
+  api.database.prepare("UPDATE play_invites SET expires=0 WHERE party=?").run(fresh);
+  assert.equal((await act(third,"party",{action:"accept",partyId:fresh})).status,409);
+  await inviteThird();
+  assert.equal((await act(third,"party",{action:"decline",partyId:fresh})).status,200);
+  assert.equal((await act(third,"party")).body.invites.length,0);
+  api.database.prepare("UPDATE play_parties SET expires=0 WHERE id=?").run(fresh);
+  assert.ok(!(await act(first,"party")).body.party);
+
+
+  const invite={requestKey:"player-invite-test-12345",instanceName:"Test",minecraftVersion:"26.3",loader:"fabric",shareMode:"copy",invites:[{recipientId:first.user.id,shareCode:"BCDF2345"}]};
+  assert.equal((await act(third,"instance-invites",invite)).status,201);
+  assert.equal((await act(second,"instance-invites")).body.invites.length,0);
+  assert.equal((await act(first,"me/visibility",{hidden:true},"PUT")).body.hidden,true);
+  assert.equal((await act(third,"friends")).body.friends[0].online,false);
+  assert.equal((await act(first,"player-links",{id:first.user.id},"DELETE")).status,200);
+  assert.equal((await act(first,"friends")).body.friends[0].id,third.user.id);
+  assert.equal((await act(first,"instance-invites")).body.invites.length,1);
+  people.MainPlayer.name="Renamed";
+  assert.equal((await login("MainPlayer")).body.user.id,first.user.id);
 });

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { ArrowRight, Download, Play, RefreshCw, Wrench } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, DownloadIcon as Download, PlayIcon as Play, ArrowsClockwiseIcon as RefreshCw, WrenchIcon as Wrench } from "@phosphor-icons/react";
 import { FollowUpdateContext, hasUpdate, type FollowRepair } from "../services/follow-updates";
 import { userError } from "../services/user-error";
 import { invoke } from "../services/invoke";

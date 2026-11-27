@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Save } from "lucide-react";
+import { FloppyDiskIcon as Save } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import type { DraftEditing, DraftSummary } from "../services/workspace-drafts";

@@ -1,8 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import launcherGuide from "../../backend/ask-delight/launcher-knowledge.json";
+import controlGuide from "../../backend/ask-delight/ui-knowledge.json";
 import catalog from "../../backend/ask-delight/catalog.json";
 
 import targets from "../../backend/ask-delight/destinations.json";
 export const destinations: Record<string, {label:string; section?:string; selector?:string}> = targets;
+const playerGuide = [...launcherGuide.entries, ...controlGuide.entries];
 export const help = catalog.entries;
 export type Action = "instances" | "memory" | "mods" | "resourcepacks" | "shaderpacks";
 export type Context = { build: string; platform: string; page: string; loader: string | null };
@@ -118,7 +121,8 @@ export function localAnswer(question: string, context: Context, inConversation: 
     .replace(/^(?:(?:find|add|install|open|change|set|create|manage|enable|adjust|allocate|view)\s+)+/, "")
     .replace(/^(?:the|my)\s+/, "").replace(/\s+(?:settings|in delight|in delight client)$/, "");
   return help.find(entry => entryFor(entry.action, context)
-    && (normalize(entry.question) === query || entry.aliases.includes(exact)));
+    && (normalize(entry.question) === query || entry.aliases.includes(exact)))
+    ?? playerGuide.find(entry => entry.aliases.some(alias => [query, query.replace(intent, ""), exact].includes(normalize(alias))));
 }
 
 export function validResult(result: Reply["result"], context: Context, question = "") {
@@ -155,7 +159,7 @@ export const usageMessage: Record<string, string> = {
   budget: "Alula replies are temporarily unavailable because the shared budget is paused. Local help still works.",
   paused: "Alula replies are temporarily unavailable. Local help still works.",
   rollout: "Alula replies aren’t available for this account yet. Local help still works.",
-  signed_out: "Sign in to your Delight account through Social to use Alula. Local help still works.",
+  signed_out: "Sign in to Minecraft in Settings → Accounts to use online replies. Local help still works.",
   offline: "Can’t reach Alula right now. Local help still works.",
   duplicate: "That request was already submitted.",
   in_flight: "An answer is already in progress.",

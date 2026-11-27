@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Check, ExternalLink, Plus, Timer } from "lucide-react";
+import { CheckIcon as Check, ArrowSquareOutIcon as ExternalLink, PlusIcon as Plus, TimerIcon as Timer } from "@phosphor-icons/react";
 
 export function CatalogArtwork({ source, embedded, fallback }: {
   source?: string | null; embedded?: string | null; fallback: ReactNode;

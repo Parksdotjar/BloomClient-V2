@@ -81,7 +81,7 @@
   background: transparent; box-shadow: none; border-color: var(--launcher-menu-line);
 }
 .quick-switcher .switcher-results button[aria-selected="true"] { color: var(--text); background: var(--launcher-menu-hover); }
-.onboarding-shell .onboarding-code-card { background: var(--launcher-menu); border: 1px solid var(--launcher-menu-line); border-radius: 8px; box-shadow: none; }
+.onboarding-shell .onboarding-code-card { background: var(--launcher-menu); border: 1px solid var(--launcher-menu-line); border-radius: inherit; box-shadow: none; }
 
 .desktop-redesign .mod-detail-drawer { border-left-color: var(--desktop-line); border-radius: 10px 0 0 10px; background: var(--launcher-menu); box-shadow: -8px 0 22px var(--theme-shadow-soft); }
 .desktop-redesign .mod-detail-header { background: transparent; border-color: var(--desktop-line); }

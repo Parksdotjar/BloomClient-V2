@@ -83,7 +83,7 @@ Normal message content contains only the sender, local time, text, optional scre
 
 Hovering or keyboard-focusing a delivered message reveals a stationary compact action strip with Pin and React. There is no CSS lift or scale animation. The pin is a plain white Lucide control and the header owns a matching compact pinned-messages button and drawer.
 
-Unpinned messages, reactions, device envelopes, and encrypted screenshot blobs have one fixed 24-hour lifetime. Clients prune decrypted local records during every Social sync and the backend deletes expired ciphertext and blob files before serving new requests. Pinning sends a separate encrypted control event that contains the protected message snapshot; only its opaque per-device envelopes remain durable. Unpinning removes the local durable state and lets the ordinary 24-hour retention boundary apply again. The backend can route pin state but cannot read pinned text, attachment keys, or image contents.
+Unpinned messages, reactions, device envelopes, and encrypted screenshot blobs have one fixed seven-day lifetime. Clients prune decrypted local records during every Social sync and the backend deletes expired ciphertext and blob files before serving new requests. Pinning sends a separate encrypted control event that contains the protected message snapshot; only its opaque per-device envelopes remain durable. Unpinning removes the local durable state and lets the ordinary seven-day retention boundary apply again. The backend can route pin state but cannot read pinned text, attachment keys, or image contents.
 
 Reactions appear as small rounded counters beneath the message. A person may add one of each emoji to a message and toggle it off. The encrypted reaction event references the target message identifier; the backend sees neither the chosen emoji nor the readable target contents.
 
@@ -197,7 +197,7 @@ The encrypted message descriptor contains the content key, MIME type, dimensions
 
 The backend enforces ciphertext byte limits, per-user upload quotas, rate limits, authentication, and expiry but cannot inspect image content. Early deployments may use the existing private persistent volume. Object storage can replace that implementation without changing message semantics.
 
-Encrypted blobs expire 24 hours after upload. Pinning their message extends the encrypted blob while the pin exists; unpinning restores the original 24-hour boundary and old blobs become eligible for immediate cleanup. A report action may explicitly include selected decrypted message and image content; nothing is disclosed for moderation without that user action.
+Encrypted blobs expire seven days after upload. Pinning their message extends the encrypted blob while the pin exists; unpinning restores the original seven-day boundary and old blobs become eligible for immediate cleanup. A report action may explicitly include selected decrypted message and image content; nothing is disclosed for moderation without that user action.
 
 ### Metadata boundaries
 
@@ -461,3 +461,5 @@ Invitation cards appear only in the corresponding direct-message chronology with
 - Blocking prevents new requests, messages, envelopes, attachments, and notification previews in both directions.
 - Social remains a two-pane messaging interface with private group chats and no public channels, online status, activity feed, or filler panels.
 - Windows reduced-motion, animation-disabled, and Ultra Performance settings do not introduce movement or break any control.
+
+2026-11-27 — Party members share or stop sharing their current multiplayer connection directly from the right side of their own row. The host appears first with a portrait-width crown. Join sits on the right of a shared player row. The mod reports the current connection locally. Explicit sharing creates a 30-second renewable party lease tied to that connection visit. Stopping, leaving or switching servers ends sharing. The previous footer server view is retired. Four mod builds and the backend and drawer suites passed. Two live players joining the same server still needs in-game verification.

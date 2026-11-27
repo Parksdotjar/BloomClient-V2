@@ -30,6 +30,14 @@ const providerConfiguration = (env) => {
       prompt: "select_account",
     };
   }
+  if (env.DELIGHT_MICROSOFT_CLIENT_ID && env.DELIGHT_MICROSOFT_CLIENT_SECRET) {
+    providers.microsoft = {
+      clientId: env.DELIGHT_MICROSOFT_CLIENT_ID,
+      clientSecret: env.DELIGHT_MICROSOFT_CLIENT_SECRET,
+      tenantId: "consumers",
+      prompt: "select_account",
+    };
+  }
   return providers;
 };
 
@@ -61,6 +69,8 @@ export async function createBloomAuth({ env = process.env } = {}) {
       storeStateStrategy: "database",
       accountLinking: {
         enabled: true,
+        // Microsoft personal accounts can omit email_verified. Explicit linking proves control of both sessions.
+        trustedProviders: ["microsoft"],
         disableImplicitLinking: true,
         allowDifferentEmails: true,
         allowUnlinkingAll: false,

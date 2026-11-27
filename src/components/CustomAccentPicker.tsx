@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Pipette } from "lucide-react";
+import { LauncherEyedropper } from "./LauncherEyedropper";
+import { EyedropperIcon as Pipette } from "@phosphor-icons/react";
 
 type UndoColor = { owner: symbol; undo: () => boolean };
 const colorHistory: UndoColor[] = [];
@@ -57,10 +58,11 @@ type PickerProps = {
   onApply: (color: string) => void;
   onPreview?: (color: string | undefined) => void;
   label?: string;
+  rainbow?: boolean;
 
 };
 
-export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom accent color" }: PickerProps) {
+export function CustomAccentPicker({ value, onApply, onPreview, rainbow, label = "Custom accent color" }: PickerProps) {
   const [open, setOpen] = useState(false);
   const [color, setColor] = useState<HsvColor>(() => hexToHsv(value));
   const [hexDraft, setHexDraft] = useState(value.toUpperCase());
@@ -78,7 +80,15 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
   const latest = useRef({ value, onApply });
   latest.current = { value, onApply };
   const sample = useRef<AbortController | undefined>(undefined);
-  const nativeColor = useRef<HTMLInputElement>(null);
+  const [sampling, setSampling] = useState<{ x: number; y: number }>();
+  const [sampleError, setSampleError] = useState("");
+  const dropperButton = useRef<HTMLButtonElement>(null);
+  function finishSample(hex?: string) {
+    sample.current = undefined;
+    setSampling(undefined);
+    if (hex) { changeHex(hex); commit(hex); }
+    requestAnimationFrame(() => dropperButton.current?.focus({ preventScroll: true }));
+  }
   const draftRef = useRef(hexDraft);
   draftRef.current = hexDraft;
   useEffect(() => () => {
@@ -100,18 +110,24 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
     if (colorHistory.length > 100) colorHistory.shift();
     latest.current.onApply(after);
   }
-  async function pickPixel() {
+  async function pickPixel(x: number, y: number) {
+    setSampleError("");
+    if ("__TAURI_INTERNALS__" in window && /Windows/i.test(navigator.userAgent)) {
+      sample.current = new AbortController();
+      setSampling({ x, y });
+      return;
+    }
     const Dropper = (window as Window & { EyeDropper?: new () => {
       open(options: { signal: AbortSignal }): Promise<{ sRGBHex: string }>;
     } }).EyeDropper;
-    if (!Dropper) { nativeColor.current?.click(); return; }
+    if (!Dropper) { setSampleError("Screen sampling is unavailable in this browser."); return; }
     const controller = new AbortController();
     sample.current = controller;
     try {
       const picked = await new Dropper().open({ signal: controller.signal });
       if (!controller.signal.aborted) { changeHex(picked.sRGBHex); commit(picked.sRGBHex); }
     } catch (error) {
-      if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) nativeColor.current?.click();
+      if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) setSampleError("Couldn’t sample the screen. Try again.");
     } finally { sample.current = undefined; }
   }
   const setHsv = (next: HsvColor) => {
@@ -144,6 +160,7 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
     setColor(next);
     setHexDraft(value.toUpperCase());
     setPosition({ top: 0, left: 0 });
+    setSampleError("");
     setOpen(true);
   };
   const closePicker = (restoreFocus = false) => {
@@ -196,11 +213,13 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
   }, [open]);
 
   return <>
-    <button ref={triggerRef} type="button" className="appearance-color-chip"
+    <button ref={triggerRef} type="button" className={rainbow ? "appearance-color-chip rainbow-trigger" : "appearance-color-chip"}
       aria-label={`Choose ${label.toLowerCase()}`} aria-expanded={open} aria-haspopup="dialog"
       onClick={() => { if (open) { commit(); closePicker(); } else openPicker(); }}>
-      <span aria-hidden="true" style={{ background: value }} />{value.toUpperCase()}
+      <span aria-hidden="true" style={rainbow ? undefined : { background: value }} />{rainbow ? "Custom" : value.toUpperCase()}
     </button>
+    {sampling && createPortal(<LauncherEyedropper start={sampling} onPick={finishSample}
+      onCancel={() => finishSample()} onError={() => { finishSample(); setSampleError("Couldn’t sample the launcher. Try again."); }}/>, document.body)}
     {open && createPortal(
       <div
         ref={pickerRef}
@@ -212,7 +231,7 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
           position: "fixed",
           top: position.top,
           left: position.left,
-          visibility: position.top ? "visible" : "hidden",
+          visibility: position.top && !sampling ? "visible" : "hidden",
           "--picker-hue": `hsl(${color.hue} 100% 50%)`,
           "--picker-color": currentHex,
           "--picker-saturation": `${color.saturation}%`,
@@ -269,9 +288,9 @@ export function CustomAccentPicker({ value, onApply, onPreview, label = "Custom 
             }}
           />
         </label>
-        <button type="button" className="color-picker-dropper" aria-label="Pick a color from the screen" title="Pick a color from the screen" onClick={() => void pickPixel()}><Pipette size={16}/></button>
-        <input hidden ref={nativeColor} type="color" value={currentHex} aria-label="System color picker" onChange={event => { changeHex(event.target.value); commit(event.target.value); }}/>
+        <button type="button" className="color-picker-dropper" aria-label="Pick a color from the screen" title="Pick a color from the screen" ref={dropperButton} aria-pressed={!!sampling} onClick={event => void pickPixel(event.clientX, event.clientY)}><Pipette size={16}/></button>
         <button type="button" className="color-picker-apply" disabled={!hexValid} onClick={() => { commit(currentHex); closePicker(true); }}>Apply color</button>
+        {sampleError && <span className="eyedropper-error" role="alert">{sampleError}</span>}
       </div>,
       document.body,
     )}

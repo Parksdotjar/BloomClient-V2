@@ -1,8 +1,8 @@
-import { FolderOpen } from "lucide-react";
+import { FolderOpenIcon as FolderOpen } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "../services/invoke";
-import { ArrowLeftRight, Copy, Image as ImageIcon, RefreshCw, X } from "lucide-react";
-import { MoreHorizontal } from "lucide-react";
+import { ArrowsLeftRightIcon as ArrowLeftRight, CopyIcon as Copy, ImageSquareIcon as ImageIcon, ArrowsClockwiseIcon as RefreshCw, XIcon as X } from "@phosphor-icons/react";
+import { DotsThreeIcon as MoreHorizontal } from "@phosphor-icons/react";
 import { FilterMenu } from "./FilterMenu";
 import "./utilities.css";
 import "./screenshot-shelf.css";
@@ -125,11 +125,11 @@ export function ScreenshotShelf({ filter, libraryName, onMessage }: { filter: st
     screenshotImages.prefer(visible);
     warmScreenshots(visible, 50);
   }, [shots, filter, limit]);
-  async function run(shot: Shot, operation: string) {setBusy(true);try {await action(shot, operation);onMessage(operation === "copy" ? "Image copied to clipboard." : "Screenshot folder opened.");}catch(e){onMessage(String(e), "error");}finally{setBusy(false);}}
+  async function run(shot: Shot, operation: string) {setBusy(true);try {await action(shot, operation);if (operation === "copy") onMessage("Image copied to clipboard.");}catch(e){onMessage(String(e), "error");}finally{setBusy(false);}}
   async function exportComparison(render: () => Promise<string>) {
     try {
       const png = await render();
-      if (await invoke<boolean>("save_screenshot_comparison", { png })) onMessage("Comparison exported.");
+      await invoke("save_screenshot_comparison", { png });
     } catch (error) { onMessage(String(error), "error"); }
   }
   return <section className="shot-library"><header className="shot-library-heading">
@@ -146,7 +146,7 @@ export function ScreenshotShelf({ filter, libraryName, onMessage }: { filter: st
           else if (selectedShots.length < 2) cancelSelection();
           else if (!loading) setComparing(true);
         }}>
-        <ToolbarIconSwap active={showCancel} resting={<ArrowLeftRight size={17} />} engaged={<X size={17} strokeWidth={2.5} />} />
+        <ToolbarIconSwap active={showCancel} resting={<ArrowLeftRight size={17} />} engaged={<X size={17} weight="bold" />} />
         <span key={compareLabel} className="toolbar-copy">{compareLabel}</span>
       </button></div>
       <span id={comparisonStatusId} className="shelf-selection-status" role="status">{selecting ? `${selectedShots.length} of 2 screenshots selected. ${selectedShots.length < 2 ? "Activate this button to cancel selection, or press Escape." : "Ready to compare."}` : ""}</span>

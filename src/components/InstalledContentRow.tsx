@@ -1,5 +1,5 @@
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { Cuboid, PackageOpen, Puzzle } from "lucide-react";
+import { CubeIcon as Cuboid, PackageIcon as PackageOpen, PuzzlePieceIcon as Puzzle } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { CatalogArtwork } from "./CatalogFeedRow";
 import { formatBytes } from "../services/format-bytes";

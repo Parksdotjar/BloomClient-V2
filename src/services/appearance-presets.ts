@@ -1,7 +1,7 @@
 import { normalizeAccent } from "./accent-preferences";
 import type { SettingsState } from '../main';
 
-export const appearanceKeys = ['theme', 'oledBackground', 'oledForeground', 'lightBackground', 'lightForeground', 'interfaceFont', 'interfaceSize', 'spacing', 'accent', 'customAccent', 'lastCustomAccent', 'oledSidebar', 'lightSidebar', 'oledPanel', 'lightPanel', 'oledIsland', 'lightIsland', 'dividerStrength'] as const;
+export const appearanceKeys = ['theme', 'oledBackground', 'oledForeground', 'lightBackground', 'lightForeground', 'interfaceFont', 'interfaceSize', 'spacing', 'accent', 'customAccent', 'lastCustomAccent', 'oledSidebar', 'lightSidebar', 'oledPanel', 'lightPanel', 'oledIsland', 'lightIsland', 'dividerStrength', 'railHoverBrightness'] as const;
 export type Appearance = Pick<SettingsState, typeof appearanceKeys[number]>;
 export type AppearancePreset = { id: string; name: string; appearance: Appearance; created: number };
 export function normalizeIslandColor(value: unknown) {

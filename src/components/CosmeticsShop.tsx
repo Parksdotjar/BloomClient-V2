@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, LoaderCircle, Plus, RotateCw, Search, Shirt } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, CircleNotchIcon as LoaderCircle, PlusIcon as Plus, ArrowClockwiseIcon as RotateCw, MagnifyingGlassIcon as Search, TShirtIcon as Shirt } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { CapeDisplay } from "./CapeDisplay";
 import type { CapeAnimation } from "./CapePreview";
@@ -48,7 +48,7 @@ export function CosmeticsShop({ accountId, motion, onAdded, onOpenLocker, onNoti
         const next = { ...old, items: old.items.map(item => item.id === cape.id ? { ...item, owned: true } : item) };
         cache.set(key, next); return next;
       });
-      onAdded(cape.id); onNotify(`Added to Locker: “${cape.name}”`, "success");
+      onAdded(cape.id);
     } catch (reason) { if (alive.current) onNotify(String(reason), "error"); }
     finally { claiming.current = false; if (alive.current) setPending(null); }
   };
@@ -74,7 +74,7 @@ export function CosmeticsShop({ accountId, motion, onAdded, onOpenLocker, onNoti
         {items.length ? <div className="shop-grid">{items.map(cape => <article key={cape.id} className="shop-card">
           <div className="shop-card-art"><CapeDisplay texture={cape.textureUrl} animation={cape.animation} motion={motion} /></div>
           <div className="shop-card-details"><h3 title={cape.name}>{cape.name}</h3>{action(cape)}</div>
-        </article>)}</div> : <div className="shop-empty"><Shirt size={32} strokeWidth={1.5} /><h3>{query ? "No matching cloaks" : error ? "Shop unavailable" : "No drops right now"}</h3><p>{query ? "Try a different name." : error ? "Retry when you’re back online." : "New cloaks will appear here when they’re available."}</p></div>}
+        </article>)}</div> : <div className="shop-empty"><Shirt size={32} /><h3>{query ? "No matching cloaks" : error ? "Shop unavailable" : "No drops right now"}</h3><p>{query ? "Try a different name." : error ? "Retry when you’re back online." : "New cloaks will appear here when they’re available."}</p></div>}
       </section>
     </>}
   </div>;

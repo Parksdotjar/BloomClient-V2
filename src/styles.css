@@ -3428,3 +3428,12 @@ button[aria-expanded="true"] {
 
 .color-picker-dropper { display: grid; place-items: center; border: 1px solid var(--launcher-menu-line); border-radius: 6px; color: var(--text); background: var(--launcher-menu-hover); cursor: crosshair; }
 .color-picker-dropper:hover { border-color: var(--muted); }
+.launcher-eyedropper { position: fixed; inset: 0; z-index: 2147483647; outline: none; cursor: crosshair; touch-action: none; user-select: none; }
+.launcher-eyedropper > * { pointer-events: none; }
+.eyedropper-frame { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.eyedropper-lens { position: absolute; width: 88px; height: 88px; box-sizing: content-box; border: 2px solid white; box-shadow: 0 0 0 1px #191919, 0 3px 10px #0009; background: #222; --lens-x: calc(-100% - 12px); --lens-y: calc(-100% - 12px); transform: translate(var(--lens-x), var(--lens-y)); }
+.eyedropper-lens[data-right="true"] { --lens-x: 12px; }
+.eyedropper-lens[data-below="true"] { --lens-y: 12px; }
+.eyedropper-lens canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.eyedropper-lens::after { content: ""; position: absolute; inset: 40px; border: 1px solid white; outline: 1px solid #111; }
+.eyedropper-error { grid-column: 1 / -1; font-size: 12px; }

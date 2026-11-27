@@ -111,9 +111,9 @@ try {
   await heading("Survival").hover();
   assert.equal(await folder("Survival").locator(".folder-section-heading button").count(), 1);
   const survival = heading("Survival");
-  await survival.locator("svg.lucide-folder-open:first-child").click();
+  await survival.locator("svg:first-child").click();
   assert.equal(await survival.getAttribute("aria-expanded"), "false");
-  await survival.locator("svg.lucide-folder:first-child").click();
+  await survival.locator("svg:first-child").click();
   assert.equal(await survival.getAttribute("aria-expanded"), "true");
   assert.equal(await survival.locator("svg").count(), 1);
   await card("Creative").hover();

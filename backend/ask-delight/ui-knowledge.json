@@ -69,6 +69,14 @@
       "source": "src/main.tsx"
     },
     {
+      "id": "ui-client-settings-appearance-rail-hover-brightness",
+      "aliases": [
+        "rail hover brightness"
+      ],
+      "steps": "Client settings → Appearance → Rail hover brightness. Adjust the surface and bevel behind navigation icons.",
+      "source": "src/main.tsx"
+    },
+    {
       "id": "ui-client-settings-appearance-dividers",
       "aliases": [
         "dividers"
@@ -109,11 +117,127 @@
       "source": "src/main.tsx"
     },
     {
+      "id": "ui-client-settings-appearance-snowfall",
+      "aliases": [
+        "snowfall"
+      ],
+      "steps": "Client settings → Appearance → Snowfall. Let snowflakes fall across the launcher workspace.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-flake-count",
+      "aliases": [
+        "flake count"
+      ],
+      "steps": "Client settings → Appearance → Flake count. How many flakes are visible at once.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-speed",
+      "aliases": [
+        "speed"
+      ],
+      "steps": "Client settings → Appearance → Speed. How quickly flakes fall and drift.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-size",
+      "aliases": [
+        "size"
+      ],
+      "steps": "Client settings → Appearance → Size. Scale the flakes while keeping their size variation.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-appearance-show-now-playing",
+      "aliases": [
+        "show now playing"
+      ],
+      "steps": "Client settings → Appearance → Show Now Playing. Show media from supported Windows apps in the top bar.",
+      "source": "src/main.tsx"
+    },
+    {
       "id": "ui-client-settings-appearance-button-pop-duration",
       "aliases": [
         "button pop duration"
       ],
       "steps": "Client settings → Appearance → Button Pop Duration. Choose how quickly buttons press and spring back. Set to 0 for no button pop.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-background-source",
+      "aliases": [
+        "background source",
+        "solid color",
+        "image"
+      ],
+      "steps": "Client settings → Background → Background source. Switch to a solid color or use a saved image. Switching to solid keeps your image for later. Choices include Solid color, Image.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-canvas-color",
+      "aliases": [
+        "canvas color"
+      ],
+      "steps": "Client settings → Background → Canvas color. The workspace color in this theme. It also tints the wallpaper.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-wallpaper",
+      "aliases": [
+        "wallpaper"
+      ],
+      "steps": "Client settings → Background → Wallpaper. Choose a local PNG, JPEG, or WebP up to 32 MB. Delight saves a copy on this device.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-image-fit",
+      "aliases": [
+        "image fit",
+        "fill",
+        "fit"
+      ],
+      "steps": "Client settings → Background → Image fit. Fill crops the edges. Fit shows the entire image against the canvas color. Choices include Fill, Fit.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-image-opacity",
+      "aliases": [
+        "image opacity"
+      ],
+      "steps": "Client settings → Background → Image opacity. Adjust how strongly the photograph shows through the canvas color.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-sidebar-opacity",
+      "aliases": [
+        "sidebar opacity"
+      ],
+      "steps": "Client settings → Background → Sidebar opacity. Adjust the tint on the icon rail, title bar and navigation panels.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-element-opacity",
+      "aliases": [
+        "element opacity"
+      ],
+      "steps": "Client settings → Background → Element opacity. Adjust the fill on fields, list rows and neutral controls.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-sidebar-blur",
+      "aliases": [
+        "sidebar blur"
+      ],
+      "steps": "Client settings → Background → Sidebar blur. Frost both navigation rails and the title bar. Set to zero for clear glass. Ultra Performance disables blur.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-background-element-blur",
+      "aliases": [
+        "element blur"
+      ],
+      "steps": "Client settings → Background → Element blur. Frost fields and neutral controls independently of the sidebar. Ultra Performance disables blur.",
       "source": "src/main.tsx"
     },
     {
@@ -253,19 +377,19 @@
       "source": "src/main.tsx"
     },
     {
-      "id": "ui-client-settings-updates-automatic-checks",
+      "id": "ui-client-settings-updates-automatic-launcher-checks",
       "aliases": [
-        "automatic checks"
+        "automatic launcher checks"
       ],
-      "steps": "Client settings → Updates → Automatic Checks. Check GitHub Releases once whenever Delight Client opens.",
+      "steps": "Client settings → Updates → Automatic launcher checks. Check for launcher updates when Delight opens.",
       "source": "src/main.tsx"
     },
     {
-      "id": "ui-client-settings-updates-current-version",
+      "id": "ui-client-settings-updates-check-when-delight-opens",
       "aliases": [
-        "current version"
+        "check when delight opens"
       ],
-      "steps": "Client settings → Updates → Current Version. The version currently installed on this computer.",
+      "steps": "Client settings → Updates → Check when Delight opens. Check installed mods in every instance in the background.",
       "source": "src/main.tsx"
     },
     {
@@ -289,7 +413,15 @@
       "aliases": [
         "onboarding"
       ],
-      "steps": "Client settings → Advanced → Onboarding. Run the Microsoft setup again.",
+      "steps": "Client settings → Advanced → Onboarding. Revisit appearance, instance storage and Microsoft sign-in.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "ui-client-settings-advanced-onboarding-preview",
+      "aliases": [
+        "onboarding preview"
+      ],
+      "steps": "Client settings → Advanced → Onboarding preview. Try setup with temporary choices and a sample Microsoft code.",
       "source": "src/main.tsx"
     },
     {
@@ -389,6 +521,22 @@
       "source": "src/components/UtilitiesPage.tsx"
     },
     {
+      "id": "ui-settings-updates-mod-maintenance",
+      "aliases": [
+        "mod maintenance"
+      ],
+      "steps": "Settings → Updates → Mod maintenance. Check all instances for compatible updates and required dependencies.",
+      "source": "src/components/ModMaintenance.tsx"
+    },
+    {
+      "id": "ui-settings-updates-duplicate-mods",
+      "aliases": [
+        "duplicate mods"
+      ],
+      "steps": "Settings → Updates → Duplicate mods. Keep the newest compatible versions across your instances and back up older copies.",
+      "source": "src/components/ModMaintenance.tsx"
+    },
+    {
       "id": "ui-instance-settings-fabric-loader-version",
       "aliases": [
         "fabric loader version"
@@ -440,21 +588,21 @@
     {
       "id": "controls-main-client-settings-my-profile-0",
       "aliases": [
-        "change picture",
         "switch",
         "add minecraft account"
       ],
-      "steps": "Client settings → My Profile. Controls available in the corresponding view or dialog include Change picture, Switch, Add Minecraft account.",
+      "steps": "Client settings → My Profile. Controls available in the corresponding view or dialog include Switch, Add Minecraft account.",
       "source": "src/main.tsx"
     },
     {
       "id": "controls-main-client-settings-advanced-0",
       "aliases": [
         "restart onboarding",
+        "preview onboarding",
         "sign out",
         "reset settings"
       ],
-      "steps": "Client settings → Advanced. Controls available in the corresponding view or dialog include Restart onboarding, Sign out, Reset settings.",
+      "steps": "Client settings → Advanced. Controls available in the corresponding view or dialog include Restart onboarding, Preview onboarding, Sign out, Reset settings.",
       "source": "src/main.tsx"
     },
     {
@@ -471,25 +619,36 @@
       "id": "controls-main-open-an-instance-0",
       "aliases": [
         "change instance icon",
-        "play",
         "open instance folder",
         "worlds",
         "instance settings",
+        "change version",
         "reset to default"
       ],
-      "steps": "Open an instance. Controls available in the corresponding view or dialog include Change instance icon, Play, Open instance folder, Worlds, Instance settings, Reset to default.",
+      "steps": "Open an instance. Controls available in the corresponding view or dialog include Change instance icon, Open instance folder, Worlds, Instance settings, Change version, Reset to default.",
       "source": "src/main.tsx"
     },
     {
       "id": "controls-main-open-an-instance-6",
       "aliases": [
+        "back to mods",
         "clear search",
-        "retry search",
-        "reset view",
+        "keep current",
+        "replace",
+        "try again",
+        "reset filters"
+      ],
+      "steps": "Open an instance. Controls available in the corresponding view or dialog include Back to mods, Clear search, Keep current, Replace, Try again, Reset filters.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "controls-main-open-an-instance-12",
+      "aliases": [
+        "choose version",
         "browse modrinth",
         "open folder"
       ],
-      "steps": "Open an instance. Controls available in the corresponding view or dialog include Clear search, Retry search, Reset view, Browse Modrinth, Open folder.",
+      "steps": "Open an instance. Controls available in the corresponding view or dialog include Choose version, Browse Modrinth, Open folder.",
       "source": "src/main.tsx"
     },
     {
@@ -594,65 +753,164 @@
       "source": "src/components/ScreenshotComparison.tsx"
     },
     {
+      "id": "controls-socialplay-social-party-0",
+      "aliases": [
+        "accept invitation",
+        "decline invitation",
+        "invite players",
+        "add a friend",
+        "join",
+        "join with"
+      ],
+      "steps": "Social → Party. Controls available in the corresponding view or dialog include Accept invitation, Decline invitation, Invite players, Add a friend, Join, Join with.",
+      "source": "src/components/SocialPlay.tsx"
+    },
+    {
+      "id": "controls-socialplay-social-party-6",
+      "aliases": [
+        "create party"
+      ],
+      "steps": "Social → Party. Controls available in the corresponding view or dialog include Create party.",
+      "source": "src/components/SocialPlay.tsx"
+    },
+    {
+      "id": "controls-socialdock-social-drawer-0",
+      "aliases": [
+        "social"
+      ],
+      "steps": "Social drawer. Controls available in the corresponding view or dialog include Social.",
+      "source": "src/components/SocialDock.tsx"
+    },
+    {
+      "id": "controls-playeraccountactions-account-menu-0",
+      "aliases": [
+        "open linking page"
+      ],
+      "steps": "Account menu. Controls available in the corresponding view or dialog include Open linking page.",
+      "source": "src/components/PlayerAccountActions.tsx"
+    },
+    {
+      "id": "controls-desktopnotificationcenter-top-bar-notifications-0",
+      "aliases": [
+        "accept invitation",
+        "decline invitation",
+        "cancel launch",
+        "equip",
+        "previous track",
+        "next track"
+      ],
+      "steps": "Top bar → Notifications. Controls available in the corresponding view or dialog include Accept invitation, Decline invitation, Cancel launch, Equip, Previous track, Next track.",
+      "source": "src/components/DesktopNotificationCenter.tsx"
+    },
+    {
+      "id": "controls-desktopnotificationcenter-top-bar-notifications-6",
+      "aliases": [
+        "volume",
+        "mark all as read",
+        "share crash details",
+        "try again"
+      ],
+      "steps": "Top bar → Notifications. Controls available in the corresponding view or dialog include Volume, Mark all as read, Share crash details, Try again.",
+      "source": "src/components/DesktopNotificationCenter.tsx"
+    },
+    {
+      "id": "controls-desktopislandupdate-top-bar-updates-0",
+      "aliases": [
+        "dismiss update confirmation"
+      ],
+      "steps": "Top bar → Updates. Controls available in the corresponding view or dialog include Dismiss update confirmation.",
+      "source": "src/components/DesktopIslandUpdate.tsx"
+    },
+    {
+      "id": "controls-storagebreakdown-settings-storage-0",
+      "aliases": [
+        "open folder"
+      ],
+      "steps": "Settings → Storage. Controls available in the corresponding view or dialog include Open folder.",
+      "source": "src/components/StorageBreakdown.tsx"
+    },
+    {
+      "id": "controls-modmaintenance-settings-updates-0",
+      "aliases": [
+        "check for mod updates and dependencies",
+        "view mods",
+        "mod issues"
+      ],
+      "steps": "Settings → Updates. Controls available in the corresponding view or dialog include Check for mod updates and dependencies, View Mods, Mod issues.",
+      "source": "src/components/ModMaintenance.tsx"
+    },
+    {
       "id": "controls-socialpage-social-0",
       "aliases": [
         "add friend",
+        "all friends",
+        "online",
         "copy username",
         "open direct message",
-        "remove friend",
-        "accept",
-        "decline invite"
+        "remove friend"
       ],
-      "steps": "Social. Controls available in the corresponding view or dialog include Add friend, Copy username, Open direct message, Remove friend, Accept, Decline invite.",
+      "steps": "Social. Controls available in the corresponding view or dialog include Add friend, All friends, Online, Copy username, Open direct message, Remove friend.",
       "source": "src/components/SocialPage.tsx"
     },
     {
       "id": "controls-socialpage-social-6",
       "aliases": [
+        "accept",
+        "decline invite",
         "cancel invite",
-        "close pinned messages",
-        "unpin message",
-        "close encryption details",
-        "the numbers match",
-        "scan qr image"
+        "received",
+        "sent",
+        "close pinned messages"
       ],
-      "steps": "Social. Controls available in the corresponding view or dialog include Cancel invite, Close pinned messages, Unpin message, Close encryption details, The numbers match, Scan QR image.",
+      "steps": "Social. Controls available in the corresponding view or dialog include Accept, Decline invite, Cancel invite, Received, Sent, Close pinned messages.",
       "source": "src/components/SocialPage.tsx"
     },
     {
       "id": "controls-socialpage-social-12",
       "aliases": [
+        "unpin message",
+        "close encryption details",
+        "the numbers match",
+        "scan qr image",
         "continue without verifying",
-        "reply",
-        "edit message",
-        "pinned messages",
-        "review",
-        "attach encrypted screenshot"
+        "reply"
       ],
-      "steps": "Social. Controls available in the corresponding view or dialog include Continue without verifying, Reply, Edit message, Pinned messages, Review, Attach encrypted screenshot.",
+      "steps": "Social. Controls available in the corresponding view or dialog include Unpin message, Close encryption details, The numbers match, Scan QR image, Continue without verifying, Reply.",
       "source": "src/components/SocialPage.tsx"
     },
     {
       "id": "controls-socialpage-social-18",
       "aliases": [
+        "edit message",
+        "back to conversations",
+        "pinned messages",
+        "review",
         "add emoji",
-        "send message",
-        "change group icon",
-        "members",
-        "create group",
-        "remove from group"
+        "send message"
       ],
-      "steps": "Social. Controls available in the corresponding view or dialog include Add emoji, Send message, Change group icon, Members, Create group, Remove from group.",
+      "steps": "Social. Controls available in the corresponding view or dialog include Edit message, Back to conversations, Pinned messages, Review, Add emoji, Send message.",
       "source": "src/components/SocialPage.tsx"
     },
     {
       "id": "controls-socialpage-social-24",
       "aliases": [
+        "change group icon",
+        "members",
+        "create group",
+        "remove from group",
         "leave group",
+        "try again"
+      ],
+      "steps": "Social. Controls available in the corresponding view or dialog include Change group icon, Members, Create group, Remove from group, Leave group, Try again.",
+      "source": "src/components/SocialPage.tsx"
+    },
+    {
+      "id": "controls-socialpage-social-30",
+      "aliases": [
         "create group chat",
         "add a friend"
       ],
-      "steps": "Social. Controls available in the corresponding view or dialog include Leave group, Create group chat, Add a friend.",
+      "steps": "Social. Controls available in the corresponding view or dialog include Create group chat, Add a friend.",
       "source": "src/components/SocialPage.tsx"
     },
     {
@@ -714,14 +972,14 @@
     {
       "id": "controls-instancefolders-instances-0",
       "aliases": [
-        "save folder name",
-        "cancel rename",
+        "save folder",
+        "cancel folder edit",
+        "remove folder",
         "rename",
         "ungroup",
-        "ungroup folder",
-        "close folder editor"
+        "new folder"
       ],
-      "steps": "Instances. Controls available in the corresponding view or dialog include Save folder name, Cancel rename, Rename, Ungroup, Ungroup folder, Close folder editor.",
+      "steps": "Instances. Controls available in the corresponding view or dialog include Save folder, Cancel folder edit, Remove folder, Rename, Ungroup, New folder.",
       "source": "src/components/InstanceFolders.tsx"
     },
     {
@@ -734,14 +992,6 @@
       "source": "src/components/ModDetailDrawer.tsx"
     },
     {
-      "id": "controls-contenttoolbar-instance-content-toolbar-0",
-      "aliases": [
-        "sort and filter"
-      ],
-      "steps": "Instance → Content toolbar. Controls available in the corresponding view or dialog include Sort and filter.",
-      "source": "src/components/ContentToolbar.tsx"
-    },
-    {
       "id": "controls-contenttransfer-instance-copy-to-instance-0",
       "aliases": [
         "close copy dialog"
@@ -752,9 +1002,10 @@
     {
       "id": "controls-catalogfiltercontrols-instance-mods-catalog-filters-0",
       "aliases": [
-        "retry filter choices"
+        "retry filter choices",
+        "reset filters"
       ],
-      "steps": "Instance → Mods → Catalog filters. Controls available in the corresponding view or dialog include Retry filter choices.",
+      "steps": "Instance → Mods → Catalog filters. Controls available in the corresponding view or dialog include Retry filter choices, Reset filters.",
       "source": "src/components/CatalogFilterControls.tsx"
     },
     {
@@ -795,10 +1046,20 @@
         "maximize or restore delight client",
         "close delight client",
         "connect microsoft",
-        "continue to launcher",
-        "try again"
+        "finish without signing in",
+        "preview local cosmetics"
       ],
-      "steps": "Microsoft setup. Controls available in the corresponding view or dialog include Minimize Delight Client, Maximize or restore Delight Client, Close Delight Client, Connect Microsoft, Continue to launcher, Try again.",
+      "steps": "Microsoft setup. Controls available in the corresponding view or dialog include Minimize Delight Client, Maximize or restore Delight Client, Close Delight Client, Connect Microsoft, Finish without signing in, Preview local cosmetics.",
+      "source": "src/components/OnboardingFlow.tsx"
+    },
+    {
+      "id": "controls-onboardingflow-microsoft-setup-6",
+      "aliases": [
+        "continue to launcher",
+        "try again",
+        "exit preview"
+      ],
+      "steps": "Microsoft setup. Controls available in the corresponding view or dialog include Continue to launcher, Try again, Exit preview.",
       "source": "src/components/OnboardingFlow.tsx"
     },
     {

@@ -5,14 +5,14 @@ pub const JAVA_ARCHIVE_EXTENSION: &str = "zip";
 pub const JAVA_EXECUTABLE: &str = "javaw.exe";
 pub const DEVICE_NAME: &str = "Delight Client on Windows";
 pub fn data_directory() -> Result<PathBuf, String> {
-    Ok(appdata()?.join("BloomClient"))
+    super::launcher_folder(&appdata()?)
 }
 fn appdata() -> Result<PathBuf, String> {
     std::env::var("APPDATA")
         .map(PathBuf::from)
         .map_err(|_| "APPDATA is unavailable on this computer.".into())
 }
-pub fn game_directory() -> Result<PathBuf, String> {
+pub(super) fn legacy_game_directory() -> Result<PathBuf, String> {
     Ok(appdata()?.join(".minecraft"))
 }
 pub fn open_folder(path: &Path) -> Result<(), String> {

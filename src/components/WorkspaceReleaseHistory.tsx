@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { invoke as invokeNative } from "@tauri-apps/api/core";
-import { RotateCcw } from "lucide-react";
+import { ArrowCounterClockwiseIcon as RotateCcw } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import { connectDelightAccount, socialDirectoryChanged } from "../services/connect-delight-account";

@@ -13,9 +13,9 @@ fn home() -> Result<PathBuf, String> {
         .ok_or_else(|| "The macOS home directory is unavailable.".into())
 }
 pub fn data_directory() -> Result<PathBuf, String> {
-    Ok(home()?.join("Library/Application Support/BloomClient"))
+    super::launcher_folder(&home()?.join("Library/Application Support"))
 }
-pub fn game_directory() -> Result<PathBuf, String> {
+pub(super) fn legacy_game_directory() -> Result<PathBuf, String> {
     Ok(home()?.join("Library/Application Support/minecraft"))
 }
 pub fn open_folder(path: &Path) -> Result<(), String> {

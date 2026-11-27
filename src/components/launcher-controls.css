@@ -160,7 +160,7 @@
 .desktop-redesign .appearance-options .theme-choices { justify-content: space-between; }
 
 .desktop-redesign [aria-label="Settings help"] button { white-space: nowrap; gap: 7px; padding-inline: 6px; }
-@media (max-width: 980px) { [aria-label="Settings help"] .lucide-external-link { display: none; } }
+@media (max-width: 980px) { [aria-label="Settings help"] button > svg:last-child:not(:first-child) { display: none; } }
 .desktop-redesign .rail-account .profile-popover[role="menu"] { --account-menu-fill: var(--launcher-menu); }
 :root:not([data-theme="light"]) .desktop-redesign .rail-account .profile-popover[role="menu"] {
   --launcher-menu: #262626;
@@ -307,3 +307,15 @@
 .accent-option i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--launcher-menu-line); }
 .appearance-options .setting-percent-slider { width: min(100%, 290px); grid-template-columns: minmax(40px, 1fr) 54px; }
 .appearance-options .setting-percent-slider output { background: transparent; border-color: var(--launcher-menu-line); border-radius: 6px; font: inherit; font-size: 13px; }
+
+.rail-account-trigger .account-skin-portrait, .accounts-portrait .account-skin-portrait { width: 100%; height: 100%; border-radius: inherit; }
+.account-menu-identity .account-skin-portrait { width: 36px; height: 36px; }
+.player-account-actions { padding-bottom: 4px; border-bottom: 1px solid var(--launcher-menu-line); }
+.rail-player-rows button { display: grid; grid-template-columns: 18px minmax(0,1fr) 16px; align-items: center; gap: 9px; }
+.rail-player-rows button > :first-child { justify-self: center; margin: 0; }
+.rail-player-rows button > span { text-align: left; }
+.rail-player-rows button > svg:last-child { justify-self: center; margin: 0; }
+.rail-player-flyout { position: fixed; z-index: 3000; width: min(216px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; box-sizing: border-box; padding: 5px; color: var(--text); background: var(--launcher-menu); border: 1px solid var(--launcher-menu-line); border-radius: 8px; box-shadow: 0 6px 20px var(--theme-shadow-soft); font: 14px/1.35 var(--interface-font, "Segoe UI"),sans-serif; }
+.rail-link-code { display: grid; gap: 3px; padding: 8px 10px; }
+.rail-link-code code { white-space: nowrap; font-size: 20px; letter-spacing: .08em; }
+.rail-link-code small { color: var(--muted); }

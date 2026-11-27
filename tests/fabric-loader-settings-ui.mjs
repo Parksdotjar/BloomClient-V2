@@ -12,17 +12,24 @@ const url = process.env.BLOOM_TEST_URL || "http://127.0.0.1:1420";
 await page.route("**/*", route => route.request().url().startsWith(url) || route.request().url().startsWith("data:") ? route.continue() : route.abort());
 await page.addInitScript(() => {
   localStorage.setItem("bloom-onboarding-complete-v1", "complete");
-  localStorage.setItem("bloom-settings", JSON.stringify({ theme: "oled", accent: "#f24f54", animations: true, buttonPressDuration: 0, ...JSON.parse(localStorage.getItem("loader-test-prefs")||"{}") }));
+  localStorage.setItem("bloom-settings", JSON.stringify({ modChecksOnStartup: false, theme: "oled", accent: "#f24f54", animations: true, buttonPressDuration: 0, ...JSON.parse(localStorage.getItem("loader-test-prefs")||"{}") }));
   const art = (color, letter) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="${color}"/><text x="50" y="68" text-anchor="middle" fill="white" font-family="sans-serif" font-size="48" font-weight="bold">${letter}</text></svg>`);
   const instances = JSON.parse(localStorage.getItem("loader-test-instances") || "null") || ["Meadow", "Vanilla", "Creative", "Adventure"].map((name, i) => ({ id: String(i), name, loader: i === 1 ? "Vanilla" : "Fabric", loaderVersion: i === 0 ? "0.18.4" : null, version: "1.21.1", directory: `C:/Bloom/instances/${name}`, java: "Automatic", memory: 4096, jvmArguments: "", mods: true, resourcePacks: true, shaderPacks: true, config: true, visible: true, icon: i === 3 ? undefined : art(["#55795e", "#a18350", "#677fa6"][i], name[0]) }));
   window.folderTest = { metadataFail: false, metadataDelay: false, releaseMetadata: null, saveDelay: false, releaseSettings: null, running: false, launchedVersions: [], renameFail: false, calls: [], failSave: false, failLoad: false, delaySave: false, releaseSave: null, instances };
   let next = 1;
+  const callbacks = new Map();
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
   window.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: "main" }, currentWebview: { label: "main" } },
-    transformCallback() { return next++; }, unregisterCallback() {}, convertFileSrc(path) { return path; },
+    transformCallback(fn) { const id=next++; callbacks.set(id,fn); return id; }, unregisterCallback(id) { callbacks.delete(id); }, convertFileSrc(path) { return path; },
     async invoke(command, args) {
       window.folderTest.calls.push({ command, args });
+      if (command === "check_mod_maintenance") {
+        const version = instances.find(item => item.id === args.instanceId).loaderVersion;
+        if (window.folderTest.holdScan) await new Promise(resolve => window.folderTest.releaseScan = resolve);
+        (window.folderTest.scannedVersions ??= []).push(version);
+        return { updates: [], repairsAvailable: false, dependencyIssues: [], issues: [], complete: true };
+      }
       if (command === "list_instances") return instances.map(item => ({...item}));
       if (command === "cosmetics_request") return {items:[]};
       if (command === "list_instance_fabric_loaders") {
@@ -74,7 +81,10 @@ await page.addInitScript(() => {
       if (command === "get_minecraft_launch_status") return { active: false, progress: 0, state: "idle", message: "" };
       if (command === "get_minecraft_releases") return [{ id: "1.21.1", type: "release" }];
       if (["list_pack_channel_memberships", "reconcile_cosmetics", "list_cached_screenshots", "detect_java_installations"].includes(command)) return [];
-      if (command === "plugin:event|listen") return next++;
+      if (command === "plugin:event|listen") {
+        if (args.event === "instance-loader-resolved") window.folderTest.emitLoader = payload => callbacks.get(args.handler)?.({ event: args.event, payload });
+        return next++;
+      }
       if (command === "plugin:app|version") return "1.1.8";
       if (command === "get_client_cache_settings") return { enabled: true, maxBytes: 3e9 };
       return null;
@@ -105,8 +115,19 @@ try {
  await page.evaluate(()=>window.folderTest.saveDelay=true);await save.click();await wait(()=>typeof window.folderTest.releaseSettings==='function');
  assert.equal(await selector.isDisabled(),true);assert.equal(await page.getByRole('button',{name:'Saving…',exact:true}).isDisabled(),true);
  await page.evaluate(()=>{window.folderTest.saveDelay=false;window.folderTest.releaseSettings();});await page.waitForFunction(()=>!document.querySelector('.instance-preferences-save').disabled);
- assert.equal((await calls('update_instance_settings')).at(-1).args.loaderVersion,'0.20.1');
+ await page.waitForFunction(()=>window.folderTest.calls.some(c=>c.command==='check_mod_maintenance'));
+ assert.deepEqual((await calls('check_mod_maintenance')).map(c=>c.args.instanceId),['0'], 'one check for the instance whose loader changed with startup checks off');
+ await saveDone();
+ assert.equal((await calls('check_mod_maintenance')).length,1,'saving the same runtime does not recheck');
+ assert.equal((await calls('update_instance_settings')).find(c=>c.args.loaderVersion)?.args.loaderVersion,'0.20.1');
  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('loader-test-instances'))[0].loaderVersion),'0.20.1');
+ await page.evaluate(()=>window.folderTest.holdScan=true);
+ await pick('0.19.5');await saveDone();await wait(()=>typeof window.folderTest.releaseScan==='function');
+ await pick('0.18.4');await saveDone();await pick('0.20.1 (latest stable)');await saveDone();
+ assert.equal((await calls('check_mod_maintenance')).length,2,'rapid saves share the in-flight scan');
+ await page.evaluate(()=>{window.folderTest.holdScan=false;window.folderTest.releaseScan()});
+ await wait(()=>window.folderTest.scannedVersions.length===3);
+ assert.deepEqual(await page.evaluate(()=>window.folderTest.scannedVersions),['0.20.1','0.19.5','0.20.1']);
  await page.reload();await open();await page.waitForFunction(()=>!document.querySelector('.instance-fabric-loader .select-trigger').disabled);assert.match(await selector.innerText(),/0\.20\.1/);
  // Saving unrelated edits omits the optional loader field, preserving pins even without metadata.
  await saveDone();assert.equal('loaderVersion' in (await calls('update_instance_settings')).at(-1).args,false);
@@ -134,5 +155,13 @@ try {
  await page.evaluate(()=>{window.folderTest.lateMetadata=window.folderTest.releaseMetadata;window.folderTest.metadataDelay=false;});await open('Creative');await page.waitForFunction(()=>!document.querySelector('.instance-fabric-loader .select-trigger').disabled);await page.evaluate(()=>window.folderTest.lateMetadata());await page.waitForTimeout(100);assert.match(await selector.innerText(),/0\.18\.4/);
  await page.evaluate(()=>localStorage.setItem('loader-test-prefs',JSON.stringify({theme:'light',animations:false})));await page.setViewportSize({width:900,height:680});await page.reload();await open();await page.waitForFunction(()=>!document.querySelector('.instance-fabric-loader .select-trigger').disabled);await selector.click();await shot('light-compact');
  const bounds=await page.locator('.select-menu-portal').boundingBox();assert.ok(bounds.x>=0 && bounds.x+bounds.width<=900 && bounds.y>=0 && bounds.y+bounds.height<=680);
+ const beforePin = (await calls('check_mod_maintenance')).length;
+ await page.evaluate(()=>{
+   const item=window.folderTest.instances.find(i=>i.id==='2');
+   item.loaderVersion='0.20.1';
+   window.folderTest.emitLoader([item.id,item.version,item.loaderVersion]);
+ });
+ await page.waitForFunction(expected=>window.folderTest.calls.filter(c=>c.command==='check_mod_maintenance').length===expected,beforePin+1);
+ assert.equal((await calls('check_mod_maintenance')).at(-1).args.instanceId,'2');
  assert.deepEqual(errors,[]);console.log('Fabric settings UI passed: real save arguments, upgrade/downgrade persistence, next-launch selection, failed-save retry, busy menu closure, metadata retry, legacy/Vanilla preservation, keyboard prereleases, stale response isolation, compact Light layout.');
 } catch(error) {await shot('failure');throw error;} finally {await browser.close();}

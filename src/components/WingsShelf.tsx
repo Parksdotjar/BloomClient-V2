@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, RotateCw } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, ArrowClockwiseIcon as RotateCw } from "@phosphor-icons/react";
 import { installedWings, cosmeticColorLabels, wingRequest,
   type CosmeticCategory, type EquippedWing, type Tint, type WingCatalog, type WingColors, type WingOffer } from "../services/delight-wings";
 import { CustomAccentPicker } from "./CustomAccentPicker";
@@ -66,7 +66,11 @@ export function WingsShelf({ mode, category = "wings", accountId, motion, initia
     ? { left: "Crown", right: "Spores", trim: "Brim", rightOuter: "Stem" }
     : item?.id === "miners-helmet"
       ? { left: "Center strip", right: "Helmet shell", trim: "Lamp lens", rightOuter: "Lamp housing" }
-      : cosmeticColorLabels[category];
+      : item?.id === "northstar-witch-hat"
+        ? { left: "Crown felt", rightOuter: "Brim felt", right: "Woven band", trim: "Brass buckle" }
+        : item?.id === "cinder-horns"
+          ? { left: "Left horn", right: "Right horn", trim: "Left ember tip", rightOuter: "Right ember tip" }
+          : cosmeticColorLabels[category];
   const colorControls = Object.entries(labels) as [Tint, string][];
   const tintKeys = colorControls.map(([key]) => key);
   const equipped = catalog?.equipped;
@@ -79,7 +83,6 @@ export function WingsShelf({ mode, category = "wings", accountId, motion, initia
       await wingRequest("POST", "claim", accountId, { id: offer.id, revision: offer.revision }, category);
       if (alive.current) {
         setCatalog(previous => previous && { ...previous, items: previous.items.map(item => item.id === offer.id ? { ...item, owned: true } : item) });
-        onNotify("Added " + offer.name + " to Locker.", "success");
       }
     });
   }
@@ -98,9 +101,6 @@ export function WingsShelf({ mode, category = "wings", accountId, motion, initia
           items: current.items.map(offer => saved && offer.revision === saved.revision
             ? { ...offer, configured: saved.colors } : offer),
         });
-        if (sequence === latestWrite.current) {
-          onNotify(saved ? "Colors and equipment saved." : hats ? "Hat unequipped." : category === "back" ? "Back cosmetic unequipped." : "Wings unequipped.", "success");
-        }
       } catch (error) {
         if (alive.current && sequence === latestWrite.current) {
           const previous = confirmed.current;

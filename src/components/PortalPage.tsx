@@ -1,7 +1,7 @@
 import { announceClipboardCopy } from "../services/clipboard";
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { ArrowLeft, ArrowUpRight, Check, Copy, Globe2, Layers3, SlidersHorizontal, MoreHorizontal, Play, Plus, RefreshCw, Search, Server, Star, TriangleAlert, Trash2, X } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, ArrowUpRightIcon as ArrowUpRight, CheckIcon as Check, CopyIcon as Copy, GlobeHemisphereWestIcon as Globe2, StackIcon as Layers3, SlidersHorizontalIcon as SlidersHorizontal, DotsThreeIcon as MoreHorizontal, PlayIcon as Play, PlusIcon as Plus, ArrowsClockwiseIcon as RefreshCw, MagnifyingGlassIcon as Search, HardDrivesIcon as Server, StarIcon as Star, WarningIcon as TriangleAlert, TrashIcon as Trash2, XIcon as X } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import type { PortalChange, PortalEntry, PortalLibrary, PortalTarget } from "../services/portal";
 import { ToolbarIconSwap } from "./ConnectedToolbar";
@@ -108,7 +108,7 @@ export function PortalPage({ filter, instances, busy, onPlay, onOpenInstance, on
   const launchButton = (entry: PortalEntry) => <button className="portal-play" disabled={busy || Boolean(entry.unavailableReason)}
     title={entry.unavailableReason || (busy ? "Wait for the current game or download to finish." : `Launch ${entry.instanceName} directly into ${entry.name}`)}
     onClick={() => play(entry)} aria-label={`${entry.kind === "server" ? "Join" : "Play"} ${entry.name}`}>
-    <Play size={14} fill="currentColor" />{entry.kind === "server" ? "Join" : "Play"}
+    <Play size={14} weight="fill" />{entry.kind === "server" ? "Join" : "Play"}
   </button>;
   const copyAddress = async (entry: PortalEntry) => {
     setMessage("");
@@ -140,7 +140,7 @@ export function PortalPage({ filter, instances, busy, onPlay, onOpenInstance, on
       <div className="portal-toolbar">
         <label className="portal-search"><Search size={16} /><input aria-label="Search Portal" placeholder={filter === "All" ? "Search destinations…" : `Search ${filter.toLowerCase()}…`} value={query} onChange={event => setQuery(event.target.value)} />{query && <button aria-label="Clear Portal search" onClick={() => setQuery("")}><X size={14} /></button>}</label>
         <button ref={filterTrigger} className="portal-filter-trigger" aria-label="Filter" title="Filter and sort" aria-haspopup="menu" aria-expanded={filtersOpen} aria-controls={filtersOpen ? "portal-filters" : undefined} data-filtered={Boolean(scope || sort !== "Recently played")} onClick={() => setFiltersOpen(value => !value)}><SlidersHorizontal size={17} />Filter</button>
-        <button className="portal-icon-button portal-favorites" aria-label="Favorites" title="Favorites" aria-pressed={favorites} onClick={() => setFavorites(value => !value)}><Star size={17} fill={favorites ? "currentColor" : "none"} /></button>
+        <button className="portal-icon-button portal-favorites" aria-label="Favorites" title="Favorites" aria-pressed={favorites} onClick={() => setFavorites(value => !value)}><Star size={17} weight={favorites ? "fill" : "regular"} /></button>
         {filtersOpen && <FilterMenu anchor={filterTrigger} id="portal-filters" title="Portal filters" onClose={() => setFiltersOpen(false)}>
           <FilterSection label="Instance" value={scope ? labels[instances.findIndex(instance => instance.id === scope)] : "All instances"} options={["All instances", ...labels]} onChange={value => setInstanceFilter(instances[labels.indexOf(value)]?.id ?? "")} />
           <FilterSection label="Sort by" value={sort} options={["Recently played", "Name", "Instance"]} onChange={setSort} />
@@ -189,7 +189,7 @@ function PortalRow({ entry, changing, removing, onFavorite, onOpen, onCopy, onRe
       <PlaceIcon entry={entry} />
       <div className="portal-row-copy"><h3 title={entry.name}>{entry.name}</h3><p title={entry.kind === "server" ? entry.target : entry.instanceName}>{entry.kind === "server" ? entry.target : entry.instanceName}</p></div>
       <div className="portal-row-actions">
-        <button className="portal-icon-button portal-star" disabled={changing} aria-label={`${entry.favorite ? "Unfavorite" : "Favorite"} ${entry.name}`} title={entry.favorite ? "Remove from favorites" : "Add to favorites"} aria-pressed={entry.favorite} onClick={onFavorite}><Star size={17} fill={entry.favorite ? "currentColor" : "none"} /></button>
+        <button className="portal-icon-button portal-star" disabled={changing} aria-label={`${entry.favorite ? "Unfavorite" : "Favorite"} ${entry.name}`} title={entry.favorite ? "Remove from favorites" : "Add to favorites"} aria-pressed={entry.favorite} onClick={onFavorite}><Star size={17} weight={entry.favorite ? "fill" : "regular"} /></button>
         <div className="portal-row-menu">
           <button ref={trigger} aria-haspopup="menu" className="portal-icon-button" aria-label={`Options for ${entry.name}`} title={entry.unavailableReason || "Options"} aria-expanded={open} aria-controls={`portal-menu-${entry.id}`} onClick={() => setOpen(value => !value)}>
             <ToolbarIconSwap active={copied} resting={entry.unavailableReason ? <TriangleAlert size={17} /> : <MoreHorizontal size={18} />} engaged={<Check size={17} />} />

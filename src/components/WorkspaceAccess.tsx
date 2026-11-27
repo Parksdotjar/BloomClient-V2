@@ -1,6 +1,6 @@
 import { copyTextWithFeedback } from "../services/clipboard";
 import { useEffect, useId, useRef, useState, type ComponentType, type FormEvent } from "react";
-import { Copy, Plus, RefreshCw } from "lucide-react";
+import { CopyIcon as Copy, PlusIcon as Plus, ArrowsClockwiseIcon as RefreshCw } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import { connectDelightAccount, socialDirectoryChanged } from "../services/connect-delight-account";

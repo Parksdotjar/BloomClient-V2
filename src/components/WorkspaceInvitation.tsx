@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cuboid, Link2, UserRoundPlus } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, CaretRightIcon as ChevronRight, CubeIcon as Cuboid, LinkIcon as Link2, UserCirclePlusIcon as UserRoundPlus } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import { connectDelightAccount } from "../services/connect-delight-account";

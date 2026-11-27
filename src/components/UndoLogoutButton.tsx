@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LogOut, Undo2 } from "lucide-react";
+import { SignOutIcon as LogOut, ArrowArcLeftIcon as Undo2 } from "@phosphor-icons/react";
 import { ToolbarIconSwap } from "./ConnectedToolbar";
 import "./undo-logout.css";
 
@@ -104,7 +104,7 @@ export function UndoLogoutButton({ accountId, open, disabled = false, animations
         <path d={outline}
           pathLength="100" strokeDasharray="100 100" strokeDashoffset={-100 * progress} />
       </svg>}
-      <span className="undo-logout-icon"><ToolbarIconSwap active={undo} resting={<LogOut size={18} strokeWidth={2.6} />} engaged={<Undo2 size={18} strokeWidth={2.6} />} /></span>
+      <span className="undo-logout-icon"><ToolbarIconSwap active={undo} resting={<LogOut size={18} weight="bold" />} engaged={<Undo2 size={18} weight="bold" />} /></span>
       <div><b key={phase} className="undo-logout-label toolbar-copy">{undo ? "Undo" : phase === "committing" ? "Signing out…" : "Log out"}</b></div>
     </button>
     <span className="logout-announcement" role="status" aria-live="polite" aria-atomic="true">{announcement}</span>

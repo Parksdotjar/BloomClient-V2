@@ -1,6 +1,6 @@
 import { createContext, useContext, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronRight, RotateCcw } from "lucide-react";
+import { CheckIcon as Check, CaretRightIcon as ChevronRight, ArrowCounterClockwiseIcon as RotateCcw } from "@phosphor-icons/react";
 import "./catalog-filter-controls.css";
 import { fitFloatingMenu } from "../services/menu-position";
 

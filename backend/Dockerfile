@@ -7,6 +7,7 @@ COPY --chown=node:node server.mjs /app/server.mjs
 COPY --chown=node:node auth /app/auth
 COPY --chown=node:node cosmetics /app/cosmetics
 COPY --chown=node:node sharing /app/sharing
+COPY --chown=node:node ask-delight /app/ask-delight
 COPY --chown=node:node social /app/social
 COPY --chown=node:node emotes /app/emotes
 USER node
