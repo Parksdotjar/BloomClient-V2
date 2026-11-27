@@ -134,7 +134,9 @@ try {
     await focus(); await enabled();
     assert.equal(await progressBar.count(), 0, "Terminal launch states clear the progress bar");
     if (terminal === "error") {
-      const toast = page.locator(".launch-toast");
+      const toast = page.locator('.desktop-notification-center[data-face="notice"]');
+      assert.equal(await page.locator(".launch-toast").count(), 0);
+      await toast.locator(".desktop-island-notice-trigger").click();
       assert((await toast.textContent()).includes("Minecraft crashed (exit code 1)."));
       const count = () => page.evaluate(() => launchTest.calls.filter(x => x.command === "ask_delight_remote" && x.args?.body).length);
       const before = await count();

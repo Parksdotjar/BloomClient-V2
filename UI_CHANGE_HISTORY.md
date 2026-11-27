@@ -1621,3 +1621,7 @@ Parks approved the ears' shape and replaced the initial palette with rose pink (
 ### 2026-11-26 — Shared color editing
 
 2026-11-26 — Shared launcher color pickers now place a screen eyedropper between Hex and Apply. Releasing the color field or hue control commits one edit. Clicking outside commits a valid hex entry. Ctrl/Cmd+Z reverses the last committed change while native text undo remains available in the hex field. Worn cosmetic writes are serialized, including immediate undo during an outstanding save. Browser flows passed for hats, wings and back items, including click-away and mocked eyedropper results. The OS loupe was not manually sampled.
+
+### 2026-11-26 — Launcher notifications in the top island
+
+Parks retired the full-width rising notification bar and requested the top island for all transient outcomes, including copies and errors. The compact preview expands for details and crash sharing.

@@ -52,11 +52,6 @@
   transform: none;
   transition-delay: 0s;
 }
-.launch-toast { anchor-name: --launch-toast; }
-.launch-toast + .player-install-bar {
-  bottom: 64px;
-  bottom: calc(anchor(--launch-toast top, 48px) + 16px);
-}
 .player-install-label { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; }
 .player-install-label [role="status"] { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .player-install-label [aria-hidden], .player-install-bar small { color: var(--muted); font-size: 12px; }

@@ -314,7 +314,7 @@
 .crash-details p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .crash-details textarea { display: block; width: 100%; min-height: 115px; padding: 10px; margin: 12px 0 6px; resize: vertical; color: inherit; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
 .crash-details footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.crash-details button, .launch-toast .share-crash { padding: 7px 12px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+.crash-details button { padding: 7px 12px; border-radius: 8px; background: var(--panel); color: var(--text); border: 1px solid var(--border); }
 
 .ask-pack { display: grid; gap: .5rem; margin-top: .75rem; }
 .ask-pack small { opacity: .72; }
