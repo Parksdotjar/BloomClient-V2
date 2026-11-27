@@ -1,5 +1,6 @@
+import type { IslandPartyInvite } from "../services/use-party-invite-island";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { Bell, CheckCheck, ChevronRight, CircleAlert, Download, Package, PackageCheck, Pause, Play, SkipBack, SkipForward, TriangleAlert, Volume2, VolumeX, X } from "lucide-react";
+import { BellIcon as Bell, CheckIcon as Check, UsersIcon as UsersRound, ChecksIcon as CheckCheck, CaretRightIcon as ChevronRight, WarningCircleIcon as CircleAlert, DownloadIcon as Download, PackageIcon as Package, PackageIcon as PackageCheck, PauseIcon as Pause, PlayIcon as Play, SkipBackIcon as SkipBack, SkipForwardIcon as SkipForward, WarningIcon as TriangleAlert, SpeakerHighIcon as Volume2, SpeakerSlashIcon as VolumeX, XIcon as X } from "@phosphor-icons/react";
 import type { ClientNotice } from "../services/client-notice";
 import type { NotificationItem } from "../services/notification-center";
 import type { DesktopNowPlaying, NowPlayingAction, NowPlayingVolume } from "../services/now-playing";
@@ -30,6 +31,7 @@ function previewNotice(message: string) {
 export type IslandFeedback = { id: string; message: string; kind: "notification" | "error" };
 
 export type DesktopNotifications = {
+  partyInvite?: IslandPartyInvite;
   feedback?: IslandFeedback;
   dismissFeedback?: (id: string) => void;
   shareCrash?: () => void;
@@ -141,13 +143,20 @@ export function DesktopNotificationCenter({
     panel?.kind === "update" && panel.version === updateVersion;
   const canShowCosmetic = !!(cosmeticUnlock && onDismissCosmeticUnlock && onOpenUnlockedCloak);
   const face = installingUpdate || showingUpdate ? "update" : launchProgress?.phase ??
-    (clientNotice ? "notice" : canShowCosmetic ? "cosmetic" : launcherUpdate ? "update" : nowPlaying ? "media" : "notifications");
+    (center.partyInvite ? "party" : clientNotice ? "notice" : canShowCosmetic ? "cosmetic" : launcherUpdate ? "update" : nowPlaying ? "media" : "notifications");
+  const partyInvite = center.partyInvite;
+  const dismissParty = partyInvite?.dismiss;
+  useEffect(()=>{
+    if(face!=="party" || !dismissParty) return;
+    const timer=window.setTimeout(dismissParty,10000);
+    return ()=>window.clearTimeout(timer);
+  },[face,partyInvite?.key,dismissParty]);
   const showingLaunch = face === "launching" || face === "launched";
   const canCancel = face === "launching" && !!onCancelLaunch;
   const launchExpanded = canCancel && !dismissedLaunch && (hoveringLaunch || focusedLaunch);
   const showingNotice = face === "notice" && panel?.kind === "notice" && panel.id === clientNotice?.id;
   const mediaDetails = face === "media" && panel?.kind === "media" && panel.sessionId === nowPlaying?.sessionId ? panel.sessionId : null;
-  const showingNotifications = !showingLaunch && panel?.kind === "notifications";
+  const showingNotifications = face!=="party" && !showingLaunch && panel?.kind === "notifications";
   const detail: IslandDetail | null = showingNotice ? "notice" : showingNotifications ? "notifications" : null;
   const expanded = detail !== null;
   // Retain the previous body during retraction. Inert makes its actions unavailable immediately.
@@ -338,7 +347,13 @@ export function DesktopNotificationCenter({
     {face === "cosmetic" && <CosmeticConfetti key={cosmeticSequence} motion={motion} />}
     <div className="desktop-island-surface" ref={surface}>
       <div className="desktop-island-compact">
-        {face === "launching" ? <div className="desktop-notification-launch">
+        {face === "party" && partyInvite ? <div key={partyInvite.key} className="island-party-invite">
+          <UsersRound size={14} aria-hidden="true"/>
+          <span className="island-party-copy" role="status"><strong title={partyInvite.name}>{partyInvite.name}</strong><span>invited you to a party</span></span>
+          <button type="button" className="accept" title="Accept invitation" aria-label={`Accept party invite from ${partyInvite.name}`} disabled={partyInvite.busy} onClick={()=>partyInvite.respond("accept")}><Check size={13} weight="bold"/></button>
+          <button type="button" className="decline" title="Decline invitation" aria-label={`Decline party invite from ${partyInvite.name}`} disabled={partyInvite.busy} onClick={()=>partyInvite.respond("decline")}><X size={12} weight="bold"/></button>
+          <i className="island-party-timer" aria-hidden="true"/>
+        </div> : face === "launching" ? <div className="desktop-notification-launch">
           <div ref={node => { trigger.current = node; }} className="desktop-notification-launch-progress"
             role="progressbar" aria-label="Launching Minecraft" tabIndex={canCancel ? 0 : undefined}
             aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
@@ -425,7 +440,7 @@ export function DesktopNotificationCenter({
             }}>
             <span className="desktop-notification-trigger-icon" aria-hidden="true">
               <span className="desktop-notification-bell">
-                <Bell size={16} strokeWidth={1.65} />
+                <Bell size={16} />
                 {unread && <span className="desktop-notification-dot" />}
               </span>
             </span>

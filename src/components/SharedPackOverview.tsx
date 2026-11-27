@@ -1,6 +1,7 @@
+import { runtimeKey } from "../services/mod-maintenance";
 import { copyTextWithFeedback } from "../services/clipboard";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, Copy, PackagePlus } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, CopyIcon as Copy, PackageIcon as PackagePlus } from "@phosphor-icons/react";
 import { PackContentsReview, type ReleaseDraft } from "./PackContentsReview";
 import type { PackPublication } from "./PackPublication";
 import { WorkspaceFrame, type WorkspaceInstance, type WorkspacePage } from "./PackWorkspace";
@@ -116,7 +117,7 @@ export function SharedPackOverview({ instance, page, sharing, onNavigate, Select
       : page === "releases" ? followed ? <FollowedPackReleases instance={instance} /> : <WorkspaceReleaseHistory instanceId={instance.id}
           restore={canRestore ? {playerUrl:creatorPublication.playerUrl, actionHost:releaseActionHost, onRestored:sharing.published} : undefined} />
       : page === "changes" ? <PackContentsReview key={`${creatorPublication?.revision ?? 0}:${editedDraft?.id ?? ""}`}
-          instanceId={instance.id} loader={instance.loader}
+          instanceId={instance.id} loader={instance.loader} runtime={runtimeKey(instance)}
           setContentsBack={registerContentsBack}
           basePublication={creatorPublication} carriedDraft={carriedDraft}
           onRefreshHead={draft => { setCarriedDraft(draft); retry(true); }} onBusy={setPublishing}

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { RotateCcw } from "lucide-react";
+import { ArrowCounterClockwiseIcon as RotateCcw } from "@phosphor-icons/react";
 import { catalogFilterLabel, type CatalogFilters } from "../services/catalog-filters";
 
 type Choices = { categories: string[]; loaders: string[]; versions: string[] };

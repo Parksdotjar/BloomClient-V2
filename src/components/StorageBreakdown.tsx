@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ChevronDown, FolderOpen, RefreshCw } from "lucide-react";
+import { CaretDownIcon as ChevronDown, FolderOpenIcon as FolderOpen, ArrowsClockwiseIcon as RefreshCw } from "@phosphor-icons/react";
 import "./storage-breakdown.css";
 
 const categories = [

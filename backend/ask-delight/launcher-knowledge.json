@@ -1,0 +1,536 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "minecraft-accounts",
+      "aliases": [
+        "minecraft accounts",
+        "add account",
+        "switch accounts",
+        "alt account"
+      ],
+      "steps": "Open Settings → Accounts to manage Microsoft sign-ins. The rail account menu also has Switch account and Add account. Each Minecraft player has their own Social profile.",
+      "source": "src/components/PlayerAccountActions.tsx"
+    },
+    {
+      "id": "client-settings",
+      "aliases": [
+        "settings",
+        "client settings",
+        "appearance",
+        "background",
+        "theme",
+        "animations",
+        "ultra performance",
+        "client preferences",
+        "java runtime"
+      ],
+      "steps": "Open the account menu at the bottom of the sidebar and choose Client settings, or use Edit → Client settings. Appearance controls the theme, accent, background color, sidebar color, text, and dividers. Performance contains Memory Allocation, Java Runtime and Ultra Performance Mode. Per-instance Java and memory settings are inside the instance’s own Settings.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "pack-import",
+      "aliases": [
+        "import",
+        "import modpack",
+        "mrpack",
+        "zip",
+        "modpack",
+        "export",
+        "modrinth pack",
+        "pack import"
+      ],
+      "steps": "Open Instances → New instance. Use Add from Modrinth to browse Modrinth modpacks or Import for a supported local pack. Delight’s Home Import Modpack shortcut accepts supported Fabric .mrpack or ZIP files. Downloads shows installation progress. Open the resulting instance to check its Minecraft version and loader before adding more content.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "portal-play",
+      "aliases": [
+        "portal",
+        "server",
+        "servers",
+        "world",
+        "worlds",
+        "quick play",
+        "direct play",
+        "recently played",
+        "add server",
+        "realms"
+      ],
+      "steps": "Portal is in the sidebar. Use Servers or Worlds, search, or filter by the owning instance. Join or Play launches a supported destination with that instance’s settings. If direct play is unavailable, use the row’s Open instance option and open the destination in Minecraft. Portal does not list Realms or report live player counts.",
+      "source": "PORTAL_ARCHITECTURE.md"
+    },
+    {
+      "id": "share-instance",
+      "aliases": [
+        "share",
+        "share instance",
+        "share modpack",
+        "synced pack",
+        "standalone copy",
+        "gift",
+        "pack invite",
+        "invite a friend"
+      ],
+      "steps": "Open the instance’s three-dot menu and select Share instance. Pick a standalone copy or synced pack, choose from accepted Delight Social friends, and send. Friends accept through the gift card in the matching Social conversation. A synced pack has revisions controlled by the owner. Download progress appears in Downloads.",
+      "source": "MODPACK_SHARING.md"
+    },
+    {
+      "id": "social-account",
+      "aliases": [
+        "add friends",
+        "add a friend",
+        "friend request",
+        "find my friends",
+        "social account"
+      ],
+      "steps": "Open the Social tab on the right edge, then Friends. Use the + to add someone by Minecraft username. Incoming friend requests appear in Inbox. Switching Minecraft accounts also switches friends, presence and invites.",
+      "source": "src/components/SocialPage.tsx"
+    },
+    {
+      "id": "launch-help",
+      "aliases": [
+        "downloads",
+        "download queue",
+        "installation",
+        "install progress",
+        "failed to launch",
+        "launch error",
+        "live logs",
+        "logs",
+        "repair installation",
+        "java status"
+      ],
+      "steps": "Downloads shows game preparation and content installs. Live Logs in the sidebar shows Minecraft output for the current launch. The Home quick actions include Java Status and Repair Installation where available. For a failed launch, identify whether it stopped in Downloads or after game start and ask for a short error message with private details removed. Repair verifies the latest instance’s Minecraft files.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "screenshots-library",
+      "aliases": [
+        "screenshots",
+        "screenshot shelf",
+        "screenshot comparison",
+        "minecraft screenshot",
+        "compare screenshots"
+      ],
+      "steps": "Open Screenshots in the sidebar to browse screenshots from Minecraft instances. Use the instance filter to narrow the library, open an image for a larger preview, or select two screenshots and use Compare to drag the divider between them.",
+      "source": "src/components/ScreenshotShelf.tsx"
+    },
+    {
+      "id": "home-play",
+      "aliases": [
+        "play button",
+        "home screen",
+        "home dashboard",
+        "traditional launcher",
+        "select instance",
+        "launch a game"
+      ],
+      "steps": "On Home, select the instance you want and press Play. Edit → Client settings → Launcher → Home Layout switches between the dashboard and the focused launcher.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "quick-switcher",
+      "aliases": [
+        "quick switcher",
+        "search settings",
+        "keyboard shortcut",
+        "ctrl k",
+        "command k",
+        "find a page"
+      ],
+      "steps": "By default press Ctrl+K (Command+K on Mac). Change the binding in Settings → Shortcuts. In the switcher type an instance, page, or settings section. Use the arrow keys and Enter to open the selected result.",
+      "source": "src/components/QuickSwitcher.tsx"
+    },
+    {
+      "id": "profile-picture",
+      "aliases": [
+        "profile picture",
+        "player icon",
+        "account portrait"
+      ],
+      "steps": "The account button uses your Minecraft skin. Choose a skin in Locker → Skins to change your player’s appearance.",
+      "source": "src/components/MinecraftWardrobe.tsx"
+    },
+    {
+      "id": "cache-storage",
+      "aliases": [
+        "storage breakdown",
+        "cache settings",
+        "disk space",
+        "storage"
+      ],
+      "steps": "Open Settings → Storage to review space used by launcher data and instances. Review the selected category before clearing cached files.",
+      "source": "src/components/StorageBreakdown.tsx"
+    },
+    {
+      "id": "appearance-presets",
+      "aliases": [
+        "preset",
+        "presets",
+        "saved appearance",
+        "save theme",
+        "save colors"
+      ],
+      "steps": "In Client settings → Appearance, open the appearance preset picker to save and name the current look or select a saved appearance.",
+      "source": "src/components/AppearancePresets.tsx"
+    },
+    {
+      "id": "accent-editor",
+      "aliases": [
+        "accent",
+        "hex color",
+        "sidebar color",
+        "text color",
+        "dividers"
+      ],
+      "steps": "In Client settings → Appearance, use Accent to choose a preset or Custom to edit the hex color. Background, Sidebar and Text each have a color picker. Dividers adjusts separator visibility.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "right-sidebar",
+      "aliases": [
+        "open alula",
+        "find alula",
+        "ask delight"
+      ],
+      "steps": "Select Alula on the left rail to open chat. Your chat history is in the context sidebar.",
+      "source": "src/components/AskDelight.tsx"
+    },
+    {
+      "id": "chat-history",
+      "aliases": [
+        "chat history",
+        "previous chats",
+        "delete conversations"
+      ],
+      "steps": "Open Alula and use the history sidebar to find or reopen a conversation. History is stored locally for the active account.",
+      "source": "src/components/AlulaHistory.tsx"
+    },
+    {
+      "id": "ai-usage",
+      "aliases": [
+        "usage limit",
+        "quota",
+        "questions left",
+        "ai paused",
+        "alula",
+        "ai questions"
+      ],
+      "steps": "Click the small ring beside Alula’s composer for remaining questions and reset times. Enter sends and Shift+Enter adds a line. Live answers require an eligible signed-in account. Local launcher shortcuts can work offline.",
+      "source": "src/components/AskDelight.tsx"
+    },
+    {
+      "id": "instance-folders",
+      "aliases": [
+        "folder",
+        "folders",
+        "organize instances",
+        "group instances",
+        "move instance",
+        "new folder"
+      ],
+      "steps": "Open Instances. Use the library folder controls to create a named folder and choose instances. Move an instance into an existing or new folder using the move dialog. These are library groups; Open folder on an instance opens files on disk.",
+      "source": "src/components/InstanceFolders.tsx"
+    },
+    {
+      "id": "instance-actions",
+      "aliases": [
+        "rename",
+        "duplicate",
+        "export",
+        "delete instance",
+        "open folder",
+        "instance directory",
+        "copy instance"
+      ],
+      "steps": "Open an instance’s actions menu for Open folder, duplicate, export, share and delete. Use Instance settings to edit the instance name and Save changes. Export creates a shareable file; duplicate creates another local instance.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "floating-play",
+      "aliases": [
+        "floating controls",
+        "pop out",
+        "mini player",
+        "floating play"
+      ],
+      "steps": "Open the instance’s actions menu and choose Pop out Play controls. Move or resize the floating control and use Put away floating controls to close it.",
+      "source": "src/components/FloatingInstancePlayer.tsx"
+    },
+    {
+      "id": "instance-java",
+      "aliases": [
+        "overdrive",
+        "jvm",
+        "java profile",
+        "garbage collection",
+        "java flags",
+        "custom arguments"
+      ],
+      "steps": "Open the instance → Instance settings. Choose Default, Performance, Overdrive or Custom under Java profile. Advanced Java options exposes JVM arguments and Reset to default. Save changes applies edits.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "fabric-loader-setting",
+      "aliases": [
+        "loader version",
+        "fabric loader",
+        "change fabric",
+        "downgrade fabric",
+        "update fabric"
+      ],
+      "steps": "Open a Fabric instance → Instance settings → Fabric loader setting. Choose a loader version for that instance’s Minecraft version and Save changes. Wait for active game operations to finish before changing the loader.",
+      "source": "src/components/FabricLoaderSetting.tsx"
+    },
+    {
+      "id": "content-copy",
+      "aliases": [
+        "copy mods",
+        "copy to instance",
+        "transfer mods",
+        "move packs",
+        "copy shaders",
+        "drop onto an instance"
+      ],
+      "steps": "Use the content transfer controls on installed instance content or drag transferable content onto another instance. Review the destination and selected files in the Copy to instance dialog before copying.",
+      "source": "src/components/ContentTransfer.tsx"
+    },
+    {
+      "id": "catalog-details",
+      "aliases": [
+        "filter mods",
+        "filter mod search",
+        "catalog filters",
+        "reset filters",
+        "sort mods"
+      ],
+      "steps": "Open an instance → Mods → Add Mods. Narrow the catalog by Minecraft version, mod loader or category. Sort by best match, downloads, follows, recently updated or newest. Reset filters clears your selections.",
+      "source": "src/components/CatalogFilterControls.tsx"
+    },
+    {
+      "id": "sync-instances",
+      "aliases": [
+        "sync",
+        "synchronize",
+        "sync now",
+        "sync settings",
+        "keybinds",
+        "controls",
+        "voice chat",
+        "shared pack folders",
+        "servers from one setup",
+        "copy servers",
+        "share saved servers"
+      ],
+      "steps": "Utilities → Sync Across Instances. Choose a source and what to copy or share. Save setup remembers the choices. Sync now applies them after confirmation and backs up replaced files.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "sharing-codes",
+      "aliases": [
+        "share code",
+        "group pack",
+        "editor code",
+        "publish changes",
+        "group revision",
+        "install shared pack"
+      ],
+      "steps": "Utilities → Modpack Sharing can create a share code or import a shared pack by code or link. Group packs support joining as a member or using a one-time editor code. Owners and editors can publish revisions; members apply available updates.",
+      "source": "src/components/UtilitiesPage.tsx"
+    },
+    {
+      "id": "wardrobe",
+      "aliases": [
+        "skins",
+        "skin",
+        "slim",
+        "classic arms",
+        "upload skin",
+        "minecraft cape",
+        "equip cape"
+      ],
+      "steps": "Open Locker and choose Skins or Capes. For a skin use Add skin and enter a Java username or choose a PNG. Click a saved skin to wear it. Classic and Slim changes apply immediately. Click an owned cape or cloak to wear it. Choose Unequip to take it off.",
+      "source": "src/components/MinecraftWardrobe.tsx"
+    },
+    {
+      "id": "cloaks-shop",
+      "aliases": [
+        "cloak",
+        "cloaks",
+        "cosmetics shop",
+        "cape code",
+        "redeem code",
+        "claim cape",
+        "locker"
+      ],
+      "steps": "Open Locker. Cloaks are Delight cosmetics tied to the Minecraft account. Browse Shop for available cloaks or use Redeem code to claim one. Use the Locker view to choose owned cosmetics.",
+      "source": "src/components/Locker.tsx"
+    },
+    {
+      "id": "screenshots-tools",
+      "aliases": [
+        "screenshot folder",
+        "copy screenshot",
+        "f2",
+        "compare pictures",
+        "comparison divider",
+        "export comparison",
+        "clipboard",
+        "copy image",
+        "screenshot"
+      ],
+      "steps": "Take an in-game screenshot with F2, then open Screenshots and refresh. Use Copy image or Open folder on a card. Compare lets you select two images, move the divider and export the comparison.",
+      "source": "src/components/ScreenshotShelf.tsx"
+    },
+    {
+      "id": "social-chat",
+      "aliases": [
+        "direct messages",
+        "message a friend",
+        "group chat",
+        "send a message"
+      ],
+      "steps": "Open Social → Messages, select a conversation, type in the composer and send. Use the back arrow to return to conversations. Direct messages and group chats have separate lists.",
+      "source": "src/components/SocialPage.tsx"
+    },
+    {
+      "id": "launch-diagnostics",
+      "aliases": [
+        "share crash details",
+        "crash details",
+        "failed launch",
+        "diagnose crash",
+        "send logs"
+      ],
+      "steps": "Use Share crash details on a failed launch notification or in Live Logs. Review or edit the extracted details, then choose Send to Alula for a separate request. Cancel closes the preview without sending.",
+      "source": "src/components/CrashDetails.tsx"
+    },
+    {
+      "id": "download-history",
+      "aliases": [
+        "cancel download",
+        "queued downloads",
+        "completed downloads",
+        "stopped downloads",
+        "download history"
+      ],
+      "steps": "Open Downloads from the sidebar. See active progress, queued content, stopped jobs and completed items. Use the available cancel or dismiss action on the relevant job. Client settings → Launcher → Download Queue controls simultaneous downloads.",
+      "source": "src/main.tsx"
+    },
+    {
+      "id": "portal-favorites",
+      "aliases": [
+        "favorite server",
+        "favorites",
+        "add a server",
+        "world filter",
+        "search portal"
+      ],
+      "steps": "Open Portal, select Servers or Worlds, then use Search Portal, Favorites or Filters to find a destination. Use Add a server for a saved multiplayer address and select the owning instance.",
+      "source": "src/components/PortalPage.tsx"
+    },
+    {
+      "id": "onboarding",
+      "aliases": [
+        "connect microsoft",
+        "onboarding"
+      ],
+      "steps": "At first launch choose appearance, accent color and a launcher data location. Connect Microsoft, copy the device code and complete sign-in in your browser. Continue to the launcher to apply your setup. Manage saved players in Settings → Accounts.",
+      "source": "src/components/OnboardingFlow.tsx"
+    },
+    {
+      "id": "party-invites",
+      "aliases": [
+        "invite my friends",
+        "invite a friend",
+        "invite friends",
+        "party invite",
+        "invite someone to my party",
+        "invite my friend to a party",
+        "invite my friends to a party"
+      ],
+      "steps": "Open Social at the right edge of the launcher and choose Party. If you don’t have a party yet, choose Create party. Click the + beside the roster count, then the + beside your friend’s Minecraft name. If they aren’t listed, add them under Friends first. A party holds up to eight players.",
+      "source": "src/components/SocialPlay.tsx"
+    },
+    {
+      "id": "party-response",
+      "aliases": [
+        "accept a party invite",
+        "decline party invite",
+        "missed party invite",
+        "party notification"
+      ],
+      "steps": "Use the green check to accept or the red X to decline. The top island shows the invite for ten seconds. If it closes, open Social → Party to respond to a pending invitation.",
+      "source": "src/components/SocialPlay.tsx"
+    },
+    {
+      "id": "party-server",
+      "aliases": [
+        "share my server",
+        "share current server",
+        "join my friend",
+        "join a friend",
+        "join friends server",
+        "stop sharing"
+      ],
+      "steps": "Join a multiplayer server in Minecraft, then open Social → Party and click Share on your own row. Party members see the address and a Join button beside your name. Join uses a compatible instance. Stop sharing or disconnect from the server to remove the Join button.",
+      "source": "src/components/SocialPlay.tsx"
+    },
+    {
+      "id": "player-link",
+      "aliases": [
+        "link website account",
+        "link minecraft",
+        "link my player",
+        "unlink my player"
+      ],
+      "steps": "Open the account menu at the bottom of the rail and choose Link website account. Open the linking page, sign in to Delight Productions and enter the eight-digit code before it expires. Linking is optional for Friends. Unlinking leaves friends, blocks and invites with the Minecraft player.",
+      "source": "src/components/PlayerAccountActions.tsx"
+    },
+    {
+      "id": "island",
+      "aliases": [
+        "top bar",
+        "notification island",
+        "notifications",
+        "notification center"
+      ],
+      "steps": "Click the island in the middle of the top bar to view notifications. It also shows launcher updates and Minecraft launch progress. A party invite has accept and decline controls right on the island.",
+      "source": "src/components/DesktopNotificationCenter.tsx"
+    },
+    {
+      "id": "locker-colors",
+      "aliases": [
+        "change wing color",
+        "change hat color",
+        "cosmetic colors",
+        "eyedropper",
+        "zoom preview"
+      ],
+      "steps": "Open Locker, choose the cosmetic’s tab and select an owned item to equip it. Scroll over the worn preview to zoom and drag to rotate. On recolorable items, choose a section and adjust its color, enter a hex value or use the eyedropper to sample your skin. Restore default colors resets its palette.",
+      "source": "src/components/Locker.tsx"
+    },
+    {
+      "id": "maintenance",
+      "aliases": [
+        "mod maintenance",
+        "repair managed mods",
+        "fabric loader warning"
+      ],
+      "steps": "Open Settings → Updates and run the mod maintenance check. If an instance needs a loader version, confirm its Fabric Loader selection in the instance settings, then recheck.",
+      "source": "src/components/ModMaintenance.tsx"
+    },
+    {
+      "id": "rail-appearance",
+      "aliases": [
+        "rail hover brightness",
+        "icon rail color",
+        "dividers",
+        "interface size"
+      ],
+      "steps": "Open Settings → Appearance. Rail hover brightness adjusts the highlight and bevel together. Icon rail controls the rail background, Dividers adjusts separator contrast, and Interface size scales the launcher.",
+      "source": "src/main.tsx"
+    }
+  ]
+}

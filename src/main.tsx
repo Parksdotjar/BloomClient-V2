@@ -1,3 +1,4 @@
+import { usePartyInviteIsland } from "./services/use-party-invite-island";
 import { copyTextWithFeedback } from "./services/clipboard";
 import type { IslandFeedback } from "./components/DesktopNotificationCenter";
 import { captureAppearance, normalizeIslandColor } from "./services/appearance-presets";
@@ -35,8 +36,8 @@ import { InstanceModMaintenance, ModMaintenanceIssues, ModMaintenanceSettings } 
 import { DuplicateResolutionPage, type DuplicateChoice } from "./components/PackFileReviewPages";
 import { MinecraftModUpdate } from "./components/MinecraftModUpdate";
 import { InstanceContentIssue } from "./components/InstanceContentIssue";
-import { isModAdvisory, isModDuplicateIssue, useModMaintenance, type ModDuplicateReport, type ModMaintenance } from "./services/mod-maintenance";
-import { Server } from "lucide-react";
+import { runtimeKey, isModAdvisory, isModDuplicateIssue, useModMaintenance, type ModDuplicateReport, type ModMaintenance } from "./services/mod-maintenance";
+import { CoatHangerIcon as HangerIcon, HardDrivesIcon as Server } from "@phosphor-icons/react";
 import { PortalPage } from "./components/PortalPage";
 import type { PortalEntry, PortalLibrary, PortalTarget } from "./services/portal";
 
@@ -86,62 +87,59 @@ import { Resource } from "@tauri-apps/api/core";
 import { launcherUpdateDelay, previewLauncherUpdate, runLauncherUpdate, type LauncherUpdatePhase, type UpdateAttempt } from "./services/launcher-update";
 import { animate } from "animejs";
 import { waapi, type WAAPIAnimation } from "animejs/waapi";
-import {
-  Check,
-  Activity,
-  ArrowRightLeft,
-  BarChart3,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clipboard,
-  Keyboard,
-  Link2,
-  Cpu,
-  Cuboid,
-  Copy,
-  Database,
-  Shirt,
-  Download,
-  ExternalLink,
-  Info,
-  CircleHelp,
-  House,
-  FileDown,
-  FolderPlus,
-  Layers3,
-  Globe,
-  FolderInput,
-  ImagePlus,
-  MoreHorizontal,
-  Monitor,
-  MemoryStick,
-  MessageCircle,
-  PackageOpen,
-  Orbit,
-  Palette,
-  Play,
-  Plus,
-  Puzzle,
-  RefreshCw,
-  Rocket,
-  RotateCw,
-  Search,
-  Settings as SettingsIcon,
-  Shield,
-  SlidersHorizontal,
-  TerminalSquare,
-  Timer,
-  TriangleAlert,
-  Trash2,
-  UserRound,
-  WandSparkles,
-  BotMessageSquare,
-  Wrench,
-  LockKeyhole,
-  ArrowLeft as X,
-  X as CloseIcon,
-} from "lucide-react";
+import { CheckIcon as Check,
+  PulseIcon as Activity,
+  ArrowsLeftRightIcon as ArrowRightLeft,
+  ChartBarIcon as BarChart3,
+  CaretDownIcon as ChevronDown,
+  CaretLeftIcon as ChevronLeft,
+  CaretRightIcon as ChevronRight,
+  ClipboardIcon as Clipboard,
+  KeyboardIcon as Keyboard,
+  LinkIcon as Link2,
+  CpuIcon as Cpu,
+  CubeIcon as Cuboid,
+  CopyIcon as Copy,
+  DatabaseIcon as Database,
+  TShirtIcon as Shirt,
+  DownloadIcon as Download,
+  ArrowSquareOutIcon as ExternalLink,
+  InfoIcon as Info,
+  QuestionIcon as CircleHelp,
+  HouseIcon as House,
+  FileArrowDownIcon as FileDown,
+  FolderSimplePlusIcon as FolderPlus,
+  StackIcon as Layers3,
+  GlobeIcon as Globe,
+  BoxArrowDownIcon as FolderInput,
+  ImagesIcon as ImagePlus,
+  DotsThreeIcon as MoreHorizontal,
+  MonitorIcon as Monitor,
+  MemoryIcon as MemoryStick,
+  PackageIcon as PackageOpen,
+  PlanetIcon as Orbit,
+  PaletteIcon as Palette,
+  PlayIcon as Play,
+  PlusIcon as Plus,
+  PuzzlePieceIcon as Puzzle,
+  ArrowsClockwiseIcon as RefreshCw,
+  RocketIcon as Rocket,
+  ArrowClockwiseIcon as RotateCw,
+  MagnifyingGlassIcon as Search,
+  GearSixIcon as SettingsIcon,
+  ShieldIcon as Shield,
+  SlidersHorizontalIcon as SlidersHorizontal,
+  TerminalWindowIcon as TerminalSquare,
+  TimerIcon as Timer,
+  WarningIcon as TriangleAlert,
+  TrashIcon as Trash2,
+  UserCircleIcon as UserRound,
+  MagicWandIcon as WandSparkles,
+  RobotIcon as BotMessageSquare,
+  WrenchIcon as Wrench,
+  LockKeyIcon as LockKeyhole,
+  ArrowLeftIcon as X,
+  XIcon as CloseIcon } from "@phosphor-icons/react";
 import "./styles.css";
 import "./components/toggle-feedback.css";
 import "./components/instance-controls.css";
@@ -150,7 +148,7 @@ import { FloatingInstancePlayer } from "./components/FloatingInstancePlayer";
 import "./themes/light.css";
 import "./components/dropdowns.css";
 import "./components/interface-details.css";
-import { FolderOpen, ListOrdered, CircleAlert } from "lucide-react";
+import { FolderOpenIcon as FolderOpen, ListNumbersIcon as ListOrdered, WarningCircleIcon as CircleAlert } from "@phosphor-icons/react";
 import "./components/sidebar-navigation.css";
 import "./components/interface-depth.css";
 import "./components/account-depth.css";
@@ -164,8 +162,11 @@ import { monitorBackend } from "./services/backend";
 import { Locker, lockerSections, type CosmeticUnlock, type LockerSection } from "./components/Locker";
 import type { DesktopCosmeticUnlock } from "./components/DesktopCosmeticUnlock";
 import { UtilitiesPage } from "./components/UtilitiesPage";
+import { PlayerAccountActions } from "./components/PlayerAccountActions";
+import { SocialDock, type SocialDockMode } from "./components/SocialDock";
 import { SocialPage, type SocialDestination } from "./components/SocialPage";
 import { ModDetailDrawer, type ModDrawerSelection, type ModProjectDetails } from "./components/ModDetailDrawer";
+import { AppearanceThumbnail } from "./components/AppearanceThumbnail";
 import { OnboardingFlow, OnboardingSplash } from "./components/OnboardingFlow";
 import "./components/desktop-redesign.css";
 import "./components/launcher-controls.css";
@@ -179,17 +180,10 @@ type Theme = "oled" | "light" | "system";
 
 type HomeLayout = "Dashboard" | "Spotlight";
 type AppPage = "alula" | "portal" | "screenshots" | "home" | "settings" | "utilities" | "social" | "new-instance" | "downloads" | "logs" | "instance" | "instances" | "locker";
-const PROFILE_ICON_STORAGE_KEY = "bloom-profile-icon";
 const RECENT_PLAY_STORAGE_KEY = "delight-recently-played-instances";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "bloom-sidebar-collapsed";
 const ONBOARDING_COMPLETE_STORAGE_KEY = "bloom-onboarding-complete-v1";
 
-function HangerIcon({ size = 17, strokeWidth = 2 }: { size?: number; strokeWidth?: number }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M9.5 6.5a2.5 2.5 0 1 1 4 2c-.9.7-1.5 1-1.5 2.5v1" />
-    <path d="m12 12 8.5 5.7a1.25 1.25 0 0 1-.7 2.3H4.2a1.25 1.25 0 0 1-.7-2.3L12 12Z" />
-  </svg>;
-}
 
 const sidebarChoices = ["Download Queue", "Custom Image", "Friends", "Hidden"] as const;
 type SidebarChoice = (typeof sidebarChoices)[number];
@@ -197,7 +191,7 @@ const isSidebarChoice = (value: string): value is SidebarChoice => sidebarChoice
 
 const interfaceFonts = ["Segoe UI", "Arial", "Bahnschrift", "Calibri", "Consolas", "Georgia", "Tahoma", "Trebuchet MS", "Verdana"] as const;
 const defaultColors = {
-  oled: { Background: "#0b0b0b", Foreground: "#ffffff", Sidebar: "#151515", Panel: "#101010", Island: "#050505" },
+  oled: { Background: "#0f0f0f", Foreground: "#ffffff", Sidebar: "#0c0b0b", Panel: "#0c0c0c", Island: "#050505" },
   light: { Background: "#f6f6f6", Foreground: "#1b1b1b", Sidebar: "#e6e6e6", Panel: "#dadada", Island: "#050505" },
 };
 function paletteKey(mode: keyof typeof defaultColors, part: keyof typeof defaultColors.oled) {
@@ -231,6 +225,7 @@ export type SettingsState = AccentPreferences & {
   oledIsland: string;
   lightIsland: string;
   dividerStrength: number;
+  railHoverBrightness: number;
   animations: boolean;
   showNowPlaying: boolean;
   buttonPressDuration: number;
@@ -264,10 +259,10 @@ export type SettingsState = AccentPreferences & {
 const defaults: SettingsState = {
   backdrop: backgroundDefaults,
   customAccent: false, lastCustomAccent: "",
-  oledSidebar: "", lightSidebar: "", oledPanel: "", lightPanel: "", oledIsland: "", lightIsland: "", dividerStrength: 13,
+  oledSidebar: "", lightSidebar: "", oledPanel: "", lightPanel: "", oledIsland: "", lightIsland: "", dividerStrength: 12, railHoverBrightness: 35,
   theme: "oled",
   oledBackground: "", oledForeground: "", lightBackground: "", lightForeground: "",
-  interfaceFont: "Segoe UI",
+  interfaceFont: "Bahnschrift",
   interfaceSize: 95,
   spacing: "compact",
   accent: "#87a9f3",
@@ -308,7 +303,6 @@ const nav = [
   [House, "Home", "home"],
   [Layers3, "Instances", "instances"],
   [HangerIcon, "Locker", "locker"],
-  [MessageCircle, "Social", "social"],
   [ImagePlus, "Screenshots", "screenshots"],
   [Wrench, "Utilities", "utilities"],
   [Orbit, "Portal", "portal"],
@@ -921,8 +915,6 @@ function SettingsPage({
   setSettings,
   onSignOut,
   profile,
-  profileIcon,
-  onProfileIconChange,
   sidebarImage,
   wallpaper,
   initialTab,
@@ -940,15 +932,13 @@ function SettingsPage({
   switchingAccount,
   onSwitchAccount,
   onAccountAdded,
-  onRestartOnboarding,
+  onRestartOnboarding, onPreviewOnboarding,
 }: {
   resolvedTheme: keyof typeof defaultColors;
   settings: SettingsState;
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   onSignOut: () => void;
   profile: MinecraftProfile | null;
-  profileIcon: string | null;
-  onProfileIconChange: (icon: string) => void;
   sidebarImage: ReturnType<typeof useLauncherImage>;
   wallpaper: ReturnType<typeof useLauncherImage>;
   initialTab?: string;
@@ -967,6 +957,7 @@ function SettingsPage({
   onSwitchAccount: (account: MinecraftProfile) => Promise<void>;
   onAccountAdded: (profile: MinecraftProfile) => void;
   onRestartOnboarding: () => void;
+  onPreviewOnboarding?: () => void;
 }) {
   const update = <K extends keyof SettingsState>(
     key: K,
@@ -984,12 +975,10 @@ function SettingsPage({
   const selectedAccent = settings.customAccent ? "Custom" : accentPresets.find(preset => preset.color === settings.accent)?.name ?? "Custom";
   const activeTab = initialTab || "Appearance";
   const [aboutMessage, setAboutMessage] = useState("");
-  const [profileMessage, setProfileMessage] = useState("");
   const [releaseOptions, setReleaseOptions] = useState<string[]>([]);
   const [javaOptions, setJavaOptions] = useState<string[]>(["Automatic"]);
   const [addingAccount, setAddingAccount] = useState(false);
   const [pendingProfileAccountId, setPendingProfileAccountId] = useState<string | null>(null);
-  const profileIconInput = useRef<HTMLInputElement>(null);
   const sections = useRef<Record<string, HTMLDivElement | null>>({});
   const pendingRow = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -1029,15 +1018,6 @@ function SettingsPage({
       sections.current[label] = node;
     },
   });
-  const chooseProfileIcon = (file?: File) => {
-    if (!file) return;
-    if (!profile) { setProfileMessage("Sign in before choosing a profile picture."); return; }
-    if (!["image/png", "image/jpeg"].includes(file.type) || file.size > 2_500_000) { setProfileMessage("Choose a PNG or JPEG smaller than 2.5 MB."); return; }
-    const reader = new FileReader();
-    reader.onload = () => { onProfileIconChange(String(reader.result)); setProfileMessage("Profile picture updated for every account."); };
-    reader.onerror = () => setProfileMessage("Delight could not read that profile picture.");
-    reader.readAsDataURL(file);
-  };
   return (
     <div className="settings-page">
       {query.trim() && <section className="settings-search-results" aria-label="Settings search results">
@@ -1090,7 +1070,7 @@ function SettingsPage({
                   {(["system", "oled", "light"] as const).map(theme => <button key={theme} aria-pressed={theme === settings.theme} onClick={() => {
                     update("theme", theme);
                   }}>
-                    <span className="theme-preview" data-preview={theme} aria-hidden="true"><i/><i/><i/><i/>{theme === settings.theme && <Check size={15}/>}</span>
+                    <AppearanceThumbnail mode={theme} />
                     {theme === "system" ? "System" : theme === "oled" ? "Dark" : "Light"}
                   </button>)}
                 </div>
@@ -1120,6 +1100,9 @@ function SettingsPage({
                   <CustomAccentPicker label={name + " color"} value={color} onApply={value => update(key, part === "Island" ? normalizeIslandColor(value) : value)} />
                 </SettingsRow>;
               })}
+              <SettingsRow title="Rail hover brightness" description="Adjust the surface and bevel behind navigation icons.">
+                <PercentSlider label="Rail hover brightness" value={settings.railHoverBrightness} onChange={value => update("railHoverBrightness", value)} />
+              </SettingsRow>
               <SettingsRow title="Dividers" description="Adjust the visibility of lines between sections and rows.">
                 <PercentSlider label="Divider strength" value={settings.dividerStrength} onChange={value => update("dividerStrength", value)} />
               </SettingsRow>
@@ -1440,12 +1423,7 @@ function SettingsPage({
             <SettingsHeading title="Accounts" description="Manage your launcher picture and Microsoft accounts." />
             <div className="accounts-workspace">
               <section className="accounts-picture" aria-label="Profile picture" data-setting-help="Shown for all accounts on this launcher.">
-                <button className="accounts-portrait" aria-label="Change picture" title="Change picture" disabled={!profile} onClick={() => profileIconInput.current?.click()}>
-                  {profileIcon ? <img src={profileIcon} alt="" /> : profile ? <span aria-hidden="true">{profile.name.slice(0, 1).toUpperCase()}</span> : <UserRound size={42}/>}
-                  {profile && <i aria-hidden="true"><ImagePlus size={16}/></i>}
-                </button>
-                <input ref={profileIconInput} type="file" aria-label="Upload profile picture" accept="image/png,image/jpeg" hidden onChange={event => { chooseProfileIcon(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-                {profileMessage && <p className="settings-inline-status" role="status">{profileMessage}</p>}
+                <div className="accounts-portrait">{profile ? <AccountSkinPortrait accountId={profile.id} /> : <UserRound size={42} />}</div>
               </section>
               <section className="accounts-library" aria-label="Minecraft accounts">
                 <ul className="settings-account-list" aria-label="Saved Minecraft accounts">
@@ -1488,12 +1466,15 @@ function SettingsPage({
               </SettingsRow>
               <SettingsRow
                 title="Onboarding"
-                description="Run the Microsoft setup again."
+                description="Revisit appearance, instance storage and Microsoft sign-in."
               >
                 <button className="restart-onboarding-button" onClick={onRestartOnboarding}>
                   <RotateCw size={15} /> Restart onboarding
                 </button>
               </SettingsRow>
+              {onPreviewOnboarding && <SettingsRow title="Onboarding preview" description="Try setup with temporary choices and a sample Microsoft code.">
+                <button className="restart-onboarding-button" onClick={onPreviewOnboarding}>Preview onboarding</button>
+              </SettingsRow>}
               <SettingsRow
                 title="Minecraft Account"
                 description="Remove the saved Microsoft account from this device."
@@ -2041,6 +2022,7 @@ function InstanceWorlds({ instanceId, busy, onPlay }: {
 
 function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspace, contentTasks, groupRole, busy, initialTab = "mods", initialCatalog = false, onPopOut, floating, onPlay, onRename, onExport, onDuplicate, onDelete, onChanged, onInstallContent, onMessage, maintenance }: { maintenance: ModMaintenance; duplicateTarget?: string; onMessage: (message: string, kind?: "notification" | "error") => void; instance: InstanceDraft; contentTasks: ContentDownload[]; groupRole?: PackChannelRole; busy: boolean; initialTab?: InstanceTab; initialCatalog?: boolean; workspaceOpen: boolean; onOpenWorkspace: () => void; onPopOut: () => void; floating: boolean; onPlay: (target?: PortalTarget) => void; onRename: (name: string) => Promise<void>; onExport: () => Promise<void>; onDuplicate: () => Promise<void>; onDelete: () => Promise<void>; onChanged: (instance: InstanceDraft) => void; onInstallContent: (item: CatalogItem, category: Exclude<InstanceTab, "settings">) => Promise<void> }) {
   const followReview = useContext(FollowUpdateContext)?.reviews[instance.id];
+  const runtime = runtimeKey(instance);
   const maintenanceEntry = maintenance.entries[instance.id];
   const maintenanceReport = maintenanceEntry?.report;
   const applyingMods = maintenance.active === instance.id;
@@ -2077,7 +2059,7 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
     scan();
     window.addEventListener("focus", scan);
     return () => { current = false; window.removeEventListener("focus", scan); };
-  }, [instance.id, tab, contentReady, workspaceOpen, busy, duplicateInventory, duplicateChoice]);
+  }, [instance.id, runtime, tab, contentReady, workspaceOpen, busy, duplicateInventory, duplicateChoice]);
   useLayoutEffect(() => {
     const button = duplicateButton.current;
     if (pendingDuplicateFocus.current && button) {
@@ -2092,6 +2074,8 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
   const [catalogLoading, setCatalogLoading] = useState(initialCatalog && instance.loader.toLowerCase().includes("fabric"));
   const [catalogFilters, setCatalogFilters] = useState(defaultCatalogFilters);
   const [catalogVersion, setCatalogVersion] = useState(instance.version);
+  useEffect(() => { setCatalogVersion(instance.version); }, [instance.version]);
+  useEffect(() => { setModEnableErrors({}); setDuplicateChoice(undefined); setDuplicateReport(undefined); }, [runtime]);
   const catalogFiltered = catalogFiltersChanged(catalogFilters, catalogVersion, instance.version);
   const showCatalogFilters = browsingCatalog && tab === "mods";
   const [installedRowsAtEntry, setInstalledRowsAtEntry] = useState<InstanceContentItem[]>([]);
@@ -2236,13 +2220,12 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
     if (tab === "settings") return;
     try {
       await invoke("delete_instance_content", { instanceId: instance.id, category: tab, fileName: item.fileName });
-      onMessage(`${item.name} was deleted.`);
       if (tab === "mods") void maintenance.check(instance.id, true);
       await loadContent(true);
     } catch (error) { onMessage(String(error), "error"); }
   };
   const chooseIcon = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { void invoke<InstanceDraft>("set_instance_icon", { instanceId: instance.id, icon: String(reader.result) }).then(onChanged).catch(error => onMessage(String(error), "error")); }; reader.readAsDataURL(file); };
-  const saveSettings = async () => { if (savingSettings || (busy && loaderVersion !== undefined)) return; setSavingSettings(true); try { const saved = await invoke<InstanceDraft>("update_instance_settings", { instanceId: instance.id, name, memory, jvmArguments, ...(loaderVersion !== undefined ? { loaderVersion } : {}) }); onChanged(saved); setLoaderVersion(undefined); onMessage("Instance settings saved."); } catch (error) { onMessage(String(error), "error"); } finally { setSavingSettings(false); } };
+  const saveSettings = async () => { if (savingSettings || (busy && loaderVersion !== undefined)) return; setSavingSettings(true); try { const saved = await invoke<InstanceDraft>("update_instance_settings", { instanceId: instance.id, name, memory, jvmArguments, ...(loaderVersion !== undefined ? { loaderVersion } : {}) }); onChanged(saved); setLoaderVersion(undefined); } catch (error) { onMessage(String(error), "error"); } finally { setSavingSettings(false); } };
   const applyJvmPreset = (preset: string) => { if (preset === "Custom") setAdvancedJvmOpen(true); if (preset in JVM_PRESETS) setJvmArguments(JVM_PRESETS[preset as keyof typeof JVM_PRESETS]); };
   const categoryLabel = tab === "mods" ? "Mods" : tab === "resourcepacks" ? "Resource Packs" : "Shaders";
   const catalogKey = (item: CatalogItem, category: Exclude<InstanceTab, "settings"> = tab as Exclude<InstanceTab, "settings">) => `${category}:${item.projectId}`;
@@ -2396,7 +2379,6 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
   useEffect(() => {
     if (workspaceOpen || duplicateChoice || applyingMods || updatingVersion || tab === "settings") { setDraggingContent(false); return; }
     const category = tab;
-    const itemLabel = tab === "mods" ? "mod" : tab === "resourcepacks" ? "resource pack" : "shader";
     let active = true;
     const subscription = getCurrentWindow().onDragDropEvent((event) => {
       if (!active) return;
@@ -2406,7 +2388,6 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
         setDraggingContent(false);
         const paths = event.payload.paths;
         if (category === "mods") setModImport({ pending: true });
-        else onMessage(`Importing ${paths.length} ${itemLabel}${paths.length === 1 ? "" : "s"}…`);
         const importRequest = category === "mods"
           ? invoke<string[]>("import_instance_mod_files", { instanceId: instance.id, paths })
           : invoke<string[]>("import_instance_content_files", { instanceId: instance.id, category, paths });
@@ -2416,7 +2397,7 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
             if (category === "mods") {
               setModImport(names.length ? {} : { error: "Already installed." });
               void maintenance.check(instance.id, true);
-            } else onMessage(`${names.length} ${itemLabel}${names.length === 1 ? "" : "s"} added to ${instance.name}.`);
+            }
             return refreshInstalledContent(instance, category, true);
           })
           .catch(error => {
@@ -2433,9 +2414,9 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
   const contentTabs: Array<[Exclude<InstanceTab, "settings">, string, typeof Puzzle]> = [["mods", "Mods", Puzzle], ["resourcepacks", "Resource packs", Layers3], ["shaderpacks", "Shaders", WandSparkles]];
   if (workspaceOpen) return null;
   return <div className="instance-workspace">
-    {draggingContent && <div className="content-drop-overlay" role="status" aria-label={`Drop files into ${categoryLabel}`}><FileDown className="content-drop-symbol" size={58} strokeWidth={1.75} aria-hidden="true" /></div>}
+    {draggingContent && <div className="content-drop-overlay" role="status" aria-label={`Drop files into ${categoryLabel}`}><FileDown className="content-drop-symbol" size={58} aria-hidden="true" /></div>}
     <div className="desktop-breadcrumb"><Cuboid size={16} />Instances <ChevronRight size={13} /><strong>{instance.name}</strong></div>
-<section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} strokeWidth={2.4} /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1 aria-label={instance.name}><InstanceName name={instance.name} onRename={onRename} disabled={savingSettings} /></h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy || updatingVersion} onClick={() => onPlay()}>{hasUpdate(followReview) ? <><Download size={17}/>View update</> : <><Play size={17} fill="currentColor"/>Play</>}</button><button className="instance-more desktop-open-folder" aria-label="Open instance folder" title="Open instance folder" onClick={() => void invoke("open_instance_folder", { instanceId: instance.id }).catch(error => onMessage(String(error), "error"))}><FolderOpen size={20} /></button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} role="dialog" aria-label={`Actions for ${instance.name}`} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
+<section className="instance-hero-panel"><div className="instance-hero-main"><div className="instance-identity"><button className="instance-icon-picker" onClick={() => iconInput.current?.click()} aria-label="Change instance icon" title="Change instance icon">{instance.icon ? <img src={instance.icon} alt="" /> : <b className="instance-icon-fallback" aria-hidden="true">?</b>}<span aria-hidden="true"><ArrowRightLeft size={27} weight="bold" /></span></button><input ref={iconInput} type="file" accept="image/png,image/jpeg" hidden onChange={event => chooseIcon(event.target.files?.[0])} /><div><h1 aria-label={instance.name}><InstanceName name={instance.name} onRename={onRename} disabled={savingSettings} /></h1><p>{instance.version} • {instance.loader}</p><small>{instance.directory}</small></div></div><div className="instance-hero-actions"><button className="instance-play" disabled={busy || updatingVersion} onClick={() => onPlay()}>{hasUpdate(followReview) ? <><Download size={17}/>View update</> : <><Play size={17} weight="fill"/>Play</>}</button><button className="instance-more desktop-open-folder" aria-label="Open instance folder" title="Open instance folder" onClick={() => void invoke("open_instance_folder", { instanceId: instance.id }).catch(error => onMessage(String(error), "error"))}><FolderOpen size={20} /></button><div className="instance-more-wrap"><button ref={instanceMenuTriggerRef} className="instance-more" aria-haspopup="dialog" aria-expanded={menuOpen} aria-label={`Actions for ${instance.name}`} onClick={() => setMenuOpen(value => !value)}><MoreHorizontal size={20} /></button>{menuOpen && createPortal(<div ref={instanceMenuRef} role="dialog" aria-label={`Actions for ${instance.name}`} className="select-menu select-menu-portal instance-folder-menu" style={{ ...closedDropdownStyle, position: "fixed", top: instanceMenuPosition.top, left: instanceMenuPosition.left, right: "auto", width: instanceMenuPosition.width, maxHeight: instanceMenuPosition.maxHeight }}>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); onPopOut(); }}><ExternalLink size={18} /><span><b>{floating ? "Put away floating controls" : "Pop out Play controls"}</b></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id }); }}><FolderOpen size={18} /><span><b>Open folder</b></span></button>
       <button className="instance-menu-action" style={{ opacity: 0 }} onClick={() => { setMenuOpen(false); void invoke("open_instance_folder", { instanceId: instance.id, category: "mods" }); }}><PackageOpen size={18} /><span><b>Open mods folder</b></span></button>
@@ -2466,12 +2447,12 @@ function InstancePage({ instance, duplicateTarget, workspaceOpen, onOpenWorkspac
       </div>
     </div></section>
     {worldsOpen ? <InstanceWorlds instanceId={instance.id} busy={busy} onPlay={onPlay} /> : tab === "settings" && versionReview ? (
-      <MinecraftModUpdate<InstanceDraft> instanceId={instance.id} current={instance.version}
+      <MinecraftModUpdate<InstanceDraft> key={runtime} instanceId={instance.id} current={instance.version}
         busy={busy} Select={Select} onBusy={setUpdatingVersion} onBack={closeVersionReview} onUpdated={updated => {
           onChanged(updated);
           closeVersionReview();
           void refreshInstalledContent(updated, "mods", true);
-          void maintenance.check(updated.id, true);
+          if (runtimeKey(updated) === runtime) void maintenance.check(updated.id, true);
         }} />
     ) : tab === "settings" ? (
       <section className="instance-manager settings-manager instance-preferences">
@@ -2971,7 +2952,7 @@ export function App() {
         if (saved.startupBehavior === "Remember last page") {
           const remembered = localStorage.getItem("bloom-last-page");
           const validPages: AppPage[] = ["alula", "portal", "home", "settings", "utilities", "social", "screenshots", "new-instance", "downloads", "logs", "instance", "instances", "locker"];
-          return validPages.includes(remembered as AppPage) ? remembered as AppPage : "home";
+          return remembered !== "social" && validPages.includes(remembered as AppPage) ? remembered as AppPage : "home";
         }
       } catch {}
       return "home";
@@ -3009,7 +2990,7 @@ export function App() {
   const [instanceNavigationKey, setInstanceNavigationKey] = useState(0);
   const [duplicateDestination, setDuplicateDestination] = useState<{ instanceId: string; modId: string }>();
   const [alulaSidebar, setAlulaSidebar] = useState<HTMLDivElement | null>(null);
-  const [socialSidebar, setSocialSidebar] = useState<HTMLDivElement | null>(null);
+  const [socialDock, setSocialDock] = useState<SocialDockMode>("closed");
   const [socialDestination, setSocialDestination] = useState<SocialDestination>();
   const [instanceDestination, setInstanceDestination] = useState<InstanceLibraryDestination>("view");
   const [libraryState, setLibraryState] = useState<"loading" | "ready" | "error">("loading");
@@ -3040,6 +3021,7 @@ export function App() {
   }, [playAfterReview, workspaceInstanceId, workspacePage]);
   const [alulaOrigin, setAlulaOrigin] = useState<AppPage>("home");
   const setPage = (next: AppPage, entry: typeof creationEntry.step = "source", link = "") => {
+    if (next === "social") { setSocialDock("pinned"); return; }
     setPlayAfterReview(null);
     setWorkspaceInstanceId(null);
     if (next === "alula" && page !== "alula") setAlulaOrigin(page);
@@ -3155,6 +3137,7 @@ export function App() {
       return null;
     }
   });
+  const [previewOnboarding, setPreviewOnboarding] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(() =>
     localStorage.getItem(ONBOARDING_COMPLETE_STORAGE_KEY) !== "complete"
       && !localStorage.getItem("bloom-profile"),
@@ -3169,14 +3152,11 @@ export function App() {
     setPage("new-instance", isWorkspaceInvite(inboundLink) ? "invite" : "player-link", inboundLink);
     setInboundLink("");
   }, [inboundLink, accountHydrated, onboardingOpen, playerInstalling]);
-  const [profileIcon, setProfileIcon] = useState<string | null>(() => localStorage.getItem(PROFILE_ICON_STORAGE_KEY));
   const accountMenu = useRef<HTMLDivElement>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const signingOut = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true");
   const [accounts, setAccounts] = useState<MinecraftProfile[]>([]);
-  const [accountChoicesOpen, setAccountChoicesOpen] = useState(false);
-  useEffect(() => { if (!profileMenuOpen) setAccountChoicesOpen(false); }, [profileMenuOpen]);
   const [switchingAccount, setSwitchingAccount] = useState(false);
   const [downloadSection, setDownloadSection] = useState<DownloadSection>("Downloading");
   const [settingsTarget, setSettingsTarget] = useState("Appearance");
@@ -3201,6 +3181,7 @@ export function App() {
       }
       loaded = { ...loaded, theme: loaded.theme === "light" || loaded.theme === "system" ? loaded.theme : "oled" };
       loaded.backdrop = readBackground(stored.backdrop);
+      loaded.railHoverBrightness = Number.isFinite(loaded.railHoverBrightness) ? Math.max(0, Math.min(100, loaded.railHoverBrightness)) : defaults.railHoverBrightness;
       loaded.dividerStrength = Number.isFinite(loaded.dividerStrength) ? Math.max(0, Math.min(100, loaded.dividerStrength)) : defaults.dividerStrength;
       loaded.interfaceSize = Math.max(90, Math.min(125, Number(loaded.interfaceSize) || defaults.interfaceSize));
       loaded.spacing = loaded.spacing === "comfortable" ? "comfortable" : defaults.spacing;
@@ -3328,6 +3309,12 @@ export function App() {
     const channels = [1, 3, 5].map(index => Number.parseInt(settings.accent.slice(index, index + 2), 16));
     const brightest = Math.max(...channels);
     root.toggleAttribute("data-dark-neutral-accent", brightest <= 56 && brightest - Math.min(...channels) <= 16);
+    root.toggleAttribute("data-rail-brightness", settings.railHoverBrightness !== 50);
+    const railBrightness = 2 ** ((settings.railHoverBrightness - 50) / 40);
+    // Lift pale surfaces toward white without clipping their rim to solid white.
+    const railFilter = resolvedTheme === "light" && railBrightness > 1
+      ? `invert(1) brightness(${1 / railBrightness}) invert(1)` : `brightness(${railBrightness})`;
+    root.style.setProperty("--rail-material-filter", railFilter);
     root.style.setProperty("--divider-strength", settings.dividerStrength + "%");
     root.style.setProperty("--row-divider-strength", (settings.dividerStrength * 7 / 13) + "%");
     for (const part of ["Background", "Sidebar", "Panel", "Foreground"] as const) {
@@ -3530,9 +3517,6 @@ export function App() {
     if (profile) localStorage.setItem("bloom-profile", JSON.stringify(profile));
     else localStorage.removeItem("bloom-profile");
   }, [profile]);
-  useEffect(() => {
-    if (profileIcon) localStorage.setItem(PROFILE_ICON_STORAGE_KEY, profileIcon);
-  }, [profileIcon]);
   const refreshAccounts = async () => {
     const list = await invoke<MinecraftAccountList>("list_minecraft_accounts");
     setAccounts(list.accounts);
@@ -3564,6 +3548,15 @@ export function App() {
         });
     }, 250);
     return () => { window.clearTimeout(timer); window.clearTimeout(fallback); };
+  }, []);
+  useEffect(() => {
+    let mounted = true;
+    const stop = listen<[string, string, string]>("instance-loader-resolved", ({ payload: [id, game, version] }) => {
+      if (!mounted) return;
+      setInstances(items => items.map(item => item.id === id && item.version === game && item.loader.toLowerCase() === "fabric" && !item.loaderVersion?.trim()
+        ? { ...item, loaderVersion: version } : item));
+    });
+    return () => { mounted = false; void stop.then(unlisten => unlisten()).catch(() => {}); };
   }, []);
   const instanceRead = useRef<Promise<InstanceDraft[] | undefined> | undefined>(undefined);
   const refreshInstances = (): Promise<InstanceDraft[] | undefined> => {
@@ -3864,7 +3857,8 @@ export function App() {
       // Refreshing the workspace may remount the review. Read the player's current intent first.
       const continuePlaying = stillHere();
       window.dispatchEvent(new CustomEvent("workspace-follow-updated", {detail: {instanceId: id}}));
-      void modMaintenance.check(id, true);
+      const original = instances.find(item => item.id === id);
+      if (!updated || !original || runtimeKey(updated) === runtimeKey(original)) void modMaintenance.check(id, true);
       if (continuePlaying && play && updated) {
         applyingUpdate.current = false;
         setPlayAfterReview(null);
@@ -3932,7 +3926,6 @@ export function App() {
       if (floatingInstanceId === instance.id) setFloatingInstanceId(null);
       if (selectedInstance?.id === instance.id) { setSelectedInstanceId(null); setInstanceDestination("view"); navigate("instances"); }
       if (spotlightInstanceId === instance.id) { setSpotlightInstanceId(null); localStorage.removeItem("bloom-spotlight-instance"); }
-      showToolMessage(`${instance.name} and all of its files were deleted.`, "notification");
     } catch (error) {
       showToolMessage(String(error), "error");
       throw error;
@@ -3957,7 +3950,6 @@ export function App() {
       setSelectedInstanceId(duplicate.id);
       setInstanceDestination("view");
       setPage("instance");
-      showToolMessage(`${duplicate.name} is ready.`, "notification");
     } catch (error) {
       showToolMessage(String(error), "error");
       throw error;
@@ -3969,16 +3961,15 @@ export function App() {
     return invoke<MinecraftProfile | null>("sign_out_minecraft")
       .then(next => { setProfile(next); return refreshAccounts(); })
       .catch(error => showToolMessage(String(error), "error"))
-      .finally(() => { signingOut.current = false; setSignInOpen(false); setProfileMenuOpen(false); setAccountChoicesOpen(false); });
+      .finally(() => { signingOut.current = false; setSignInOpen(false); setProfileMenuOpen(false); });
   };
   const switchAccount = async (account: MinecraftProfile) => {
     if (switchingAccount) return;
     setSwitchingAccount(true);
     try {
       const next = await invoke<MinecraftProfile>("switch_minecraft_account", { accountId: account.id });
-      setProfile(next); setAccountChoicesOpen(false); setProfileMenuOpen(false);
+      setProfile(next); setProfileMenuOpen(false);
       await refreshAccounts();
-      showToolMessage(`Switched to ${next.name}.`);
     } catch (error) { showToolMessage(String(error), "error"); }
     finally { setSwitchingAccount(false); }
   };
@@ -4019,12 +4010,16 @@ export function App() {
       { id: "dev:mock-redeem", label: "/mock redeem", detail: "Preview a cosmetic unlock", kind: "page" as const, run: previewCosmeticUnlock },
     ] : []),
   ];
-  useEffect(() => { if (page !== "social") setSocialDestination(undefined); }, [page]);
+  useEffect(() => { if (socialDock === "closed") setSocialDestination(undefined); }, [socialDock]);
   const activeNavPage = page === "instance" || page === "new-instance" ? "instances" : page;
   const [lockerSection, setLockerSection] = useState<LockerSection>("Equipped look");
   const [cosmeticUnlock, setCosmeticUnlock] = useState<DesktopCosmeticUnlock>();
   const [cloakSelection, setCloakSelection] = useState<DesktopCosmeticUnlock>();
   const cosmeticSequence = useRef(0);
+  useEffect(() => {
+    if (profile?.id) void invoke("social_session_state").catch(() => undefined);
+  }, [profile?.id]);
+  const partyInvite = usePartyInviteIsland(profile?.id,showToolMessage);
   const activeCosmeticAccount = useRef(profile?.id);
   activeCosmeticAccount.current = profile?.id;
   const cosmeticAccountId = import.meta.env.DEV ? profile?.id ?? "" : profile?.id;
@@ -4079,10 +4074,9 @@ export function App() {
   const showWorkspacePanel = workspacePanelOpen && settings.rightSidebar !== "Hidden";
   const primaryNavigation = [
     [House, "Home", "home", () => setPage("home")],
-    [Cuboid, "Instances", "instances", () => setPage("instances")],
+    [Layers3, "Instances", "instances", () => setPage("instances")],
     [Download, "Downloads", "downloads", () => setPage("downloads")],
     [Wrench, "Utilities", "utilities", () => setPage("utilities")],
-    [MessageCircle, "Social", "social", () => { setSocialDestination({ section: "messages" }); setPage("social"); }],
     [HangerIcon, "Locker", "locker", () => { setLockerSection("Equipped look"); setPage("locker"); }],
     [Orbit, "Portal", "portal", () => setPage("portal")],
     [BotMessageSquare, "Alula", "alula", () => setPage("alula")],
@@ -4109,7 +4103,7 @@ export function App() {
     ] },
     { label: "View", items: [
       ...primaryNavigation.map(([, label, , run]) => ({ label, run })),
-      ...nav.slice(2).filter(([, , destination]) => destination !== "screenshots" && destination !== "portal" && destination !== "utilities" && destination !== "locker" && destination !== "social").map(([, label, destination]) => ({ label, run: () => setPage(destination) })),
+      ...nav.slice(2).filter(([, , destination]) => destination !== "screenshots" && destination !== "portal" && destination !== "utilities" && destination !== "locker").map(([, label, destination]) => ({ label, run: () => setPage(destination) })),
       { label: "Logs", run: () => setPage("logs") },
       { label: "Notifications", run: () => setNotificationRequest(request => request + 1) },
       ...(canCollapseContext && !contextCollapsed ? [{ label: "Collapse sidebar", run: () => {
@@ -4129,7 +4123,7 @@ export function App() {
     ] },
   ];
   useEffect(() => {
-    if (onboardingOpen || !accountHydrated) return;
+    if (onboardingOpen || previewOnboarding || !accountHydrated) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || recording(event) || event.isComposing) return;
       if (document.querySelector('dialog[open], [aria-modal="true"]')) return;
@@ -4151,13 +4145,14 @@ export function App() {
   });
   const sectionButton = ([Icon, label]: typeof settingTabs[number]) => <button key={label} aria-current={!settingsQuery && settingsTarget === label ? "location" : undefined} onClick={() => openSettings(label)}><Icon size={17} />{settingsLabel(label)}</button>;
   if (!accountHydrated) return <OnboardingSplash />;
-  if (onboardingOpen) {
-    return <OnboardingFlow clientId={MICROSOFT_CLIENT_ID} onPreviewCosmetics={import.meta.env.DEV ? () => {
+  if (onboardingOpen || previewOnboarding) {
+    return <OnboardingFlow initial={settings} onExitPreview={previewOnboarding ? () => setPreviewOnboarding(false) : undefined} clientId={MICROSOFT_CLIENT_ID} onPreviewCosmetics={import.meta.env.DEV && !previewOnboarding ? () => {
       localStorage.setItem(ONBOARDING_COMPLETE_STORAGE_KEY, "complete");
       setOnboardingOpen(false);
       setLockerSection("Hats");
       setPage("locker");
-    } : undefined} onComplete={(nextProfile) => {
+    } : undefined} onComplete={(nextProfile, choices) => {
+      setSettings(current => ({ ...current, ...choices, ...normalizeAccent({ accent: choices.accent, lastCustomAccent: current.lastCustomAccent, customAccent: !accentPresets.some(item => item.color === choices.accent) }) }));
       localStorage.setItem(ONBOARDING_COMPLETE_STORAGE_KEY, "complete");
       setProfile(nextProfile);
       setOnboardingOpen(false);
@@ -4212,13 +4207,13 @@ export function App() {
           phase: updatePhase, progress: updateProgress, error: updateError, blockedReason: updateNeedsCheck ? undefined : updateBlockedReason,
           checking: updateChecking, needsCheck: updateNeedsCheck, request: updateRequest,
           onAction: updateNeedsCheck ? () => { void checkForUpdates(true, true); } : installUpdate } : undefined}
-        notificationCenter={{ feedback, dismissFeedback, shareCrash: feedback?.kind === "error" && failure && userError(failure.message) === feedback.message ? previewFailure : undefined, items: notifications.items, loadError: notifications.loadError, onShow: notifications.refresh, onRetry: notifications.refresh,
+        notificationCenter={{ partyInvite, feedback, dismissFeedback, shareCrash: feedback?.kind === "error" && failure && userError(failure.message) === feedback.message ? previewFailure : undefined, items: notifications.items, loadError: notifications.loadError, onShow: notifications.refresh, onRetry: notifications.refresh,
           onOpenItem: openNotification, onMarkAllRead: () => notifications.markRead() }} />
       <div className="desktop-rail"><div className="rail-scroll"><nav className="rail-destinations" aria-label="Main navigation">
         {primaryNavigation.map(([Icon, label, destination, action]) => (
           <button key={destination} title={label} aria-label={label}
             aria-current={activeNavPage === destination ? "page" : undefined} onClick={action}>
-            <Icon size={21} strokeWidth={1.7} />
+            <Icon size={20} weight={activeNavPage === destination ? "fill" : "regular"} />
             {destination === "downloads" && !download.launch && download.active && <span className="desktop-progress" aria-label={`${Math.round(ringProgress)} percent downloaded`} />}
           </button>
         ))}
@@ -4226,7 +4221,7 @@ export function App() {
         {railInstances.length > 0 && <nav className="rail-recent-instances" aria-label="Instance shortcuts">
           {railInstances.map(instance => <button key={instance.id} type="button" title={instance.name}
             aria-label={instance.name} onClick={() => openInstancePage(instance)}>
-            <CatalogArtwork source={instance.icon} fallback={<Cuboid size={32} strokeWidth={1.5} aria-hidden="true" />} />
+            <CatalogArtwork source={instance.icon} fallback={<Cuboid size={32} aria-hidden="true" />} />
           </button>)}
         </nav>}
         </div>
@@ -4245,7 +4240,7 @@ export function App() {
                       if (items?.length) items[fromEnd ? items.length - 1 : 0].focus();
                     });
                   }} onClick={(event) => { event.stopPropagation(); setProfileMenuOpen(value => !value); }} aria-expanded={profileMenuOpen} aria-haspopup="menu">
-                  <div className="avatar">{profileIcon ? <img src={profileIcon} alt="" /> : profile.name.slice(0, 1).toUpperCase()}</div>
+                  <AccountSkinPortrait accountId={profile.id} />
                 </button>
 
               </div>
@@ -4256,13 +4251,11 @@ export function App() {
                 const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (at + buttons.length + (event.key === "ArrowUp" ? -1 : 1)) % buttons.length;
                 event.preventDefault(); buttons[next]?.focus();
               }} onClick={event => event.stopPropagation()}>
-                <header className="account-menu-identity"><span className="avatar">{profileIcon ? <img src={profileIcon} alt=""/> : profile.name.slice(0, 1)}</span><div><b>{profile.name}</b><small>Microsoft account</small></div></header>
+                <header className="account-menu-identity">{profileMenuOpen && <AccountSkinPortrait accountId={profile.id} />}<div><b>{profile.name}</b><small>Microsoft account</small></div></header>
+                {profileMenuOpen && <PlayerAccountActions key={`actions-${profile.id}`} player={profile.id}
+                  accounts={accounts.length ? accounts : [profile]} switching={switchingAccount} onSwitch={switchAccount}
+                  onSettings={() => { setProfileMenuOpen(false); openSettings("My Profile"); }} onNotify={showToolMessage} />}
                 <div className="account-menu-actions">
-                  <button role="menuitem" onClick={() => { setProfileMenuOpen(false); openSettings("My Profile"); }}><UserRound size={17}/>Account settings</button>
-                  <button role="menuitem" aria-expanded={accountChoicesOpen} onClick={() => setAccountChoicesOpen(value => !value)}><ArrowRightLeft size={17}/>Switch account<ChevronDown size={14}/></button>
-                  {accountChoicesOpen && <div className="account-choices">{(accounts.length ? accounts : [profile]).map(account =>
-                    <button role="menuitem" key={account.id} disabled={switchingAccount || account.id === profile.id} onClick={() => void switchAccount(account)}>{account.name}{account.id === profile.id && <Check size={16}/>}</button>
-                  )}</div>}
                   <button role="menuitem" onClick={() => { setProfileMenuOpen(false); openSettings("My Profile", true); }}><Plus size={17}/>Add account</button>
                 </div>
                 <div className="profile-popover-rule" />
@@ -4297,7 +4290,7 @@ export function App() {
         <div className="desktop-context-body">
           {workspaceInstance ? <PackWorkspaceSidebar instances={instances} instance={workspaceInstance} SelectControl={Select} sidebarRef={contextSidebar}
             page={activeWorkspacePage} destinations={sharing.destinations} onNavigate={setWorkspacePage}
-            onSelect={setWorkspaceInstanceId} onBack={() => setWorkspaceInstanceId(null)} /> : page === "alula" ? <div className="alula-sidebar" ref={setAlulaSidebar} /> : page === "social" ? <div className="social-sidebar-shell"><h1>Social</h1><div className="social-sidebar-host" ref={setSocialSidebar} /></div> : page === "settings" ? <nav className="desktop-context-links" aria-label="Settings sections">
+            onSelect={setWorkspaceInstanceId} onBack={() => setWorkspaceInstanceId(null)} /> : page === "alula" ? <div className="alula-sidebar" ref={setAlulaSidebar} /> : page === "settings" ? <nav className="desktop-context-links" aria-label="Settings sections">
           {settingsGroups.map(group => <section className="settings-nav-group" key={group.title}>
             <h2>{group.title}</h2>
             {group.sections.map(name => sectionButton(settingTabs.find(([, label]) => label === name)!))}
@@ -4310,7 +4303,7 @@ export function App() {
             </button>)}
         </nav> : page === "locker" ? <nav className="desktop-context-links utility-navigation" aria-label="Locker categories">
           <h2>Locker</h2>
-          {lockerSections.map(([label, Icon]) => <button key={label} aria-current={label === lockerSection ? "page" : undefined} onClick={() => setLockerSection(label)}><Icon size={17}/>{label}</button>)}
+          {lockerSections.map(([label, Icon]) => <button key={label} aria-current={label === lockerSection ? "page" : undefined} onClick={() => setLockerSection(label)}><Icon size={17} weight={label === lockerSection ? "fill" : "regular"} aria-hidden="true"/>{label}</button>)}
         </nav> : activeNavPage === "utilities" ? <nav className="desktop-context-links utility-navigation" aria-label="Utility tools">
           <h2>Utilities</h2>
           <button aria-current={page === "utilities" ? "page" : undefined} onClick={() => setPage("utilities")}><RefreshCw size={17}/>Global File Sync</button>
@@ -4355,8 +4348,6 @@ export function App() {
           <ScreenshotShelf filter={shotFilter} libraryName={instances.find(item => item.id === shotFilter)?.name || "All screenshots"} onMessage={showToolMessage} />
         ) : page === "portal" ? (
           <PortalPage filter={portalSection} instances={instances} busy={download.active || gameRunning} SelectControl={Select} onCreate={() => setPage("new-instance")} onOpenInstance={id => { const instance = instances.find(item => item.id === id); if (instance) openInstancePage(instance); }} onPlay={(id, target) => { const instance = instances.find(item => item.id === id); if (instance) void launch(instance, target); else showToolMessage("That instance is no longer available. Refresh Portal.", "error"); }} />
-        ) : page === "social" ? (
-          <SocialPage sidebarHost={socialSidebar} destination={socialDestination} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} onInstanceImported={(result) => { setSharedPackMissingMods(result.missingMods); setDownload({ active: true, progress: 1, state: "installing", message: "Importing shared instance", instanceId: result.instanceId, taskKind: "game" }); refreshPackMemberships(); setDownloadSection("Downloading"); setPage("downloads"); void refreshInstances(); }} />
         ) : page === "instances" ? (
           <section className="library-load-state" aria-live="polite">
             {libraryState === "error" ? <><h1>Couldn’t load your instances</h1><p>{libraryError}</p><button onClick={() => { setLibraryState("loading"); void refreshInstances(); }}><RefreshCw size={16} />Retry</button></>
@@ -4374,7 +4365,7 @@ export function App() {
             onCosmeticUnlock={celebrateCosmeticUnlock} cloakSelection={cloakSelection}
             onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} />
         ) : page === "settings" ? (
-          <SettingsPage resolvedTheme={resolvedTheme} settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} profileIcon={profileIcon} onProfileIconChange={setProfileIcon} sidebarImage={sidebarImage} wallpaper={wallpaper} initialTab={settingsTarget} query={settingsQuery} onNavigate={openSettings} addAccount={addAccount} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={displayedUpdateVersion || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={openUpdateConfirmation} modMaintenance={<ModMaintenanceSettings maintenance={modMaintenance}
+          <SettingsPage resolvedTheme={resolvedTheme} settings={settings} setSettings={setSettings} onSignOut={signOut} profile={profile} sidebarImage={sidebarImage} wallpaper={wallpaper} initialTab={settingsTarget} query={settingsQuery} onNavigate={openSettings} addAccount={addAccount} navigationKey={settingsNavigationKey} currentVersion={currentVersion} availableVersion={displayedUpdateVersion || null} updateChecking={updateChecking} onCheckUpdates={() => void checkForUpdates(true)} onOpenUpdate={openUpdateConfirmation} modMaintenance={<ModMaintenanceSettings maintenance={modMaintenance}
             instances={instances} libraryReady={libraryState === "ready"} followUpdates={followChecks.reviews} onOpenInstance={(id, release) => {
               const instance = instances.find(item => item.id === id);
               if (instance) {
@@ -4384,7 +4375,7 @@ export function App() {
                   setInstanceDestination("mods");
                 }
               }
-            }} />} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} />
+            }} />} accounts={accounts} switchingAccount={switchingAccount} onSwitchAccount={switchAccount} onAccountAdded={(next) => { setProfile(next); void refreshAccounts(); }} onPreviewOnboarding={import.meta.env.DEV || import.meta.env.VITE_ONBOARDING_PREVIEW === "1" ? () => setPreviewOnboarding(true) : undefined} onRestartOnboarding={() => { setProfileMenuOpen(false); setSignInOpen(false); setOnboardingOpen(true); }} />
         ) : page === "new-instance" ? (
           creationEntry.step === "player-link" ? <PlayerLinkPage key={creationEntry.revision} initialLink={creationEntry.link} instances={instances}
             otherInstallActive={playerInstalling} onInstallLinkChange={setInstallingPlayerLink}
@@ -4509,6 +4500,9 @@ export function App() {
         setSocialDestination({ friendId });
         setPage("social");
       }} />}
+      <SocialDock mode={socialDock} setMode={setSocialDock}>
+        <SocialPage instances={instances.filter(item => item.visible)} launchBusy={download.active || gameRunning || playerInstalling} onJoinServer={(id, address) => { const instance = instances.find(item => item.visible && item.id === id); if (instance) void launch(instance, {kind:"server", target:address}); }} key={profile?.id ?? "signed-out"} destination={socialDestination} onNotify={(message, kind) => showToolMessage(message, kind === "error" ? "error" : "notification")} onInstanceImported={(result) => { setSocialDock("closed"); setSharedPackMissingMods(result.missingMods); setDownload({ active: true, progress: 1, state: "installing", message: "Importing shared instance", instanceId: result.instanceId, taskKind: "game" }); refreshPackMemberships(); setDownloadSection("Downloading"); setPage("downloads"); void refreshInstances(); }} />
+      </SocialDock>
       {floatingInstance && <FloatingInstancePlayer instance={floatingInstance} busy={download.active || gameRunning} onPlay={() => void launch(floatingInstance)} onClose={() => { setFloatingInstanceId(null); document.querySelector<HTMLButtonElement>(".instance-more")?.focus(); }} />}
       {crashPreview && <CrashDetails {...crashPreview} close={() => setCrashPreview(undefined)} />}
       <PlayerInstallBar link={installingPlayerLink} />

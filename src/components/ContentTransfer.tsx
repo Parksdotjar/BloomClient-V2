@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, Copy, PackageOpen, X } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, CopyIcon as Copy, PackageIcon as PackageOpen, XIcon as X } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import "./content-transfer.css";

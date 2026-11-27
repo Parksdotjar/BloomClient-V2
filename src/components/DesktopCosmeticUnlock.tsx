@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { Layers } from "lucide-react";
+import { StackIcon as Layers } from "@phosphor-icons/react";
 import { CapeDisplay } from "./CapeDisplay";
 import type { CosmeticUnlock } from "./Locker";
 

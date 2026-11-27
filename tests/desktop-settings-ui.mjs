@@ -410,7 +410,7 @@ try {
   assert.notEqual((await appearanceStyle())[0], "rgb(32, 40, 48)");
   await button("Reset appearance").click(); await theme("oled");
   const chooseAccent = async name => { await button("Accent").click(); await button(name, page.getByRole("dialog",{name:"Accent",exact:true})).click(); };
-  for (const name of ["Lavender", "Sage", "Chalk", "Slate", "Blue"]) {
+  for (const name of ["Purple", "Pink", "Red", "Orange", "Green", "Teal", "Blue"]) {
     await chooseAccent(name); assert.equal(await button("Accent").innerText(), name);
     assert.equal(await button("Choose custom accent color").count(), 0);
   }

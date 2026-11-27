@@ -15,7 +15,9 @@ const files = {
 for (const [component, location] of Object.entries({
   Locker: "Locker", MinecraftWardrobe: "Locker → Skins or Capes", CosmeticsShop: "Locker → Shop",
   CapeRedemption: "Locker", ScreenshotShelf: "Screenshots", ScreenshotComparison: "Screenshots → Compare",
-  SocialPage: "Social", PortalPage: "Portal", AlulaHistory: "Alula → Chat history", AskDelight: "Alula",
+  SocialPlay: "Social → Party", SocialDock: "Social drawer", PlayerAccountActions: "Account menu",
+  DesktopNotificationCenter: "Top bar → Notifications", DesktopIslandUpdate: "Top bar → Updates",
+  StorageBreakdown: "Settings → Storage", ModMaintenance: "Settings → Updates", SocialPage: "Social", PortalPage: "Portal", AlulaHistory: "Alula → Chat history", AskDelight: "Alula",
   QuickSwitcher: "Quick switcher", InstanceFolders: "Instances", ModDetailDrawer: "Instance → Mod details",
   ContentToolbar: "Instance → Content toolbar", ContentTransfer: "Instance → Copy to instance",
   CatalogFilterControls: "Instance → Mods → Catalog filters", FabricLoaderSetting: "Instance settings",

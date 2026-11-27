@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Folder, FolderInput, FolderOpen, Pencil, UnfoldVertical, X } from "lucide-react";
+import { CheckIcon as Check, FolderIcon as Folder, BoxArrowDownIcon as FolderInput, FolderOpenIcon as FolderOpen, PencilIcon as Pencil, ArrowsOutLineVerticalIcon as UnfoldVertical, XIcon as X } from "@phosphor-icons/react";
 import type { FolderChange, InstanceFolderCache } from "../services/use-instance-folders";
 import { useInstanceFolderDrag, type FolderDragItem } from "./instance-folder-drag";
 import "./instance-folders.css";

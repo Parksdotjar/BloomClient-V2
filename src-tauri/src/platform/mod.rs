@@ -14,6 +14,30 @@ mod unix;
 #[cfg(not(any(windows, target_os = "macos")))]
 pub use unix::*;
 
+// Existing profiles can contain absolute instance paths. Keep those profiles addressable.
+pub(super) fn launcher_folder(parent: &Path) -> Result<PathBuf, String> {
+    let legacy = parent.join("BloomClient");
+    match legacy.try_exists() {
+        Ok(true) if legacy.is_dir() => Ok(legacy),
+        Ok(_) => Ok(parent.join("Delight Client")),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+pub fn game_directory() -> Result<PathBuf, String> {
+    match crate::custom_storage_root()? {
+        Some(root) => Ok(root.join(".minecraft")),
+        None => {
+            let root = crate::storage_anchor()?;
+            if root.file_name().is_some_and(|name| name == "BloomClient") {
+                legacy_game_directory()
+            } else {
+                Ok(root.join(".minecraft"))
+            }
+        },
+    }
+}
+
 pub fn default_game_alias(directory: &str) -> Result<Option<PathBuf>, String> {
     let normalized = directory.replace('\\', "/");
     if normalized == ".minecraft" {
@@ -53,6 +77,18 @@ pub fn java_library_stamp(java: &Path) -> PathBuf {
 mod tests {
     use super::*;
     #[test]
+    fn fresh_install_uses_full_delight_name_and_preserves_existing_profiles() {
+        let parent = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir(&parent).unwrap();
+        assert_eq!(launcher_folder(&parent).unwrap(), parent.join("Delight Client"));
+        let legacy = parent.join("BloomClient");
+        std::fs::create_dir(&legacy).unwrap();
+        assert_eq!(launcher_folder(&parent).unwrap(), legacy);
+        std::fs::remove_dir(legacy).unwrap();
+        std::fs::remove_dir(parent).unwrap();
+    }
+
+    #[test]
     fn platform_mac_bundle_override_deserializes_with_tauri() {
         let mut config: serde_json::Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
         let patch: serde_json::Value = serde_json::from_str(include_str!("../../tauri.macos.conf.json")).unwrap();
@@ -91,8 +127,8 @@ mod tests {
     #[test]
     fn platform_windows_locations_and_runtime_format_remain_compatible() {
         let appdata = PathBuf::from(std::env::var_os("APPDATA").unwrap());
-        assert_eq!(data_directory().unwrap(), appdata.join("BloomClient"));
-        assert_eq!(game_directory().unwrap(), appdata.join(".minecraft"));
+        assert_eq!(data_directory().unwrap(), launcher_folder(&appdata).unwrap());
+        assert_eq!(legacy_game_directory().unwrap(), appdata.join(".minecraft"));
         assert_eq!(JAVA_PROVIDER_OS, "windows");
         assert_eq!(JAVA_ARCHIVE_EXTENSION, "zip");
         assert_eq!(JAVA_EXECUTABLE, "javaw.exe");
@@ -108,10 +144,10 @@ mod tests {
         let home = PathBuf::from(std::env::var_os("HOME").unwrap());
         assert_eq!(
             data_directory().unwrap(),
-            home.join("Library/Application Support/BloomClient")
+            launcher_folder(&home.join("Library/Application Support")).unwrap()
         );
         assert_eq!(
-            game_directory().unwrap(),
+            legacy_game_directory().unwrap(),
             home.join("Library/Application Support/minecraft")
         );
         assert_eq!(JAVA_PROVIDER_OS, "mac");

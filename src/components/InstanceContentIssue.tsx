@@ -1,4 +1,4 @@
-import { CircleAlert, RotateCw } from "lucide-react";
+import { WarningCircleIcon as CircleAlert, ArrowClockwiseIcon as RotateCw } from "@phosphor-icons/react";
 
 export function InstanceContentIssue({ title, details, onRetry, retryLabel = "Try again", checking = false }: {
   title: string;

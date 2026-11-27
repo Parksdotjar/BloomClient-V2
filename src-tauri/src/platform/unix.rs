@@ -10,12 +10,11 @@ fn home() -> Result<PathBuf, String> {
         .ok_or("HOME is unavailable.".into())
 }
 pub fn data_directory() -> Result<PathBuf, String> {
-    Ok(std::env::var_os("XDG_DATA_HOME")
+    super::launcher_folder(&std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
-        .unwrap_or(home()?.join(".local/share"))
-        .join("BloomClient"))
+        .unwrap_or(home()?.join(".local/share")))
 }
-pub fn game_directory() -> Result<PathBuf, String> {
+pub(super) fn legacy_game_directory() -> Result<PathBuf, String> {
     Ok(home()?.join(".minecraft"))
 }
 pub fn open_folder(path: &Path) -> Result<(), String> {

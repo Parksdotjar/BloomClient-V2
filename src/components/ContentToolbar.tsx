@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, PlusIcon as Plus } from "@phosphor-icons/react";
 import { ToolbarIconSwap } from "./ConnectedToolbar";
 import "./content-toolbar.css";
 

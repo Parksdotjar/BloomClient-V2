@@ -719,7 +719,7 @@ async function checkAccess(theme, viewport) {
       return {
         labelY: text && Math.abs(centerY(text) - centerY(bounds)),
         labelX: text && Math.abs(text.left + text.width / 2 - (bounds.left + bounds.width / 2)),
-        standardChevron: chevron?.matches(".lucide-chevron-down"),
+        standardChevron: chevron?.matches(".workspace-nav-caret"),
         chevronY: chevron && Math.abs(centerY(chevron.getBoundingClientRect()) - centerY(bounds)),
         extraIcons: extraIcons.length,
       };
@@ -986,7 +986,7 @@ async function checkNavigation(theme, viewport) {
     const overlayCoversTab = await dialog.evaluate((menu, tab) =>
       menu.contains(document.elementFromPoint(tab.x + tab.width / 2, tab.y + tab.height / 2)), tabBefore);
     assert.ok(overlayCoversTab, "The open menu covers the Overview tab");
-    assert.equal(await dialog.locator(".lucide-check:visible").count(), 0, "No selection checkmark is visible");
+    assert.equal(await dialog.locator('button[aria-pressed="true"] svg:last-child:visible').count(), 0, "No selection checkmark is visible");
     assert.equal(await dialog.getByRole("button", { name: /Pine Hollow/ }).getAttribute("aria-pressed"), "true");
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden" });

@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ChevronRight, FilePenLine, GitMerge, MessageSquare, PackageCheck, Send } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, CaretRightIcon as ChevronRight, FileTextIcon as FilePenLine, GitMergeIcon as GitMerge, ChatIcon as MessageSquare, PackageIcon as PackageCheck, PaperPlaneTiltIcon as Send } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import { socialDirectoryChanged } from "../services/connect-delight-account";

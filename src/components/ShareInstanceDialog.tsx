@@ -1,6 +1,7 @@
+import { AccountSkinPortrait } from "./SkinThumbnail";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "../services/invoke";
-import { Check, ChevronLeft, RefreshCw, Search, Share2, ShieldCheck, UserRoundCog, UsersRound, X } from "lucide-react";
+import { CheckIcon as Check, CaretLeftIcon as ChevronLeft, ArrowsClockwiseIcon as RefreshCw, MagnifyingGlassIcon as Search, ShareNetworkIcon as Share2, ShieldCheckIcon as ShieldCheck, UserGearIcon as UserRoundCog, UsersIcon as UsersRound, XIcon as X } from "@phosphor-icons/react";
 import "./share-instance.css";
 
 type ShareableInstance = { id: string; name: string; version: string; loader: string; icon?: string | null };
@@ -17,8 +18,8 @@ type SendResult = { warning: string | null };
 const label = (user: SocialUser) => user.displayName || user.username || "Delight user";
 
 function FriendAvatar({ user }: { user: SocialUser }) {
-  const source = user.avatarUrl || (user.minecraftUuid ? `https://mc-heads.net/avatar/${encodeURIComponent(user.minecraftUuid)}/96` : null);
-  return <span className="share-friend-avatar">{source ? <img src={source} alt="" referrerPolicy="no-referrer" /> : label(user).slice(0, 2).toUpperCase()}</span>;
+  const source = user.avatarUrl;
+  return <span className="share-friend-avatar">{user.minecraftUuid ? <AccountSkinPortrait accountId={user.minecraftUuid}/> : source ? <img src={source} alt="" referrerPolicy="no-referrer" /> : label(user).slice(0, 2).toUpperCase()}</span>;
 }
 
 async function inviteArtwork(source?: string | null) {
@@ -92,10 +93,10 @@ export function ShareInstanceDialog({ instance, onClose, onNotify }: { instance:
     finally { setAccessBusy(null); }
   };
   const openAccess = () => { setManaging(true); void loadAccess(); };
-  const accessAction = async (key: string, command: string, payload: Record<string, unknown>, message: string) => {
+  const accessAction = async (key: string, command: string, payload: Record<string, unknown>) => {
     if (accessBusy) return;
     setAccessBusy(key);
-    try { await invoke(command, { instanceId: instance.id, ...payload }); await loadAccess(); onNotify(message); }
+    try { await invoke(command, { instanceId: instance.id, ...payload }); await loadAccess(); }
     catch (error) { onNotify(String(error), "error"); }
     finally { setAccessBusy(null); }
   };
@@ -136,7 +137,7 @@ export function ShareInstanceDialog({ instance, onClose, onNotify }: { instance:
         invites: selected.map(recipientId => ({ recipientId, shareCode: codes.get(recipientId), role })),
         note: note.trim() || null,
       });
-      onNotify(result.warning || `Invite${selected.length === 1 ? "" : "s"} sent.`);
+      if (result.warning) onNotify(result.warning, "error");
       onClose();
     } catch (error) { onNotify(String(error), "error"); }
     finally { setSending(false); }
@@ -151,10 +152,10 @@ export function ShareInstanceDialog({ instance, onClose, onNotify }: { instance:
       </header>
 
       {!context && !loadError ? <div className="share-dialog-loading"><RefreshCw className="spin" size={22} /> Loading friends…</div> : loadError ? <div className="share-dialog-empty"><b>Couldn't load sharing</b><span>{loadError}</span><button onClick={() => void load()}>Try again</button></div> : managing ? <div className="share-access-step">
-        {!access || accessBusy === "load" ? <div className="share-dialog-loading"><RefreshCw className="spin" size={22} /> Loading access…</div> : !access.accessEnabled ? <div className="share-access-legacy"><ShieldCheck size={28} /><b>Turn on individual access</b><p>Older synced links cannot be revoked one person at a time. Turning this on disables those old links; invite each person again to restore access.</p><button disabled={Boolean(accessBusy)} onClick={() => void accessAction("enable", "enable_pack_managed_access", {}, "Individual access enabled.")}>Enable managed access</button></div> : <>
+        {!access || accessBusy === "load" ? <div className="share-dialog-loading"><RefreshCw className="spin" size={22} /> Loading access…</div> : !access.accessEnabled ? <div className="share-access-legacy"><ShieldCheck size={28} /><b>Turn on individual access</b><p>Older synced links cannot be revoked one person at a time. Turning this on disables those old links; invite each person again to restore access.</p><button disabled={Boolean(accessBusy)} onClick={() => void accessAction("enable", "enable_pack_managed_access", {})}>Enable managed access</button></div> : <>
           <section className="share-access-owner"><FriendAvatar user={context!.session.user!} /><span><b>{label(context!.session.user!)}</b><small>Owner</small></span><em>Can edit</em></section>
-          <section className="share-access-list"><header><b>People with access</b><small>{access.members.length}</small></header>{access.members.length ? access.members.map(member => { const user = context!.friends.find(friend => friend.id === member.recipientId); return <article key={member.id}><FriendAvatar user={user || { id: member.recipientId, username: null, displayName: "Delight member", avatarUrl: null, minecraftUuid: null }} /><span><b>{user ? label(user) : "Delight member"}</b><small>{user?.username ? `@${user.username}` : "No longer in friends"}</small></span><div><button className={member.role === "member" ? "active" : ""} disabled={Boolean(accessBusy)} onClick={() => member.role !== "member" && void accessAction(member.id, "update_pack_member_role", { accessId: member.id, role: "member" }, "Permission changed.")}>Can view</button><button className={member.role === "editor" ? "active" : ""} disabled={Boolean(accessBusy)} onClick={() => member.role !== "editor" && void accessAction(member.id, "update_pack_member_role", { accessId: member.id, role: "editor" }, "Permission changed.")}>Can edit</button></div><button className="share-access-remove" disabled={Boolean(accessBusy)} onClick={() => void accessAction(member.id, "revoke_pack_member", { accessId: member.id }, "Access removed.")} aria-label="Remove access"><X size={17} /></button></article>; }) : <p className="share-access-empty">No one else has access yet.</p>}</section>
-          {access.invites.length > 0 && <section className="share-access-list pending"><header><b>Pending invites</b><small>{access.invites.length}</small></header>{access.invites.map(invite => { const user = context!.friends.find(friend => friend.id === invite.recipientId); return <article key={invite.id}><FriendAvatar user={user || { id: invite.recipientId, username: null, displayName: "Delight member", avatarUrl: null, minecraftUuid: null }} /><span><b>{user ? label(user) : "Delight member"}</b><small>Pending</small></span><div><button className={invite.role === "member" ? "active" : ""} disabled={Boolean(accessBusy)} onClick={() => invite.role !== "member" && void accessAction(invite.id, "create_pack_access_invite", { recipientId: invite.recipientId, role: "member" }, "Invitation permission changed.")}>Can view</button><button className={invite.role === "editor" ? "active" : ""} disabled={Boolean(accessBusy)} onClick={() => invite.role !== "editor" && void accessAction(invite.id, "create_pack_access_invite", { recipientId: invite.recipientId, role: "editor" }, "Invitation permission changed.")}>Can edit</button></div><button className="share-access-remove" disabled={Boolean(accessBusy)} onClick={() => void accessAction(invite.id, "invalidate_pack_invite", { inviteId: invite.id }, "Invitation invalidated.")} aria-label="Invalidate invitation"><X size={17} /></button></article>; })}</section>}
+          <section className="share-access-list"><header><b>People with access</b><small>{access.members.length}</small></header>{access.members.length ? access.members.map(member => { const user = context!.friends.find(friend => friend.id === member.recipientId); return <article key={member.id}><FriendAvatar user={user || { id: member.recipientId, username: null, displayName: "Delight member", avatarUrl: null, minecraftUuid: null }} /><span><b>{user ? label(user) : "Delight member"}</b><small>{user?.username ? `@${user.username}` : "No longer in friends"}</small></span><div><button className={member.role === "member" ? "active" : ""} disabled={Boolean(accessBusy)} onClick={() => member.role !== "member" && void accessAction(member.id, "update_pack_member_role", { accessId: member.id, role: "member" })}>Can view</button><button className={member.role === "editor" ? "active" : ""} disabled={Boolean(accessBusy)} onClick={() => member.role !== "editor" && void accessAction(member.id, "update_pack_member_role", { accessId: member.id, role: "editor" })}>Can edit</button></div><button className="share-access-remove" disabled={Boolean(accessBusy)} onClick={() => void accessAction(member.id, "revoke_pack_member", { accessId: member.id })} aria-label="Remove access"><X size={17} /></button></article>; }) : <p className="share-access-empty">No one else has access yet.</p>}</section>
+          {access.invites.length > 0 && <section className="share-access-list pending"><header><b>Pending invites</b><small>{access.invites.length}</small></header>{access.invites.map(invite => { const user = context!.friends.find(friend => friend.id === invite.recipientId); return <article key={invite.id}><FriendAvatar user={user || { id: invite.recipientId, username: null, displayName: "Delight member", avatarUrl: null, minecraftUuid: null }} /><span><b>{user ? label(user) : "Delight member"}</b><small>Pending</small></span><div><button className={invite.role === "member" ? "active" : ""} disabled={Boolean(accessBusy)} onClick={() => invite.role !== "member" && void accessAction(invite.id, "create_pack_access_invite", { recipientId: invite.recipientId, role: "member" })}>Can view</button><button className={invite.role === "editor" ? "active" : ""} disabled={Boolean(accessBusy)} onClick={() => invite.role !== "editor" && void accessAction(invite.id, "create_pack_access_invite", { recipientId: invite.recipientId, role: "editor" })}>Can edit</button></div><button className="share-access-remove" disabled={Boolean(accessBusy)} onClick={() => void accessAction(invite.id, "invalidate_pack_invite", { inviteId: invite.id })} aria-label="Invalidate invitation"><X size={17} /></button></article>; })}</section>}
         </>}
       </div> : step === 1 ? <div className="share-mode-step">
         <button className={mode === "copy" ? "selected" : ""} onClick={() => { setMode("copy"); setRole("member"); prepared.current = null; }}><span><Share2 size={23} /></span><div><b>Send a copy</b><small>They get their own instance.</small></div><i>{mode === "copy" && <Check size={16} />}</i></button>

@@ -1,0 +1,5 @@
+.appearance-mini { display:block; width:100%; height:auto; border-radius:5px; --mini-accent:var(--setup-accent,var(--launcher-mark,#87a9f3)); }
+.appearance-mini-dark { --mini-frame:#101112; --mini-page:#202123; --mini-banner:#404346; --mini-ink:#eee; }
+.appearance-mini-light { --mini-frame:#dbdddf; --mini-page:#fff; --mini-banner:#c8cbd0; --mini-ink:#35383b; }
+.theme-choices .appearance-mini { width:74px; border:1px solid var(--theme-edge); }
+.theme-choices [aria-pressed=true] .appearance-mini { outline:1px solid var(--launcher-mark); }

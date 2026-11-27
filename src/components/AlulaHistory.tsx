@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { PlusIcon as Plus, MagnifyingGlassIcon as Search, TrashIcon as Trash2 } from "@phosphor-icons/react";
 import type { History, Thread } from "../services/ask-delight";
 
 type Props = {

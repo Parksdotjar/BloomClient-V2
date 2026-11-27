@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { chooseEquipment, equipmentSlot, readEquipment, useEquipment } from "../services/locker-equipment";
 import { invoke } from "../services/invoke";
-import { ChevronLeft, ChevronRight, Plus, RotateCw } from "lucide-react";
+import { CaretLeftIcon as ChevronLeft, CaretRightIcon as ChevronRight, PlusIcon as Plus, ArrowClockwiseIcon as RotateCw } from "@phosphor-icons/react";
 import { LockerInlineAction } from "./LockerInlineAction";
 import { CapeDisplay } from "./CapeDisplay";
 import { CapePreview, type CapeAnimation } from "./CapePreview";

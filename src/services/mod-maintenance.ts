@@ -41,8 +41,14 @@ export function modMaintenanceNeedsAttention(entry?: ModMaintenanceEntry) {
     (!report.complete || report.issues.some(issue => !isModAdvisory(issue)) || report.repairsAvailable || report.dependencyIssues.length)));
 }
 
+type InstanceRuntime = { version: string; loader: string; loaderVersion?: string | null };
+
+export function runtimeKey(instance: InstanceRuntime) {
+  return JSON.stringify([instance.version, instance.loader.toLowerCase(), instance.loaderVersion?.trim() || null]);
+}
+
 export function useModMaintenance(
-  instances: { id: string }[],
+  instances: (InstanceRuntime & { id: string })[],
   libraryReady: boolean,
   checkAtStartup: boolean,
   checkFollowedPack: (id: string) => Promise<FollowUpdate | null>,
@@ -60,6 +66,8 @@ export function useModMaintenance(
   // Checking a populated library should share one queue with retries and inventory refreshes.
   const scanQueue = useRef(Promise.resolve());
   const scanRequests = useRef(new Map<string, Promise<ModMaintenanceReport | undefined>>());
+  const scanning = useRef(new Set<string>());
+  const previousRuntimes = useRef(new Map<string, string>());
   const staleResults = useRef(new Set<string>());
   const offlineInstances = useRef(new Set<string>());
   const callbacks = useRef({ onApplied, checkFollowedPack });
@@ -68,7 +76,7 @@ export function useModMaintenance(
   const check = useCallback(function scan(id: string, fresh = false): Promise<ModMaintenanceReport | undefined> {
     const pending = scanRequests.current.get(id);
     if (pending) {
-      if (fresh) staleResults.current.add(id);
+      if (fresh && scanning.current.has(id)) staleResults.current.add(id);
       return pending.then(result => staleResults.current.delete(id) ? scan(id) : (scanRequests.current.get(id) ?? result));
     }
     setEntries(previous => ({ ...previous, [id]: { ...previous[id], checking: true } }));
@@ -78,6 +86,7 @@ export function useModMaintenance(
         throw new Error("You’re offline. Check again when connected.");
       }
       offlineInstances.current.delete(id);
+      scanning.current.add(id);
       return invoke<ModMaintenanceReport>("check_mod_maintenance", { instanceId: id });
     }).then(report => {
       if (!staleResults.current.has(id)) {
@@ -90,12 +99,28 @@ export function useModMaintenance(
       }
       return undefined;
     }).finally(() => {
+      scanning.current.delete(id);
       scanRequests.current.delete(id);
     });
     scanRequests.current.set(id, request);
     scanQueue.current = request.then(() => {});
     return request;
   }, []);
+
+  useEffect(() => {
+    if (!libraryReady) return;
+    const next = new Map<string, string>();
+    for (const instance of instances) {
+      const key = runtimeKey(instance);
+      next.set(instance.id, key);
+      const previous = previousRuntimes.current.get(instance.id);
+      if (previous !== undefined && previous !== key) {
+        setEntries(entries => ({ ...entries, [instance.id]: { revision: entries[instance.id]?.revision, checking: true } }));
+        void check(instance.id, true);
+      }
+    }
+    previousRuntimes.current = next;
+  }, [instances, libraryReady, check]);
 
   const checkAll = useCallback((ids: string[]) => {
     if (sweep.current) return sweep.current;

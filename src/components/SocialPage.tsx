@@ -1,39 +1,38 @@
+import { AccountSkinPortrait } from "./SkinThumbnail";
+import { SocialPlay, type PlayLauncher } from "./SocialPlay";
 import { copyTextWithFeedback } from "../services/clipboard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fitFloatingMenu } from "../services/menu-position";
 import { createPortal } from "react-dom";
 import { invoke } from "../services/invoke";
-import { connectDelightAccount, socialDirectoryChanged } from "../services/connect-delight-account";
+import { socialDirectoryChanged } from "../services/connect-delight-account";
 import QRCode from "qrcode";
 import { BrowserQRCodeReader } from "@zxing/browser";
-import {
-  ArrowRightLeft,
-  Check,
-  Copy,
-  ChevronDown,
-  ChevronUp,
-  Inbox,
-  LockKeyhole,
-  LogOut,
-  MessageCircle,
-  MoreHorizontal,
-  Paperclip,
-  Pencil,
-  Pin,
-  Plus,
-  RefreshCw,
-  Reply,
-  Search,
-  ScanLine,
-  Send,
-  ShieldAlert,
-  ShieldCheck,
-  Smile,
-  UserPlus,
-  UserRoundPlus,
-  UsersRound,
-  X,
-} from "lucide-react";
+import { GameControllerIcon as Gamepad2,
+  ArrowLeftIcon as ArrowLeft,
+  ArrowsLeftRightIcon as ArrowRightLeft,
+  CheckIcon as Check,
+  CopyIcon as Copy,
+  CaretDownIcon as ChevronDown,
+  TrayIcon as Inbox,
+  LockKeyIcon as LockKeyhole,
+  ChatCircleIcon as MessageCircle,
+  DotsThreeIcon as MoreHorizontal,
+  PencilIcon as Pencil,
+  PushPinIcon as Pin,
+  PlusIcon as Plus,
+  ArrowsClockwiseIcon as RefreshCw,
+  ArrowBendUpLeftIcon as Reply,
+  MagnifyingGlassIcon as Search,
+  ScanIcon as ScanLine,
+  PaperPlaneTiltIcon as Send,
+  ShieldWarningIcon as ShieldAlert,
+  ShieldCheckIcon as ShieldCheck,
+  SmileyIcon as Smile,
+  UserPlusIcon as UserPlus,
+  UserCirclePlusIcon as UserRoundPlus,
+  UsersIcon as UsersRound,
+  XIcon as X } from "@phosphor-icons/react";
 import "./social.css";
 import { reconcileSocialMessages, summarizeReactions, type ReactionSummary } from "./social-message-state";
 
@@ -45,6 +44,7 @@ export type SocialUser = {
   minecraftUsername: string | null;
   avatarUrl: string | null;
   provider: string | null;
+  online?: boolean;
 };
 type SessionState = { signedIn: boolean; user: SocialUser | null; needsUsername: boolean };
 type FriendRequests = { incoming: SocialUser[]; outgoing: SocialUser[] };
@@ -73,7 +73,7 @@ type Message = {
 type Snapshot = { session: SessionState; friends: SocialUser[]; requests: FriendRequests; conversations: Conversation[]; groups: Group[]; invites: InstanceInvite[]; messages: Message[]; syncWarning: string | null };
 type SocialChange = { cursor: string; changed: boolean; scopes: string[] };
 type SocialMessageSync = { messages: Message[]; syncWarning: string | null };
-type SocialSection = "messages" | "friends" | "inbox";
+type SocialSection = "play" | "messages" | "friends" | "inbox";
 type EncryptionDetails = {
   friendId: string;
   status: "not_verified" | "verified" | "key_changed";
@@ -115,17 +115,8 @@ async function groupIconData(file: File) {
 }
 
 export function Avatar({ user, large = false }: { user: SocialUser; large?: boolean }) {
-  const image = user.avatarUrl || (user.minecraftUuid ? `https://mc-heads.net/avatar/${encodeURIComponent(user.minecraftUuid)}/96` : null);
-  return <span className={`social-avatar ${large ? "large" : ""}`} aria-hidden="true">{image ? <img src={image} alt="" referrerPolicy="no-referrer" /> : initials(user)}</span>;
-}
-
-function SignInView({ busy, onSignIn }: { busy: boolean; onSignIn: () => void }) {
-  return <section className="social-auth-state">
-    <img className="social-auth-flower" src={new URL("delight-logo.png", document.baseURI).href} alt="" />
-    <h1>Sign in to use Social</h1>
-    <p>Connect a Delight account to message friends.</p>
-    <button onClick={onSignIn} disabled={busy}>{busy ? <RefreshCw className="spin" size={18} /> : <LockKeyhole size={18} />} {busy ? "Waiting for approval…" : "Connect account"}</button>
-  </section>;
+  const image = user.avatarUrl;
+  return <span className={`social-avatar ${large ? "large" : ""}`} aria-hidden="true">{user.minecraftUuid ? <AccountSkinPortrait accountId={user.minecraftUuid}/> : image ? <img src={image} alt="" referrerPolicy="no-referrer" /> : initials(user)}</span>;
 }
 
 function UsernameSetup({ busy, onSave }: { busy: boolean; onSave: (username: string) => void }) {
@@ -188,14 +179,16 @@ function PersonMenu({ anchor, onClose, children }: { anchor: HTMLElement; onClos
 
 function FriendsView({ snapshot, busy, onAdd, onOpen, onRemove }: { snapshot: Snapshot; busy: boolean; onAdd: (name: string) => Promise<boolean>; onOpen: (user: SocialUser) => void; onRemove: (id: string) => void }) {
   const [name, setName] = useState("");
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const people = snapshot.friends.filter(person => !onlineOnly || person.online);
   const [menuFor, setMenuFor] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   return <section className="social-directory-view">
-    <header className="social-directory-heading-simple"><h2>Friends</h2><b>{snapshot.friends.length}</b></header>
     <form className="social-add-friend" onSubmit={async event => { event.preventDefault(); const submitted = name.trim(); if (submitted && await onAdd(submitted)) setName(""); }}>
-      <Search size={18} /><input value={name} onChange={event => setName(event.target.value)} placeholder="Enter an exact Delight account username" autoComplete="off" /><button disabled={busy || name.trim().length < 3}><UserPlus size={18} /> Add friend</button>
+      <Search size={18} /><input value={name} onChange={event => setName(event.target.value)} placeholder="Enter a Minecraft username" autoComplete="off" /><button aria-label="Add friend" title="Add friend" disabled={busy || name.trim().length < 3}><Plus size={18} /></button>
     </form>
+    <div className="social-friend-filters" aria-label="Filter friends"><button aria-pressed={!onlineOnly} onClick={() => setOnlineOnly(false)}>All friends</button><button aria-pressed={onlineOnly} onClick={() => setOnlineOnly(true)}>Online</button></div>
     <div className="social-people-list">
-      {snapshot.friends.length ? snapshot.friends.map(friend => <div key={friend.id} className="social-friend-manage-row"><button className="social-friend-manage-main" onClick={() => onOpen(friend)}><Avatar user={friend} /><span><b>{userLabel(friend)}</b><small>@{friend.username}</small></span></button><button className="social-friend-manage-more" aria-expanded={menuFor?.id === friend.id} onClick={event => { const anchor = event.currentTarget; setMenuFor(value => value?.id === friend.id ? null : { id: friend.id, anchor }); }} aria-label={`Actions for ${userLabel(friend)}`}><MoreHorizontal size={18} /></button>{menuFor?.id === friend.id && <PersonMenu anchor={menuFor.anchor} onClose={() => setMenuFor(null)}><button onClick={() => { if (friend.username) void copyTextWithFeedback(friend.username); setMenuFor(null); }}>Copy username</button><button onClick={() => onOpen(friend)}>Open direct message</button><button className="danger" disabled={busy} onClick={() => { setMenuFor(null); onRemove(friend.id); }}>Remove friend</button></PersonMenu>}</div>) : <div className="social-empty-list"><UsersRound size={28} /><b>No friends yet</b><span>Add someone by their exact Delight account username.</span></div>}
+      {people.length ? people.map(friend => <div key={friend.id} className="social-friend-manage-row"><button className="social-friend-manage-main" data-online={!!friend.online} onClick={() => onOpen(friend)}><Avatar user={friend} /><span><b>{userLabel(friend)}</b><small>{friend.online ? "Online" : "Offline"}</small></span></button><button className="social-friend-manage-more" aria-expanded={menuFor?.id === friend.id} onClick={event => { const anchor = event.currentTarget; setMenuFor(value => value?.id === friend.id ? null : { id: friend.id, anchor }); }} aria-label={`Actions for ${userLabel(friend)}`}><MoreHorizontal size={18} /></button>{menuFor?.id === friend.id && <PersonMenu anchor={menuFor.anchor} onClose={() => setMenuFor(null)}><button onClick={() => { if (friend.username) void copyTextWithFeedback(friend.username); setMenuFor(null); }}>Copy username</button><button onClick={() => onOpen(friend)}>Open direct message</button><button className="danger" disabled={busy} onClick={() => { setMenuFor(null); onRemove(friend.id); }}>Remove friend</button></PersonMenu>}</div>) : <div className="social-empty-list"><UsersRound size={28} /><b>{onlineOnly ? "No friends online" : "No friends yet"}</b>{!onlineOnly && <span>Add someone by their Minecraft username.</span>}</div>}
     </div>
   </section>;
 }
@@ -215,17 +208,21 @@ function InstanceInviteCard({ invite, me, busy, onAccept, onDecline, onRevoke }:
 type InviteActions = Pick<Parameters<typeof InstanceInviteCard>[0], "onAccept" | "onDecline" | "onRevoke">;
 
 function InboxView({ snapshot, busy, onAcceptFriend, onDeclineFriend, ...inviteActions }: InviteActions & { snapshot: Snapshot; busy: boolean; onAcceptFriend: (id: string) => void; onDeclineFriend: (id: string) => void }) {
+  const [direction, setDirection] = useState<"incoming" | "outgoing">("incoming");
+  const incoming = direction === "incoming";
+  const invites = snapshot.invites.filter(invite => (invite.recipient.id === snapshot.session.user?.id) === incoming);
+  const requests = incoming ? snapshot.requests.incoming : snapshot.requests.outgoing;
   return <section className="social-directory-view">
-    <header className="social-directory-heading-simple"><h2>Inbox</h2></header>
-    {snapshot.requests.incoming.length > 0 && <h3 className="social-outgoing-title">Friend requests</h3>}
+    <div className="social-friend-filters" aria-label="Inbox direction"><button aria-pressed={incoming} onClick={()=>setDirection("incoming")}>Received</button><button aria-pressed={!incoming} onClick={()=>setDirection("outgoing")}>Sent</button></div>
+    {incoming && requests.length > 0 && <h3 className="social-outgoing-title">Friend requests</h3>}
     <div className="social-request-list">
-      {snapshot.requests.incoming.map(user => <article key={user.id}><Avatar user={user} large /><div><b>{userLabel(user)}</b><span>wants to be friends</span></div><button className="accept" disabled={busy} onClick={() => onAcceptFriend(user.id)}><Check size={18} /> Accept</button><button className="decline" disabled={busy} onClick={() => onDeclineFriend(user.id)} aria-label={`Decline ${userLabel(user)}`}><X size={18} /></button></article>)}
-      {!snapshot.requests.incoming.length && !snapshot.requests.outgoing.length && !snapshot.invites.length && <div className="social-empty-list"><Inbox size={28} /><b>Your inbox is clear</b><span>Friend requests and instance invites will appear here.</span></div>}
+      {incoming && requests.map(user => <article key={user.id}><Avatar user={user} large /><div><b>{userLabel(user)}</b><span>wants to be friends</span></div><button className="accept" disabled={busy} onClick={() => onAcceptFriend(user.id)}><Check size={18} /> Accept</button><button className="decline" disabled={busy} onClick={() => onDeclineFriend(user.id)} aria-label={`Decline ${userLabel(user)}`}><X size={18} /></button></article>)}
+      {!requests.length && !invites.length && <div className="social-empty-list"><Inbox size={28} /><b>{incoming ? "You’re all caught up" : "Nothing sent yet"}</b></div>}
     </div>
-    {snapshot.requests.outgoing.length > 0 && <><h3 className="social-outgoing-title">Sent requests</h3><div className="social-request-list">{snapshot.requests.outgoing.map(user => <article key={user.id}><Avatar user={user} /><div><b>{userLabel(user)}</b><span>Pending</span></div></article>)}</div></>}
-    {snapshot.session.user && snapshot.invites.length > 0 && <section className="social-inbox-invites">
+    {!incoming && requests.length > 0 && <><h3 className="social-outgoing-title">Sent requests</h3><div className="social-request-list">{snapshot.requests.outgoing.map(user => <article key={user.id}><Avatar user={user} /><div><b>{userLabel(user)}</b><span>Pending</span></div></article>)}</div></>}
+    {snapshot.session.user && invites.length > 0 && <section className="social-inbox-invites">
       <h3 className="social-outgoing-title">Instance invites</h3>
-      {[...snapshot.invites].sort((a, b) => b.createdAt - a.createdAt).map(invite =>
+      {[...invites].sort((a, b) => b.createdAt - a.createdAt).map(invite =>
         <InstanceInviteCard key={invite.id} invite={invite} me={snapshot.session.user!} busy={busy} {...inviteActions} />)}
     </section>}
   </section>;
@@ -233,13 +230,13 @@ function InboxView({ snapshot, busy, onAcceptFriend, onDeclineFriend, ...inviteA
 
 function PinnedMessagesDrawer({ messages, me, authorFor, busy, onClose, onUnpin }: { messages: Message[]; me: SocialUser; authorFor: (message: Message) => SocialUser; busy: boolean; onClose: () => void; onUnpin: (messageId: string) => void }) {
   return <aside className="social-pinned-drawer">
-    <header><div><Pin size={18} fill="currentColor" /><span><b>Pinned messages</b><small>{messages.length} saved</small></span></div><button onClick={onClose} aria-label="Close pinned messages"><X size={18} /></button></header>
+    <header><div><Pin size={18} weight="fill" /><span><b>Pinned messages</b><small>{messages.length} saved</small></span></div><button onClick={onClose} aria-label="Close pinned messages"><X size={18} /></button></header>
     <div className="social-pinned-list">
       {messages.length ? messages.map(message => { const author = authorFor(message); return <article key={message.id}>
         <Avatar user={author} />
         <div><span><b>{message.senderId === me.id ? "You" : userLabel(author)}</b><time>{formatTime(message.createdAt)}</time></span>{message.text && <p>{message.text}</p>}{message.imageDataUrl && <img src={message.imageDataUrl} alt="Pinned encrypted screenshot" />}</div>
-        <button disabled={busy} onClick={() => onUnpin(message.id)} aria-label="Unpin message" title="Unpin"><Pin size={16} fill="currentColor" /></button>
-      </article>; }) : <div className="social-pinned-empty"><Pin size={27} /><b>No pinned messages</b><span>Right-click a message and pin it to keep it beyond 24 hours.</span></div>}
+        <button disabled={busy} onClick={() => onUnpin(message.id)} aria-label="Unpin message" title="Unpin"><Pin size={16} weight="fill" /></button>
+      </article>; }) : <div className="social-pinned-empty"><Pin size={27} /><b>No pinned messages</b><span>Right-click a message and pin it to keep it beyond seven days.</span></div>}
     </div>
   </aside>;
 }
@@ -280,7 +277,7 @@ function EncryptionDrawer({ friend, details, loading, busy, onClose, onVerify, o
     } finally { URL.revokeObjectURL(source); }
   };
   return <aside className={`social-encryption-drawer ${changed ? "changed" : ""}`}>
-    <header><div><LockKeyhole size={18} /><span><b>Encryption</b><small>@{friend.username}</small></span></div><button onClick={onClose} aria-label="Close encryption details"><X size={19} /></button></header>
+    <header><div><LockKeyhole size={18} /><span><b>Encryption</b><small>{friend.online ? "Online" : "Offline"}</small></span></div><button onClick={onClose} aria-label="Close encryption details"><X size={19} /></button></header>
     {loading || !details ? <div className="social-security-loading"><RefreshCw className="spin" size={20} /> Checking encryption…</div> : <div className="social-security-body">
       <section className="social-security-status">
         {changed ? <ShieldAlert size={28} /> : <ShieldCheck size={28} />}
@@ -309,12 +306,16 @@ function MessageContextMenu({ message, reactions, x, y, mine, disabled, onClose,
   return createPortal(<div className="social-message-context" role="menu" style={{ left: x, top: y }} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
     <button autoFocus role="menuitem" disabled={!available} onClick={() => { onReply(); onClose(); }}><Reply size={16} /> Reply</button>
     {mine && message.text && <button role="menuitem" disabled={!available || disabled} onClick={() => { onEdit(); onClose(); }}><Pencil size={16} /> Edit message</button>}
-    <button role="menuitem" disabled={!available || disabled} onClick={() => { onPin(); onClose(); }}><Pin size={16} fill={message.pinned ? "currentColor" : "none"} /> {message.pinned ? "Unpin message" : "Pin message"}</button>
+    <button role="menuitem" disabled={!available || disabled} onClick={() => { onPin(); onClose(); }}><Pin size={16} weight={message.pinned ? "fill" : "regular"} /> {message.pinned ? "Unpin message" : "Pin message"}</button>
     <div className="social-context-reactions" aria-label="Reactions">{reactionChoices.map(emoji => { const reaction = reactions.find(value => value.emoji === emoji); return <button key={emoji} className={reaction?.reactedByMe ? "active" : ""} disabled={!available || disabled || reaction?.pending} onClick={() => { onReact(emoji, !reaction?.reactedByMe); onClose(); }}>{emoji}</button>; })}</div>
   </div>, document.body);
 }
 
-function ConversationView({ me, friend, messages, invites, busy, encryption, onOpenEncryption, onSend, onEdit, onScreenshot, onReact, onPin, onAcceptInvite, onDeclineInvite, onRevokeInvite }: { me: SocialUser; friend: SocialUser; messages: Message[]; invites: InstanceInvite[]; busy: boolean; encryption: EncryptionDetails | null; onOpenEncryption: () => void; onSend: (text: string, replyTo?: string) => void; onEdit: (messageId: string, text: string) => void; onScreenshot: () => void; onReact: (messageId: string, emoji: string, add: boolean) => void; onPin: (messageId: string, pinned: boolean) => void; onAcceptInvite: (invite: InstanceInvite) => void; onDeclineInvite: (id: string) => void; onRevokeInvite: (id: string) => void }) {
+function ChatBack({onBack}: {onBack: () => void}) {
+  return <button className="social-thread-back" aria-label="Back to conversations" title="Back to conversations" onClick={onBack}><ArrowLeft size={18}/></button>;
+}
+
+function ConversationView({ onBack, me, friend, messages, invites, busy, encryption, onOpenEncryption, onSend, onEdit, onReact, onPin, onAcceptInvite, onDeclineInvite, onRevokeInvite }: { onBack: () => void; me: SocialUser; friend: SocialUser; messages: Message[]; invites: InstanceInvite[]; busy: boolean; encryption: EncryptionDetails | null; onOpenEncryption: () => void; onSend: (text: string, replyTo?: string) => void; onEdit: (messageId: string, text: string) => void; onReact: (messageId: string, emoji: string, add: boolean) => void; onPin: (messageId: string, pinned: boolean) => void; onAcceptInvite: (invite: InstanceInvite) => void; onDeclineInvite: (id: string) => void; onRevokeInvite: (id: string) => void }) {
   const [draft, setDraft] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   useDismissPopup(emojiOpen, ".social-emoji-picker, button[aria-label='Add emoji']", () => setEmojiOpen(false));
@@ -341,9 +342,9 @@ function ConversationView({ me, friend, messages, invites, busy, encryption, onO
   const blocked = encryption?.status === "key_changed";
   const submit = () => { const value = draft.trim(); if (!value || busy || blocked) return; if (editing) onEdit(editing.id, value); else onSend(value, replyTo?.id); setDraft(""); setReplyTo(null); setEditing(null); setEmojiOpen(false); };
   return <section className="social-conversation">
-    <header><div><Avatar user={friend} large /><span><b>{userLabel(friend)}</b><small>@{friend.username}</small></span></div><div className="social-header-actions"><button className={`social-encryption ${blocked ? "warning" : ""}`} onClick={onOpenEncryption}>{blocked ? <ShieldAlert size={17} /> : <LockKeyhole size={17} />} {blocked ? "Review encryption" : "Encryption"}</button><button className={`social-pins-button ${pinsOpen ? "active" : ""}`} onClick={() => setPinsOpen(value => !value)} aria-label="Pinned messages" title="Pinned messages"><Pin size={17} fill={pinnedMessages.length ? "currentColor" : "none"} /></button></div></header>
+    <header><div><ChatBack onBack={onBack}/><Avatar user={friend} large /><span><b>{userLabel(friend)}</b><small>{friend.online ? "Online" : "Offline"}</small></span></div><div className="social-header-actions"><button className={`social-encryption ${blocked ? "warning" : ""}`} onClick={onOpenEncryption}>{blocked ? <ShieldAlert size={17} /> : <LockKeyhole size={17} />} {blocked ? "Review encryption" : "Encryption"}</button><button className={`social-pins-button ${pinsOpen ? "active" : ""}`} onClick={() => setPinsOpen(value => !value)} aria-label="Pinned messages" title="Pinned messages"><Pin size={17} weight={pinnedMessages.length ? "fill" : "regular"} /></button></div></header>
     <div className="social-message-list" onScroll={() => setContextMenu(null)}>
-      {!timeline.length && <div className="social-conversation-empty"><Avatar user={friend} large /><h3>Start a conversation with {userLabel(friend)}</h3><p>Only you and {userLabel(friend)} can read what is sent here.</p></div>}
+      {!timeline.length && <div className="social-conversation-empty"><MessageCircle size={22}/><h3>Say hello to {userLabel(friend)}</h3></div>}
       {timeline.map(item => {
         if (item.type === "invite") return <InstanceInviteCard key={item.invite.id} invite={item.invite} me={me} busy={busy} onAccept={onAcceptInvite} onDecline={onDeclineInvite} onRevoke={onRevokeInvite} />;
         const message = item.message;
@@ -362,9 +363,10 @@ function ConversationView({ me, friend, messages, invites, busy, encryption, onO
       <div ref={endRef} />
     </div>
     {blocked ? <div className="social-encryption-stop"><ShieldAlert size={21} /><span><b>Review encryption before sending</b><small>Your existing messages are still available.</small></span><button onClick={onOpenEncryption}>Review</button></div> : <div className="social-composer">
-      <button className="social-attach" onClick={onScreenshot} disabled={busy} aria-label="Attach encrypted screenshot"><Paperclip size={19} /></button>
-      <div className="social-compose-stack">{(replyTo || editing) && <div className="social-compose-reference"><span>{editing ? <Pencil size={14} /> : <Reply size={14} />}<b>{editing ? "Editing message" : `Replying to ${replyTo?.senderId === me.id ? "yourself" : userLabel(friend)}`}</b><small>{editing?.text || replyTo?.text || "Screenshot"}</small></span><button onClick={() => { setReplyTo(null); setEditing(null); if (editing) setDraft(""); }} aria-label="Cancel"><X size={15} /></button></div>}<div className="social-compose-field"><textarea value={draft} onChange={event => setDraft(event.target.value.slice(0, 2000))} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} rows={1} placeholder={editing ? "Edit message" : `Message @${friend.username}`} /><button onClick={() => setEmojiOpen(value => !value)} aria-label="Add emoji"><Smile size={19} /></button>{emojiOpen && <div className="social-emoji-picker">{reactionChoices.map(emoji => <button key={emoji} onClick={() => { setDraft(value => `${value}${emoji}`); setEmojiOpen(false); }}>{emoji}</button>)}</div>}</div></div>
-      <button className="social-send" onClick={submit} disabled={busy || !draft.trim()} aria-label="Send message"><Send size={20} fill="currentColor" /></button>
+      <div className="social-compose-stack">{(replyTo || editing) && <div className="social-compose-reference"><span>{editing ? <Pencil size={14} /> : <Reply size={14} />}<b>{editing ? "Editing message" : `Replying to ${replyTo?.senderId === me.id ? "yourself" : userLabel(friend)}`}</b><small>{editing?.text || replyTo?.text || "Screenshot"}</small></span><button onClick={() => { setReplyTo(null); setEditing(null); if (editing) setDraft(""); }} aria-label="Cancel"><X size={15} /></button></div>}<div className="social-compose-field"><textarea value={draft} onChange={event => setDraft(event.target.value.slice(0, 2000))} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} rows={1} placeholder={editing ? "Edit message" : `Message @${friend.username}`} />
+        <div className="social-compose-tools"><button onClick={() => setEmojiOpen(value => !value)} aria-label="Add emoji" aria-expanded={emojiOpen}><Smile size={19} /></button>{emojiOpen && <div className="social-emoji-picker">{reactionChoices.map(emoji => <button key={emoji} onClick={() => { setDraft(value => value.length + emoji.length <= 2000 ? value + emoji : value); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
+          <button className="social-send" onClick={submit} disabled={busy || !draft.trim()} aria-label="Send message"><Send size={20} weight="fill" /></button>
+        </div></div></div>
     </div>}
     {pinsOpen && <PinnedMessagesDrawer messages={pinnedMessages} me={me} authorFor={message => message.senderId === me.id ? me : friend} busy={busy} onClose={() => setPinsOpen(false)} onUnpin={messageId => onPin(messageId, false)} />}
     {contextMenu && (() => { const message = visible.find(value => value.id === contextMenu.messageId); return message ? <MessageContextMenu message={message} reactions={reactions.get(message.id) || []} x={contextMenu.x} y={contextMenu.y} mine={message.senderId === me.id} disabled={busy || blocked} onClose={() => setContextMenu(null)} onReply={() => { setReplyTo(message); setEditing(null); setDraft(""); }} onEdit={() => { setEditing(message); setReplyTo(null); setDraft(message.text || ""); }} onReact={(emoji, add) => onReact(message.id, emoji, add)} onPin={() => onPin(message.id, !message.pinned)} /> : null; })()}
@@ -373,7 +375,7 @@ function ConversationView({ me, friend, messages, invites, busy, encryption, onO
 
 function GroupAvatar({ group, size = "normal", editable = false, onPick }: { group: Group; size?: "normal" | "large" | "hero"; editable?: boolean; onPick?: (file: File) => void }) {
   const input = useRef<HTMLInputElement>(null);
-  const contents = <>{group.iconDataUrl ? <img src={group.iconDataUrl} alt="" /> : <UsersRound size={size === "hero" ? 27 : size === "large" ? 21 : 18} />}{editable && <span className="social-group-avatar-change" aria-hidden="true"><ArrowRightLeft size={size === "hero" ? 27 : 20} strokeWidth={2.4} /></span>}</>;
+  const contents = <>{group.iconDataUrl ? <img src={group.iconDataUrl} alt="" /> : <UsersRound size={size === "hero" ? 27 : size === "large" ? 21 : 18} />}{editable && <span className="social-group-avatar-change" aria-hidden="true"><ArrowRightLeft size={size === "hero" ? 27 : 20} weight="bold" /></span>}</>;
   if (!editable) return <span className={`social-group-avatar ${size}`}>{contents}</span>;
   return <><button className={`social-group-avatar social-group-avatar-picker ${size}`} onClick={() => input.current?.click()} aria-label="Change group icon" title="Change group icon">{contents}</button><input ref={input} hidden type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) onPick?.(file); event.currentTarget.value = ""; }} /></>;
 }
@@ -386,7 +388,7 @@ function GroupRow({ group, active, message, onClick }: { group: Group; active: b
   </button>;
 }
 
-function GroupConversationView({ me, group, messages, busy, onMembers, onRename, onIcon, onSend, onEdit, onReact, onPin }: { me: SocialUser; group: Group; messages: Message[]; busy: boolean; onMembers: () => void; onRename: (name: string) => void; onIcon: (file: File) => void; onSend: (text: string, replyTo?: string) => void; onEdit: (messageId: string, text: string) => void; onReact: (messageId: string, emoji: string, add: boolean) => void; onPin: (messageId: string, pinned: boolean) => void }) {
+function GroupConversationView({ onBack, me, group, messages, busy, onMembers, onRename, onIcon, onSend, onEdit, onReact, onPin }: { onBack: () => void; me: SocialUser; group: Group; messages: Message[]; busy: boolean; onMembers: () => void; onRename: (name: string) => void; onIcon: (file: File) => void; onSend: (text: string, replyTo?: string) => void; onEdit: (messageId: string, text: string) => void; onReact: (messageId: string, emoji: string, add: boolean) => void; onPin: (messageId: string, pinned: boolean) => void }) {
   const [draft, setDraft] = useState("");
   const [nameDraft, setNameDraft] = useState(group.name);
   const [editingName, setEditingName] = useState(false);
@@ -414,7 +416,7 @@ function GroupConversationView({ me, group, messages, busy, onMembers, onRename,
   const submit = () => { const value = draft.trim(); if (!value || busy) return; if (editing) onEdit(editing.id, value); else onSend(value, replyTo?.id); setDraft(""); setReplyTo(null); setEditing(null); setEmojiOpen(false); };
   const commitName = () => { const value = nameDraft.trim(); setEditingName(false); if (value.length >= 2 && value !== group.name) onRename(value); else setNameDraft(group.name); };
   return <section className="social-conversation social-group-conversation">
-    <header><div><GroupAvatar group={group} size="large" editable onPick={onIcon} /><span>{editingName ? <input className="social-group-title-input" value={nameDraft} maxLength={48} autoFocus onChange={event => setNameDraft(event.target.value)} onBlur={commitName} onKeyDown={event => { if (event.key === "Enter") commitName(); if (event.key === "Escape") { setNameDraft(group.name); setEditingName(false); } }} /> : <b className="social-group-title" onDoubleClick={() => setEditingName(true)} title="Double-click to rename">{group.name}</b>}<small>{group.members.length} members</small></span></div><div className="social-header-actions"><button className={`social-pins-button ${pinsOpen ? "active" : ""}`} onClick={() => setPinsOpen(value => !value)} aria-label="Pinned messages" title="Pinned messages"><Pin size={17} fill={pinnedMessages.length ? "currentColor" : "none"} /></button><button className="social-encryption social-members-button" onClick={onMembers}><UsersRound size={17} /> Members</button></div></header>
+    <header><div><ChatBack onBack={onBack}/><GroupAvatar group={group} size="large" editable onPick={onIcon} /><span>{editingName ? <input className="social-group-title-input" value={nameDraft} maxLength={48} autoFocus onChange={event => setNameDraft(event.target.value)} onBlur={commitName} onKeyDown={event => { if (event.key === "Enter") commitName(); if (event.key === "Escape") { setNameDraft(group.name); setEditingName(false); } }} /> : <b className="social-group-title" onDoubleClick={() => setEditingName(true)} title="Double-click to rename">{group.name}</b>}<small>{group.members.length} members</small></span></div><div className="social-header-actions"><button className={`social-pins-button ${pinsOpen ? "active" : ""}`} onClick={() => setPinsOpen(value => !value)} aria-label="Pinned messages" title="Pinned messages"><Pin size={17} weight={pinnedMessages.length ? "fill" : "regular"} /></button><button className="social-encryption social-members-button" onClick={onMembers}><UsersRound size={17} /> Members</button></div></header>
     <div className="social-message-list" onScroll={() => setContextMenu(null)}>
       {!visible.length && <div className="social-conversation-empty"><GroupAvatar group={group} size="hero" /><h3>{group.name}</h3><p>Messages are encrypted separately for every member device.</p></div>}
       {visible.map(message => { const mine = message.senderId === me.id; const author = member(message.senderId); const replied = message.reactionOperation === "reply" && message.targetId ? visible.find(value => value.id === message.targetId) : null; return <article key={message.id} className={`social-message ${mine ? "mine" : "theirs"} ${message.deliveryState}`} tabIndex={0} onKeyDown={event => {
@@ -429,8 +431,10 @@ function GroupConversationView({ me, group, messages, busy, onMembers, onRename,
       <div ref={endRef} />
     </div>
     <div className="social-composer social-group-composer">
-      <div className="social-compose-stack">{(replyTo || editing) && <div className="social-compose-reference"><span>{editing ? <Pencil size={14} /> : <Reply size={14} />}<b>{editing ? "Editing message" : `Replying to ${replyTo?.senderId === me.id ? "yourself" : userLabel(member(replyTo?.senderId || ""))}`}</b><small>{editing?.text || replyTo?.text || "Screenshot"}</small></span><button onClick={() => { setReplyTo(null); setEditing(null); if (editing) setDraft(""); }} aria-label="Cancel"><X size={15} /></button></div>}<div className="social-compose-field"><textarea value={draft} onChange={event => setDraft(event.target.value.slice(0, 2000))} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} rows={1} placeholder={editing ? "Edit message" : `Message ${group.name}`} /><button onClick={() => setEmojiOpen(value => !value)} aria-label="Add emoji"><Smile size={19} /></button>{emojiOpen && <div className="social-emoji-picker">{reactionChoices.map(emoji => <button key={emoji} onClick={() => { setDraft(value => `${value}${emoji}`); setEmojiOpen(false); }}>{emoji}</button>)}</div>}</div></div>
-      <button className="social-send" onClick={submit} disabled={busy || !draft.trim()} aria-label="Send message"><Send size={20} fill="currentColor" /></button>
+      <div className="social-compose-stack">{(replyTo || editing) && <div className="social-compose-reference"><span>{editing ? <Pencil size={14} /> : <Reply size={14} />}<b>{editing ? "Editing message" : `Replying to ${replyTo?.senderId === me.id ? "yourself" : userLabel(member(replyTo?.senderId || ""))}`}</b><small>{editing?.text || replyTo?.text || "Screenshot"}</small></span><button onClick={() => { setReplyTo(null); setEditing(null); if (editing) setDraft(""); }} aria-label="Cancel"><X size={15} /></button></div>}<div className="social-compose-field"><textarea value={draft} onChange={event => setDraft(event.target.value.slice(0, 2000))} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }} rows={1} placeholder={editing ? "Edit message" : `Message ${group.name}`} />
+        <div className="social-compose-tools"><button onClick={() => setEmojiOpen(value => !value)} aria-label="Add emoji" aria-expanded={emojiOpen}><Smile size={19} /></button>{emojiOpen && <div className="social-emoji-picker">{reactionChoices.map(emoji => <button key={emoji} onClick={() => { setDraft(value => value.length + emoji.length <= 2000 ? value + emoji : value); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
+          <button className="social-send" onClick={submit} disabled={busy || !draft.trim()} aria-label="Send message"><Send size={20} weight="fill" /></button>
+        </div></div></div>
     </div>
     {pinsOpen && <PinnedMessagesDrawer messages={pinnedMessages} me={me} authorFor={message => member(message.senderId)} busy={busy} onClose={() => setPinsOpen(false)} onUnpin={messageId => onPin(messageId, false)} />}
     {contextMenu && (() => { const message = visible.find(value => value.id === contextMenu.messageId); return message ? <MessageContextMenu message={message} reactions={reactions.get(message.id) || []} x={contextMenu.x} y={contextMenu.y} mine={message.senderId === me.id} disabled={busy} onClose={() => setContextMenu(null)} onReply={() => { setReplyTo(message); setEditing(null); setDraft(""); }} onEdit={() => { setEditing(message); setReplyTo(null); setDraft(message.text || ""); }} onReact={(emoji, add) => onReact(message.id, emoji, add)} onPin={() => onPin(message.id, !message.pinned)} /> : null; })()}
@@ -446,7 +450,7 @@ function GroupDrawer({ group, friends, me, busy, onClose, onCreate, onAdd, onRem
   if (!group) return <aside className="social-group-drawer">
     <header><div><b>New group chat</b><span>Up to 10 people</span></div><button onClick={onClose} aria-label="Close"><X size={19} /></button></header>
     <label className="social-group-name"><span>Group name</span><input value={name} onChange={event => setName(event.target.value.slice(0, 48))} placeholder="Group name" autoFocus /></label>
-    <div className="social-drawer-list">{candidates.map(friend => <button key={friend.id} className={`social-drawer-person ${selected.includes(friend.id) ? "selected" : ""}`} onClick={() => setSelected(current => current.includes(friend.id) ? current.filter(id => id !== friend.id) : current.length < 9 ? [...current, friend.id] : current)}><Avatar user={friend} /><span><b>{userLabel(friend)}</b><small>@{friend.username}</small></span><i>{selected.includes(friend.id) && <Check size={15} />}</i></button>)}</div>
+    <div className="social-drawer-list">{candidates.map(friend => <button key={friend.id} className={`social-drawer-person ${selected.includes(friend.id) ? "selected" : ""}`} onClick={() => setSelected(current => current.includes(friend.id) ? current.filter(id => id !== friend.id) : current.length < 9 ? [...current, friend.id] : current)}><Avatar user={friend} /><span><b>{userLabel(friend)}</b><small>{friend.online ? "Online" : "Offline"}</small></span><i>{selected.includes(friend.id) && <Check size={15} />}</i></button>)}</div>
     <button className="social-drawer-primary" disabled={busy || name.trim().length < 2 || !selected.length} onClick={() => void onCreate(name.trim(), selected).then(ok => { if (ok) onClose(); })}><UsersRound size={18} /> Create group</button>
   </aside>;
   return <aside className="social-group-drawer">
@@ -460,10 +464,11 @@ function GroupDrawer({ group, friends, me, busy, onClose, onCreate, onAdd, onRem
 export type SocialDestination = { friendId?: string; section?: SocialSection };
 export { socialDirectoryChanged };
 
-export function SocialPage({ onNotify, onInstanceImported, destination, sidebarHost }: { sidebarHost: HTMLDivElement | null; onNotify: (message: string, kind?: "error" | "notification") => void; onInstanceImported: (result: ModpackShareImport) => void; destination?: SocialDestination }) {
+export function SocialPage({ onNotify, onInstanceImported, destination, ...launcher }: PlayLauncher & { onNotify: (message: string, kind?: "error" | "notification") => void; onInstanceImported: (result: ModpackShareImport) => void; destination?: SocialDestination }) {
   const [session, setSession] = useState<SessionState>(emptySession);
   const [snapshot, setSnapshot] = useState<Snapshot>(emptySnapshot);
-  const [section, setSection] = useState<SocialSection>("messages");
+  const [threadOpen, setThreadOpen] = useState(false);
+  const [section, setSection] = useState<SocialSection>("play");
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [groupsOpen, setGroupsOpen] = useState(true);
@@ -472,8 +477,6 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  useDismissPopup(accountMenuOpen, ".social-account", () => setAccountMenuOpen(false));
   const [query, setQuery] = useState("");
   const [encryptionOpen, setEncryptionOpen] = useState(false);
   const [encryptionLoading, setEncryptionLoading] = useState(false);
@@ -502,15 +505,16 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
 
   useEffect(() => {
     if (!destination) return;
+    setThreadOpen(!!destination.friendId);
     setSelectedFriendId(destination.friendId ?? null);
     setSelectedGroupId(null);
     setGroupDrawer(null);
     setQuery("");
     setEncryptionOpen(false);
-    setSection(destination.section ?? (destination.friendId ? "messages" : "friends"));
+    setSection(destination.section ?? (destination.friendId ? "messages" : "play"));
   }, [destination]);
 
-  const load = async (quiet = false, replace = false) => {
+  const load = async (_quiet = false, replace = false) => {
     const requestNumber = ++loadSequence.current;
     const versionAtStart = mutationVersion.current;
     try {
@@ -545,7 +549,7 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
         onNotify(message, "error");
         return true;
       }
-      if (!quiet) onNotify(message, "error");
+      // Connection failures are shown inline and retried.
       return false;
     }
   };
@@ -565,7 +569,7 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
   };
   useEffect(() => {
     void hydrate();
-    return () => { hydrationSequence.current += 1; };
+    return () => { hydrationSequence.current += 1; loadSequence.current += 1; };
   }, []);
 
   const syncMessages = async () => {
@@ -680,9 +684,9 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
     return result;
   };
 
-  const action = async (task: () => Promise<Snapshot>, success?: string) => {
+  const action = async (task: () => Promise<Snapshot>) => {
     setBusy(true);
-    try { const next = await task(); setSnapshot(next); setSession(next.session); window.dispatchEvent(new Event(socialDirectoryChanged)); if (success) onNotify(success); return true; }
+    try { const next = await task(); setSnapshot(next); setSession(next.session); window.dispatchEvent(new Event(socialDirectoryChanged)); return true; }
     catch (error) { onNotify(String(error), "error"); return false; }
     finally { setBusy(false); }
   };
@@ -695,78 +699,32 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
       setSnapshot(next);
       setSession(next.session);
       setGroupsOpen(true);
-      if (created) { setSelectedGroupId(created.id); setSelectedFriendId(null); setSection("messages"); }
-      onNotify("Group chat created.");
+      if (created) { setSelectedGroupId(created.id); setSelectedFriendId(null); setThreadOpen(true); setSection("messages"); }
       return true;
     } catch (error) { onNotify(String(error), "error"); return false; }
     finally { setBusy(false); }
   };
-  const beginSignIn = async () => {
-    setBusy(true);
-    try {
-      await connectDelightAccount();
-      setLoading(true);
-      setSnapshot(emptySnapshot);
-      setSelectedFriendId(null);
-      setSelectedGroupId(null);
-      setGroupDrawer(null);
-      setEncryptionOpen(false);
-      setEncryptionDetails(null);
-      lastSyncWarning.current = null;
-      onNotify("Delight account connected.");
-      await hydrate(true);
-    } catch (error) { onNotify(String(error), "error"); }
-    finally { setBusy(false); }
-  };
-  const signOut = async () => {
-    hydrationSequence.current += 1;
-    setAccountMenuOpen(false);
-    setBusy(true);
-    setLoading(true);
-    try {
-      await Promise.all([
-        invoke("social_sign_out"),
-        new Promise(resolve => window.setTimeout(resolve, 320)),
-      ]);
-      setSession(emptySession);
-      setSnapshot(emptySnapshot);
-      setSelectedFriendId(null);
-      setSelectedGroupId(null);
-      setGroupDrawer(null);
-      setGroupsOpen(false);
-      setEncryptionOpen(false);
-      setEncryptionDetails(null);
-      lastSyncWarning.current = null;
-      window.dispatchEvent(new Event(socialDirectoryChanged));
-      onNotify("Signed out of Delight Social.");
-    } catch (error) { onNotify(String(error), "error"); }
-    finally { setBusy(false); setLoading(false); }
-  };
+  useEffect(() => {
+    if (!loadFailed) return;
+    const retry = window.setTimeout(()=>void hydrate(true),15000);
+    return () => window.clearTimeout(retry);
+  },[loadFailed]);
   if (loading) return <div className="social-loading"><RefreshCw className="spin" size={22} /> Loading Social…</div>;
   if (loadFailed) return <div className="social-loading">
-    <span>Couldn’t load Social.</span>
+    <span>Friends is reconnecting…</span>
     <button type="button" onClick={() => { setLoading(true); void hydrate(true); }}>Try again</button>
   </div>;
-  if (!session.signedIn) return <SignInView busy={busy} onSignIn={() => void beginSignIn()} />;
+  if (!session.signedIn) return <section className="social-auth-state"><h1>Friends</h1><p>Select a Minecraft account in the launcher to use Friends.</p></section>;
   if (session.needsUsername) return <UsernameSetup busy={busy} onSave={username => { setBusy(true); void invoke<SocialUser>("social_set_username", { username }).then(() => { setLoading(true); window.dispatchEvent(new Event(socialDirectoryChanged)); onNotify("Delight account username saved."); return hydrate(true); }).catch(error => { setLoading(false); onNotify(String(error), "error"); }).finally(() => setBusy(false)); }} />;
-  if (!session.user) return <SignInView busy={busy} onSignIn={() => void beginSignIn()} />;
+  if (!session.user) return <section className="social-auth-state"><h1>Friends</h1><p>Select a Minecraft account in the launcher to use Friends.</p></section>;
 
   const lastFor = (friendId: string) => snapshot.messages.filter(message => !message.groupId && message.friendId === friendId && message.kind === "message").at(-1);
   const lastInviteFor = (friendId: string) => snapshot.invites
     .filter(invite => (invite.sender.id === session.user?.id && invite.recipient.id === friendId) || (invite.recipient.id === session.user?.id && invite.sender.id === friendId))
     .reduce<InstanceInvite | undefined>((latest, invite) => !latest || invite.createdAt > latest.createdAt ? invite : latest, undefined);
   const lastForGroup = (groupId: string) => snapshot.messages.filter(message => message.groupId === groupId && message.kind === "message").at(-1);
-  const openFriend = (friend: SocialUser) => { setSelectedFriendId(friend.id); setSelectedGroupId(null); setGroupDrawer(null); setSection("messages"); };
-  const openGroup = (group: Group) => { setSelectedGroupId(group.id); setSelectedFriendId(null); setGroupDrawer(null); setSection("messages"); };
-  const sendScreenshot = async (friendId: string) => {
-    beginMutation();
-    setBusy(true);
-    try {
-      const message = await invoke<Message | null>("social_send_screenshot", { friendId });
-      if (message) { setSnapshot(current => ({ ...current, messages: reconcileSocialMessages(current.messages, [...current.messages, message]) })); onNotify("Encrypted screenshot sent."); }
-    } catch (error) { if (String(error).includes("encryption identity changed")) void refreshEncryption(friendId, true); onNotify(String(error), "error"); }
-    finally { setBusy(false); finishMutation(); }
-  };
+  const openFriend = (friend: SocialUser) => { setSelectedFriendId(friend.id); setSelectedGroupId(null); setGroupDrawer(null); setThreadOpen(true); setSection("messages"); };
+  const openGroup = (group: Group) => { setSelectedGroupId(group.id); setSelectedFriendId(null); setGroupDrawer(null); setThreadOpen(true); setSection("messages"); };
   const sendMessage = async (friendId: string, body: string, replyTo?: string) => {
     if (!session.user) return;
     const temporaryId = `pending-${crypto.randomUUID()}`;
@@ -899,11 +857,11 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
       finishMutation();
     }
   };
-  const updateGroupName = (groupId: string, name: string) => void action(() => invoke("social_update_group", { groupId, name, iconDataUrl: null }), "Group name updated.");
+  const updateGroupName = (groupId: string, name: string) => void action(() => invoke("social_update_group", { groupId, name, iconDataUrl: null }));
   const updateGroupIcon = async (groupId: string, file: File) => {
     try {
       const iconDataUrl = await groupIconData(file);
-      await action(() => invoke("social_update_group", { groupId, name: null, iconDataUrl }), "Group icon updated.");
+      await action(() => invoke("social_update_group", { groupId, name: null, iconDataUrl }));
     } catch (error) { onNotify(String(error), "error"); }
   };
   const acceptInstanceInvite = async (invite: InstanceInvite) => {
@@ -916,26 +874,29 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
       const next = await invoke<Snapshot>("social_complete_instance_invite", { inviteId: invite.id, claimToken: claim.claimToken });
       setSnapshot(next);
       setSession(next.session);
-      onNotify(`${invite.instanceName} was added to your library.`);
       onInstanceImported(result);
     } catch (error) {
       if (claim) await invoke("social_release_instance_invite", { inviteId: invite.id, claimToken: claim.claimToken }).catch(() => undefined);
       onNotify(String(error), "error");
     } finally { setBusy(false); }
   };
-  const declineInstanceInvite = (inviteId: string) => void action(() => invoke("social_decline_instance_invite", { inviteId }), "Invite declined.");
-  const revokeInstanceInvite = (inviteId: string) => void action(() => invoke("social_revoke_instance_invite", { inviteId }), "Invite revoked.");
+  const declineInstanceInvite = (inviteId: string) => void action(() => invoke("social_decline_instance_invite", { inviteId }));
+  const revokeInstanceInvite = (inviteId: string) => void action(() => invoke("social_revoke_instance_invite", { inviteId }));
   const matches = (value: string) => value.toLowerCase().includes(query.trim().toLowerCase());
   const visibleFriends = friends.filter(friend => matches(userLabel(friend)) || matches(friend.username ?? ""));
   const visibleGroups = groups.filter(group => matches(group.name));
   const inboxCount = snapshot.requests.incoming.length + snapshot.invites.filter(invite => invite.recipient.id === session.user?.id && invite.status === "pending").length;
-  return <div className="social-page" onClick={() => setAccountMenuOpen(false)}>
-    {sidebarHost && createPortal(<div className="social-rail">
-      <nav aria-label="Social views">
-        <button className={section === "messages" ? "active" : ""} onClick={() => setSection("messages")}><MessageCircle size={18} /><span>Messages</span></button>
-        <button className={section === "friends" ? "active" : ""} onClick={() => { setSection("friends"); setGroupDrawer(null); setEncryptionOpen(false); }}><UsersRound size={18} /><span>Friends</span><b>{snapshot.friends.length}</b></button>
-        <button className={section === "inbox" ? "active" : ""} onClick={() => { setSection("inbox"); setGroupDrawer(null); setEncryptionOpen(false); }}><Inbox size={18} /><span>Inbox</span>{inboxCount > 0 && <b className="unread">{inboxCount}</b>}</button>
-      </nav>
+  const backToMessages = () => {
+    setThreadOpen(false);
+    setGroupDrawer(null);
+    setEncryptionOpen(false);
+    requestAnimationFrame(() => {
+      const list = document.querySelector(".social-thread-list:not([hidden])");
+      (list?.querySelector<HTMLElement>(".social-friend-row.active, .social-group-row.active") ?? list?.querySelector<HTMLInputElement>("input"))?.focus({preventScroll:true});
+    });
+  };
+  const threadList = <div className="social-rail">
+
       <label className="social-thread-filter"><Search size={15} /><input aria-label="Search conversations" placeholder="Search conversations…" type="search" value={query} onChange={event => setQuery(event.target.value)} /></label>
       <div className="social-rail-lists">
         {query.trim() && !visibleFriends.length && !visibleGroups.length && <small className="social-filter-empty">No matching conversations</small>}
@@ -948,18 +909,19 @@ export function SocialPage({ onNotify, onInstanceImported, destination, sidebarH
           {groupsOpen && <div className="social-conversation-list">{visibleGroups.map(group => <GroupRow key={group.id} group={group} active={section === "messages" && selectedGroup?.id === group.id} message={lastForGroup(group.id)} onClick={() => openGroup(group)} />)}</div>}
         </section>
       </div>
-      <div className="social-account" onClick={event => event.stopPropagation()}>
-        {accountMenuOpen && <div className="social-account-menu" role="menu" aria-label="Social account menu">
-          <button className="danger" role="menuitem" disabled={busy} onClick={() => void signOut()}><LogOut size={17} /><span>Sign out</span></button>
-        </div>}
-        <button className="social-account-trigger" aria-haspopup="menu" aria-expanded={accountMenuOpen} onClick={() => setAccountMenuOpen(open => !open)}>
-          <Avatar user={session.user} /><span><b>{userLabel(session.user)}</b><small>@{session.user.username}</small></span><ChevronUp className={accountMenuOpen ? "open" : ""} size={17} />
-        </button>
-      </div>
-    </div>, sidebarHost)}
-    <div className="social-main">
-      {section === "friends" ? <FriendsView snapshot={snapshot} busy={busy} onAdd={name => action(() => invoke("social_send_friend_request", { username: name }), "Friend request sent.")} onOpen={openFriend} onRemove={id => void action(() => invoke("social_remove_friend", { userId: id }), "Friend removed.")} /> : section === "inbox" ? <InboxView onAccept={acceptInstanceInvite} onDecline={declineInstanceInvite} onRevoke={revokeInstanceInvite} snapshot={snapshot} busy={busy} onAcceptFriend={id => void action(() => invoke("social_accept_friend_request", { userId: id }), "Friend request accepted.")} onDeclineFriend={id => void action(() => invoke("social_decline_friend_request", { userId: id }))} /> : selectedGroup ? <GroupConversationView key={selectedGroup.id} me={session.user} group={selectedGroup} messages={snapshot.messages} busy={busy} onMembers={() => setGroupDrawer("members")} onRename={name => updateGroupName(selectedGroup.id, name)} onIcon={file => void updateGroupIcon(selectedGroup.id, file)} onSend={(text, replyTo) => void sendGroupMessage(selectedGroup.id, text, replyTo)} onEdit={(messageId, text) => void editGroupMessage(selectedGroup.id, messageId, text)} onReact={(messageId, emoji, add) => void sendGroupReaction(selectedGroup.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinGroupMessage(selectedGroup.id, messageId, pinned)} /> : selectedFriend ? <ConversationView key={selectedFriend.id} me={session.user} friend={selectedFriend} messages={snapshot.messages} invites={snapshot.invites} busy={busy} encryption={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} onOpenEncryption={() => void refreshEncryption(selectedFriend.id, true)} onSend={(text, replyTo) => void sendMessage(selectedFriend.id, text, replyTo)} onEdit={(messageId, text) => void editMessage(selectedFriend.id, messageId, text)} onScreenshot={() => void sendScreenshot(selectedFriend.id)} onReact={(messageId, emoji, add) => void sendReaction(selectedFriend.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinMessage(selectedFriend.id, messageId, pinned)} onAcceptInvite={invite => void acceptInstanceInvite(invite)} onDeclineInvite={declineInstanceInvite} onRevokeInvite={revokeInstanceInvite} /> : <section className="social-no-conversation"><MessageCircle size={34} /><h2>No conversations yet</h2><p>Create a group chat or add a friend by their exact Delight account username.</p><button onClick={() => { setSection("friends"); setGroupDrawer(null); setEncryptionOpen(false); }}><UserPlus size={18} /> Add a friend</button></section>}
-      {groupDrawer && <GroupDrawer group={groupDrawer === "members" ? selectedGroup : null} friends={snapshot.friends} me={session.user} busy={busy} onClose={() => setGroupDrawer(null)} onCreate={createGroup} onAdd={userId => void action(() => invoke("social_add_group_member", { groupId: selectedGroup?.id, userId }), "Person added to the group.")} onRemove={userId => void action(() => invoke("social_remove_group_member", { groupId: selectedGroup?.id, userId }), userId === session.user?.id ? "You left the group." : "Person removed from the group.")} onOpenFriend={openFriend} />}
+    </div>;
+  return <div className="social-page">
+    <nav className="social-workspace-nav" aria-label="Social views">
+      {([{id:"play", label:"Party", icon:Gamepad2}, {id:"messages", label:"Messages", icon:MessageCircle},
+        {id:"friends", label:"Friends", icon:UsersRound}, {id:"inbox", label:"Inbox", icon:Inbox}] as const).map(({id,label,icon:Icon}) =>
+        <button key={id} aria-current={section === id ? "page" : undefined} onClick={() => { setSection(id); setThreadOpen(false); setGroupDrawer(null); setEncryptionOpen(false); }}>
+          <Icon size={16}/><span>{label}</span>{id === "inbox" && inboxCount > 0 && <b>{inboxCount}</b>}
+        </button>)}
+    </nav>
+    <div className="social-main" data-thread={section === "messages" && threadOpen}>
+      {section === "messages" && <div hidden={threadOpen} className="social-thread-list">{threadList}</div>}
+      {section === "play" ? <SocialPlay {...launcher} me={session.user} friends={snapshot.friends} onFriends={() => setSection("friends")} /> : section === "friends" ? <FriendsView snapshot={snapshot} busy={busy} onAdd={name => action(() => invoke("social_send_friend_request", { username: name }))} onOpen={openFriend} onRemove={id => void action(() => invoke("social_remove_friend", { userId: id }))} /> : section === "inbox" ? <InboxView onAccept={acceptInstanceInvite} onDecline={declineInstanceInvite} onRevoke={revokeInstanceInvite} snapshot={snapshot} busy={busy} onAcceptFriend={id => void action(() => invoke("social_accept_friend_request", { userId: id }))} onDeclineFriend={id => void action(() => invoke("social_decline_friend_request", { userId: id }))} /> : !threadOpen ? null : selectedGroup ? <GroupConversationView onBack={backToMessages} key={selectedGroup.id} me={session.user} group={selectedGroup} messages={snapshot.messages} busy={busy} onMembers={() => setGroupDrawer("members")} onRename={name => updateGroupName(selectedGroup.id, name)} onIcon={file => void updateGroupIcon(selectedGroup.id, file)} onSend={(text, replyTo) => void sendGroupMessage(selectedGroup.id, text, replyTo)} onEdit={(messageId, text) => void editGroupMessage(selectedGroup.id, messageId, text)} onReact={(messageId, emoji, add) => void sendGroupReaction(selectedGroup.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinGroupMessage(selectedGroup.id, messageId, pinned)} /> : selectedFriend ? <ConversationView onBack={backToMessages} key={selectedFriend.id} me={session.user} friend={selectedFriend} messages={snapshot.messages} invites={snapshot.invites} busy={busy} encryption={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} onOpenEncryption={() => void refreshEncryption(selectedFriend.id, true)} onSend={(text, replyTo) => void sendMessage(selectedFriend.id, text, replyTo)} onEdit={(messageId, text) => void editMessage(selectedFriend.id, messageId, text)} onReact={(messageId, emoji, add) => void sendReaction(selectedFriend.id, messageId, emoji, add)} onPin={(messageId, pinned) => void pinMessage(selectedFriend.id, messageId, pinned)} onAcceptInvite={invite => void acceptInstanceInvite(invite)} onDeclineInvite={declineInstanceInvite} onRevokeInvite={revokeInstanceInvite} /> : <section className="social-no-conversation"><MessageCircle size={34} /><h2>No conversations yet</h2><p>Create a group chat or add a friend by their Minecraft username.</p><button onClick={() => { setSection("friends"); setGroupDrawer(null); setEncryptionOpen(false); }}><UserPlus size={18} /> Add a friend</button></section>}
+      {groupDrawer && <GroupDrawer group={groupDrawer === "members" ? selectedGroup : null} friends={snapshot.friends} me={session.user} busy={busy} onClose={() => setGroupDrawer(null)} onCreate={createGroup} onAdd={userId => void action(() => invoke("social_add_group_member", { groupId: selectedGroup?.id, userId }))} onRemove={userId => void action(() => invoke("social_remove_group_member", { groupId: selectedGroup?.id, userId }))} onOpenFriend={openFriend} />}
       {encryptionOpen && selectedFriend && <EncryptionDrawer friend={selectedFriend} details={encryptionDetails?.friendId === selectedFriend.id ? encryptionDetails : null} loading={encryptionLoading} busy={busy} onClose={() => setEncryptionOpen(false)} onVerify={() => void acknowledgeEncryption(selectedFriend.id, true)} onContinue={() => void acknowledgeEncryption(selectedFriend.id, false)} />}
     </div>
   </div>;

@@ -4,7 +4,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Root, Element, ElementContent } from "hast";
 import { useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowRight, ChevronDown, CircleEllipsis, CornerDownLeft, Folder, Info, X } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, CaretDownIcon as ChevronDown, DotsThreeCircleIcon as CircleEllipsis, ArrowElbowDownLeftIcon as CornerDownLeft, FolderIcon as Folder, InfoIcon as Info, XIcon as X } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   destinations, askRemote, editHistory, entryFor, getUsage, help, localAnswer, readHistory, scope, shortText, usageMessage, validResult,
@@ -27,10 +27,6 @@ type Props = {
   createPack: (pack: Pack, draftId: string, onQueued: (count: number) => void) => Promise<void>;
   navigate: (action: string, instanceId?: string) => string | null;
 };
-
-function Brand() {
-  return <h2 className="rail-title">Alula</h2>;
-}
 
 export function AskDelight(props: Props) {
   return <section className="alula-workspace" aria-label="Alula" data-motion={props.motion} hidden={!props.active}>
@@ -109,7 +105,6 @@ function AccountChat({ sidebar, active, profileId, context, instanceId, instance
     {account && <Chat sidebar={sidebar} openDownloads={openDownloads} instanceId={instanceId} instances={instances} createPack={createPack} key={account} account={account} active={active && verified} context={context} canNavigate={canNavigate}
       openDestination={openDestination} navigationError={navigationError} />}
     {active && !verified && <div className="rail-column">
-        <header className="rail-header ask-header"><Brand /></header>
         <p className="rail-scroll ask-notice" role="status">Opening Alula…</p>
       </div>}
   </>;
@@ -353,7 +348,7 @@ function Chat({ sidebar, instanceId, instances, createPack, openDownloads, accou
       }
     };
     if (localOnly) { apply("offline"); return; }
-    if (account.endsWith("-guest")) { apply("signed_out"); return; }
+    if (account.startsWith("guest-")) { apply("signed_out"); return; }
     try {
       const response = await getUsage(account);
       apply(response.usage ? "ready" : failedUsage(response.error), response.usage);
@@ -429,7 +424,7 @@ function Chat({ sidebar, instanceId, instances, createPack, openDownloads, accou
     setAttachmentPanel(undefined);
     const local = attachment || previous.at(-1)?.status === "clarify" ? undefined : localAnswer(questionText, context, previous.length > 0);
     if (local) {
-      const answer: Message = { ...thinking, text: local.steps, action: local.action, helpIds: [local.id], status: "ready" };
+      const answer: Message = { ...thinking, text: local.steps, action: "action" in local ? local.action : undefined, helpIds: [local.id], status: "ready" };
       setRevealing(thinking.id);
       saveThread({ ...item, messages: [...item.messages.slice(0, -1), answer] }, true);
       return;
@@ -476,7 +471,6 @@ function Chat({ sidebar, instanceId, instances, createPack, openDownloads, accou
   return <div className="rail-column" hidden={!active}>
     {active && sidebar && loaded && createPortal(<AlulaHistory history={history} sessionThreads={sessionThreads.current}
       onNew={() => select(null)} onSelect={select} onRemove={remove} onSetSaving={setSaving} />, sidebar)}
-    <header className="rail-header ask-header"><Brand /></header>
     {navigationError && <p className="ask-notice" role="alert">{navigationError}</p>}
     {storageError && <p className="ask-notice" role="status">Chat history may not be saved. You can keep chatting in this session.</p>}
     <div className="rail-scroll" ref={scroll}>

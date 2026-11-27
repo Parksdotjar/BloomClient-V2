@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { invoke as invokeNative } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Upload } from "lucide-react";
+import { ArrowSquareOutIcon as ExternalLink, UploadIcon as Upload } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import { connectDelightAccount } from "../services/connect-delight-account";

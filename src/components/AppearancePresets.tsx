@@ -1,7 +1,7 @@
 import { SettingsRow } from "./SettingsRow";
 import { createPortal } from 'react-dom';
 import { useEffect, useLayoutEffect, useRef, useState, useId } from 'react';
-import { Check, ChevronDown, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { CheckIcon as Check, CaretDownIcon as ChevronDown, PlusIcon as Plus, ArrowsClockwiseIcon as RefreshCw, TrashIcon as Trash2, XIcon as X } from "@phosphor-icons/react";
 import type { SettingsState } from '../main';
 import { captureAppearance, sameAppearance, deletePreset, readPresets, writePreset, type Appearance, type AppearancePreset } from '../services/appearance-presets';
 import './appearance-presets.css';

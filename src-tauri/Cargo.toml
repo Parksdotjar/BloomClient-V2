@@ -44,6 +44,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
 [target.'cfg(windows)'.dependencies]
+webview2-com = "0.38.2"
 junction = "1"
 keyring = { version = "3.6.3", features = ["windows-native"] }
 windows = { version = "0.62.2", features = [

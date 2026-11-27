@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { CircleAlert, Download, RefreshCw } from "lucide-react";
+import { WarningCircleIcon as CircleAlert, DownloadIcon as Download, ArrowsClockwiseIcon as RefreshCw } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import type { ExcludedLocalPackFile, PackDependencyReview } from "../services/pack-compatibility";
 import { userError } from "../services/user-error";

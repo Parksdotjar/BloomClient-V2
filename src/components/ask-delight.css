@@ -1,4 +1,3 @@
-.ask-header .rail-title { justify-content: center; min-height: 36px; font-size: 20px; }
 .ask-tools { display: flex; align-items: center; gap: 2px; }
 .ask-icon {
   flex: none;
@@ -370,12 +369,6 @@
   color: var(--text);
   --rail-raised: color-mix(in srgb, var(--text) 6%, transparent);
 }
-.alula-workspace .ask-header .rail-title {
-  justify-content: flex-start;
-  font-size: 28px;
-  font-weight: 650;
-}
-.alula-workspace .ask-header::after { display: none; }
 .alula-workspace .rail-scroll { scrollbar-width: thin; }
 .alula-workspace .rail-scroll:has(> .ask-welcome) { display: grid; align-items: center; }
 .alula-workspace .ask-welcome { width: min(100%, 560px); margin-inline: auto; padding-block: 20px; }

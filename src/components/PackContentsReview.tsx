@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, CircleAlert, PackagePlus, RefreshCw } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, WarningCircleIcon as CircleAlert, PackageIcon as PackagePlus, ArrowsClockwiseIcon as RefreshCw } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { matchCheckedFiles, packFileKey, type CheckedPackFile, type ExcludedLocalPackFile, type PackCompatibility } from "../services/pack-compatibility";
 import { InstalledContentRow, usePackArtwork, type ContentCategory, type InstanceContentItem } from "./InstalledContentRow";
@@ -121,8 +121,8 @@ function ReleasePreview({ report, inventory, checked, publication }: {
   </section>;
 }
 
-export function PackContentsReview({ instanceId, loader, basePublication, carriedDraft, onRefreshHead, setContentsBack, onPublished, onBusy, editor }: {
-  instanceId: string; loader: string;
+export function PackContentsReview({ instanceId, loader, runtime, basePublication, carriedDraft, onRefreshHead, setContentsBack, onPublished, onBusy, editor }: {
+  instanceId: string; loader: string; runtime: string;
   onPublished: (publication: PackPublication) => void; onBusy: (busy: boolean) => void;
   setContentsBack?: (back: (() => void) | null) => void;
   basePublication?: PackPublication; carriedDraft?: ReleaseDraft; onRefreshHead: (draft: ReleaseDraft) => void;
@@ -139,6 +139,7 @@ export function PackContentsReview({ instanceId, loader, basePublication, carrie
   const simplePublish = !editor;
   const [editingContents, setEditingContents] = useState(false);
   const [fileReview, setFileReview] = useState<FileReview | null>(null);
+  useEffect(() => { setFileReview(null); }, [runtime]);
   const draftKey = "delight-pack-draft:" + instanceId + ":" + (editor?.existing?.id ?? basePublication?.revision ?? 0);
   const [draft, setDraft] = useState<ReleaseDraft>(() => {
     if (carriedDraft) return carriedDraft;
@@ -194,6 +195,7 @@ export function PackContentsReview({ instanceId, loader, basePublication, carrie
 
   useEffect(() => {
     let active = true;
+    setCheck(null);
     void readInventory(instanceId).then(
       value => { if (active) setInventory({ value }); },
       error => { if (active) setInventory({ error: error.message }); },
@@ -212,7 +214,7 @@ export function PackContentsReview({ instanceId, loader, basePublication, carrie
       error => { if (active) setCheck({ error: String(error) }); },
     );
     return () => { active = false; };
-  }, [instanceId, scanFiles, simplePublish]);
+  }, [instanceId, runtime, scanFiles, simplePublish]);
 
   const groups = inventory && "value" in inventory ? inventory.value : null;
   const report = check && "value" in check ? check.value : null;

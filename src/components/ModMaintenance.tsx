@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowRight, Cuboid, RotateCw } from "lucide-react";
+import { ArrowRightIcon as ArrowRight, CubeIcon as Cuboid, ArrowClockwiseIcon as RotateCw } from "@phosphor-icons/react";
 import { hasCompatibleModUpdates, isModAdvisory, isModDuplicateIssue, modMaintenanceNeedsAttention, type ModMaintenance, type ModMaintenanceEntry } from "../services/mod-maintenance";
 import { InstanceContentIssue } from "./InstanceContentIssue";
 import type { FollowUpdate } from "../services/follow-updates";

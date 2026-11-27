@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Play } from "lucide-react";
+import { PlayIcon as Play } from "@phosphor-icons/react";
 import "./pixel-play-button.css";
 
 const CELL = 10;
@@ -153,10 +153,10 @@ export function PixelPlayButton({ disabled, onClick, progress, running = false }
   const percent = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress!)) : 0;
   const label = launching ? "Launching…" : running ? "Running…" : "Play";
   return <button ref={buttonRef} className={"spotlight-play pixel-play" + (launching || running ? " has-launch-state" : "")} disabled={disabled} onClick={onClick}>
-    <span className="pixel-play-content"><Play size={24} fill="currentColor" aria-hidden="true" /><b>{label}</b></span>
+    <span className="pixel-play-content"><Play size={24} weight="fill" aria-hidden="true" /><b>{label}</b></span>
     {launching && <span className="home-launch-progress" role="progressbar" aria-label="Instance launch progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} style={{ width: percent + "%" }}/>}
     <span ref={fillRef} className="pixel-play-fill" aria-hidden="true">
-      <span className="pixel-play-content"><Play size={24} fill="currentColor" /><b>{label}</b></span>
+      <span className="pixel-play-content"><Play size={24} weight="fill" /><b>{label}</b></span>
     </span>
   </button>;
 }

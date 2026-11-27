@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowRightLeft, Download, RefreshCw, RotateCcw, X } from "lucide-react";
+import { ArrowsLeftRightIcon as ArrowRightLeft, DownloadIcon as Download, ArrowsClockwiseIcon as RefreshCw, ArrowCounterClockwiseIcon as RotateCcw, XIcon as X } from "@phosphor-icons/react";
 import { renderComparison } from "../services/comparison-export";
 import "./screenshot-comparison.css";
 
@@ -65,7 +65,7 @@ export function ScreenshotComparison({ shots, loadImage, initialImages, close, c
         const step = event.shiftKey ? 10 : 1;
         const next = event.key === "Home" ? 0 : event.key === "End" ? 100 : event.key === "ArrowLeft" || event.key === "ArrowDown" ? Math.max(0, position - step) : event.key === "ArrowRight" || event.key === "ArrowUp" ? Math.min(100, position + step) : null;
         if (next !== null) { event.preventDefault(); setPosition(next); }
-      }}><span><ArrowRightLeft size={23} strokeWidth={2.4} /></span></button>
+      }}><span><ArrowRightLeft size={23} weight="bold" /></span></button>
     </div>}
     <footer className="comparison-foot"><div className="comparison-files">{ordered.map((shot, index) =>
       <span key={index} title={shot.name}><b>{index ? "B" : "A"}</b>{shot.name}</span>

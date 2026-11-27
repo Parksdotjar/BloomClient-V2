@@ -2,10 +2,12 @@ import { normalizeAnimatedAccent, sampleAccent, type AnimatedAccent } from "./an
 
 export const accentPresets = [
   { name: "Blue", color: "#87a9f3" },
-  { name: "Lavender", color: "#ac94e9" },
-  { name: "Sage", color: "#8aba82" },
-  { name: "Chalk", color: "#d4d0cd" },
-  { name: "Slate", color: "#737b85" },
+  { name: "Purple", color: "#a78bfa" },
+  { name: "Pink", color: "#f781b6" },
+  { name: "Red", color: "#f57373" },
+  { name: "Orange", color: "#fb9c55" },
+  { name: "Green", color: "#62cd89" },
+  { name: "Teal", color: "#26cfb0" },
 ];
 
 export type AccentPreferences = { accent: string; customAccent: boolean; lastCustomAccent: string };

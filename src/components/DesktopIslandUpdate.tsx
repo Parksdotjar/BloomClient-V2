@@ -1,5 +1,5 @@
 import { useId, type CSSProperties, type Ref } from "react";
-import { Download, X } from "lucide-react";
+import { DownloadIcon as Download, XIcon as X } from "@phosphor-icons/react";
 import type { LauncherUpdatePhase } from "../services/launcher-update";
 
 export type DesktopLauncherUpdate = {
@@ -74,7 +74,7 @@ export function DesktopIslandUpdate({ update, active, confirming, onOpen, onDism
       ref={focus} aria-expanded="false" onClick={onOpen}>
       <span className="desktop-launcher-update-label">{pendingLabel}</span>
       <span className="desktop-notification-trigger-icon" aria-hidden="true">
-        <Download className="desktop-launcher-update-icon" size={16} strokeWidth={1.65} />
+        <Download className="desktop-launcher-update-icon" size={16} />
       </span>
     </button>}
   </>;

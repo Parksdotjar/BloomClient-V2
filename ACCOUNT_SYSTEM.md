@@ -36,3 +36,11 @@ Bloom accounts are stable application identities authenticated through Google or
 - Never log callback bodies, authorization codes, provider tokens, cookies, secrets, or `.env` contents.
 
 The account system is deliberately separate from Microsoft/Minecraft authentication. Linking a website identity never sends Microsoft access or refresh tokens to this service.
+
+## 2026-11-27 · Approved additions and local implementation
+
+- Offline Minecraft play remains available when Friends cannot reconnect. Recover inside the Friends page.
+- Default direct invites to accepted friends only. Maintain blocks for requests, direct invites and presence. Players can choose Appear offline.
+- Address each invite to a specific Java player UUID. For future party and server links, identify the intended recipient and ask to switch before joining. Never auto-accept for an alt.
+- Unlinking a player from the website leaves that player's friends, blocks and invites with the player. Unlink only the website-to-player association. One website user can manage multiple verified Java players.
+- The local launcher uses its selected Minecraft session to open Social and scopes encryption keys, cached message vaults and social sessions by player. Backend checks device identity and the live Java profile. Website OAuth supports Microsoft with a configured confidential web registration. Explicit website linking uses a short-lived single-use code obtained in the signed-in launcher. Preserve existing website-provider and workspace identities during local review.

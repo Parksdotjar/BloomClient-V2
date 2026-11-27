@@ -1,5 +1,5 @@
 import { useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cuboid, Download, FolderOpen, Link2 } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, CaretRightIcon as ChevronRight, CubeIcon as Cuboid, DownloadIcon as Download, FolderOpenIcon as FolderOpen, LinkIcon as Link2 } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import { formatBytes } from "../services/format-bytes";

@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRightIcon as ArrowRight } from "@phosphor-icons/react";
 import { workspaceChangeCategories, type WorkspaceChange } from "../services/workspace-release-changes";
 import "./follow-updates.css";
 

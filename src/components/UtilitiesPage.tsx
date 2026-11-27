@@ -1,23 +1,21 @@
-import { FolderOpen } from "lucide-react";
+import { FolderOpenIcon as FolderOpen } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { invoke } from "../services/invoke";
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  Copy,
-  Download,
-  FileCog,
-  Image as ImageIcon,
-  Mic,
-  RefreshCw,
-  Save,
-  Server,
-  Share2,
-  ShieldCheck,
-  Sparkles,
-  Users,
-} from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft,
+  CheckIcon as Check,
+  CaretRightIcon as ChevronRight,
+  CopyIcon as Copy,
+  DownloadIcon as Download,
+  FileCodeIcon as FileCog,
+  ImageSquareIcon as ImageIcon,
+  MicrophoneIcon as Mic,
+  ArrowsClockwiseIcon as RefreshCw,
+  FloppyDiskIcon as Save,
+  HardDrivesIcon as Server,
+  ShareNetworkIcon as Share2,
+  ShieldCheckIcon as ShieldCheck,
+  SparkleIcon as Sparkles,
+  UsersIcon as Users } from "@phosphor-icons/react";
 import "./utilities.css";
 import { InfoTip } from "./InfoTip";
 import { useToggleFeedback } from "../services/toggle-feedback";
@@ -156,7 +154,6 @@ export function UtilitiesPage({
     try {
       const next = await invoke<GlobalFileSyncState>("save_global_file_sync_settings", { settings });
       setSettings(next.settings);
-      onMessage("Global File Sync setup saved.");
     } catch (error) {
       onMessage(String(error), "error");
     } finally {
@@ -171,12 +168,6 @@ export function UtilitiesPage({
       setReport(report);
       await load();
       setConfirming(false);
-      const parts = [
-        report.changedFiles ? `${report.changedFiles} file${report.changedFiles === 1 ? "" : "s"} synced` : "files already matched",
-        report.linkedFolders ? `${report.linkedFolders} shared folder${report.linkedFolders === 1 ? "" : "s"} connected` : "",
-        report.detachedFolders ? `${report.detachedFolders} shared folder${report.detachedFolders === 1 ? "" : "s"} disconnected` : "",
-      ].filter(Boolean);
-      onMessage(`Global File Sync complete: ${parts.join(", ")}.`);
     } catch (error) {
       onMessage(String(error), "error");
     } finally {
@@ -216,7 +207,7 @@ export function UtilitiesPage({
           <div className="utility-targets"><div className="utility-targets-heading"><b>Copy to selected instances</b></div>
             {instances.filter(instance => instance.id !== settings.voiceChatSource).map(instance => {
               const checked = settings.voiceChatTargets.includes(instance.id);
-              return <button key={instance.id} className={checked ? "selected" : ""} aria-pressed={checked} onClick={() => setSettings(current => ({ ...current, voiceChatTargets: checked ? current.voiceChatTargets.filter(id => id !== instance.id) : [...current.voiceChatTargets, instance.id] }))}><span>{checked && <Check size={14} strokeWidth={3} />}</span><div><b>{labels.get(instance.id) ?? instance.name}</b></div></button>;
+              return <button key={instance.id} className={checked ? "selected" : ""} aria-pressed={checked} onClick={() => setSettings(current => ({ ...current, voiceChatTargets: checked ? current.voiceChatTargets.filter(id => id !== instance.id) : [...current.voiceChatTargets, instance.id] }))}><span>{checked && <Check size={14} weight="bold" />}</span><div><b>{labels.get(instance.id) ?? instance.name}</b></div></button>;
             })}
           </div>
         </UtilityRule>
@@ -303,7 +294,6 @@ function ModpackSharingDetail({ instances, labels, idsByLabel, instanceOptions, 
     try {
       const result = await invoke<ModpackShare>("create_modpack_share", { instanceId: sourceId });
       setShare(result);
-      onMessage("Share code created.");
     } catch (error) { onMessage(String(error), "error"); }
     finally { setSharing(false); }
   };
@@ -382,7 +372,7 @@ function ModpackSharingDetail({ instances, labels, idsByLabel, instanceOptions, 
 
 function UtilityRule({ Icon, title, help, children }: { help?: string; Icon: ComponentType<{ size?: number; strokeWidth?: number }>; title: string; children: ReactNode }) {
   return <section className="utility-rule">
-    <header><span><Icon size={21} strokeWidth={1.9} /></span><div className="utility-rule-title"><h2>{title}</h2>{help && <InfoTip label={title}>{help}</InfoTip>}</div></header>
+    <header><span><Icon size={21} /></span><div className="utility-rule-title"><h2>{title}</h2>{help && <InfoTip label={title}>{help}</InfoTip>}</div></header>
     <div className="utility-rule-body">{children}</div>
   </section>;
 }

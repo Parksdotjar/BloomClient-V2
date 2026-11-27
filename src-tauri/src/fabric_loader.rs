@@ -169,7 +169,7 @@ fn pin_missing_version(
     false
 }
 
-pub(super) fn remember(config: &InstanceConfig, version: &str) -> Result<(), String> {
+pub(super) fn remember(app: &tauri::AppHandle, config: &InstanceConfig, version: &str) -> Result<(), String> {
     if configured(config).is_some() {
         return Ok(());
     }
@@ -179,6 +179,8 @@ pub(super) fn remember(config: &InstanceConfig, version: &str) -> Result<(), Str
         super::write_instance(&current).map_err(|error| {
             format!("Could not save the resolved Fabric Loader version: {error}")
         })?;
+        use tauri::Emitter;
+        let _ = app.emit("instance-loader-resolved", (&current.id, &current.version, version));
     }
     Ok(())
 }

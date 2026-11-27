@@ -2,6 +2,19 @@
   "format": 1,
   "entries": [
     {
+      "id": "northstar-witch-hat",
+      "name": "Northstar Witch Hat",
+      "defaults": {
+        "left": "#373853",
+        "right": "#20595a",
+        "trim": "#cfa35e",
+        "rightOuter": "#373853"
+      },
+      "revision": "02900af2edda495a94a5bab775c07950bbd4983f5cdef6d61fc129b32abd3fd8",
+      "slot": "hat",
+      "previewRevision": "096f053cba67683bcdb156b481f9462882328bbf935bea726fa916d4ddc11017"
+    },
+    {
       "id": "bunny-ears",
       "name": "Bunny Ears",
       "defaults": {
@@ -27,6 +40,19 @@
       "revision": "5e7d7bbd1b55800e6d5e08e6a58670fe71621716dc99c4d3ba2f66423bc29776",
       "slot": "back",
       "previewRevision": "754448fe516e581d714dc97a2f6a9bc057b5bc84973be76141e23b78f236ffb3"
+    },
+    {
+      "id": "cinder-horns",
+      "name": "Cinder Horns",
+      "defaults": {
+        "left": "#392e34",
+        "right": "#392e34",
+        "trim": "#794440",
+        "rightOuter": "#794440"
+      },
+      "revision": "5fb7903bc543d6ef88903fa53a2e28efe8379e70b12fcf12ffafc75c78697864",
+      "slot": "hat",
+      "previewRevision": "4ce2ffd432aee005de839da8087dc9d092cc99c6b7a7102e467e64a5097201d7"
     },
     {
       "id": "eclipse-angel-wings",

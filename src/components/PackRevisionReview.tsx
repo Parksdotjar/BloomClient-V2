@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, ArrowsClockwiseIcon as RefreshCw } from "@phosphor-icons/react";
 import { invoke } from "../services/invoke";
 import { userError } from "../services/user-error";
 import type { PackCompatibility } from "../services/pack-compatibility";

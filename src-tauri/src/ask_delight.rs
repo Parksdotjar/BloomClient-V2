@@ -224,14 +224,7 @@ pub async fn ask_delight_history(
 
 #[tauri::command]
 pub async fn ask_delight_remote(account: String, body: Option<Value>) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        if scope()? != account {
-            return Err("account_changed".into());
-        }
-        super::social::ask_delight_request(&account, body)
-    })
-    .await
-    .map_err(|_| "offline")?
+    super::social::ask_delight_request(account, body).await
 }
 
 #[cfg(test)]

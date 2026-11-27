@@ -549,6 +549,9 @@ pub fn attach_session(
     session: &MinecraftSession,
     token: &Option<String>,
 ) {
+    if let Some(path) = super::social::party_connection_file(&session.uuid) {
+        process.env("DELIGHT_PARTY_CONNECTION", path);
+    }
     if let Some(token) = token {
         process.env("BLOOM_COSMETICS_SESSION", token).env("BLOOM_COSMETICS_UUID", &session.uuid);
     }

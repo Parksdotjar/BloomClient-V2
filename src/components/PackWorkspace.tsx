@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode, type Ref, type RefObject } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight, Cuboid, Share2 } from "lucide-react";
+import { ArrowLeftIcon as ArrowLeft, CaretDownIcon as ChevronDown, CaretRightIcon as ChevronRight, CubeIcon as Cuboid, ShareNetworkIcon as Share2 } from "@phosphor-icons/react";
 import { CatalogArtwork } from "./CatalogFeedRow";
 import "./pack-workspace.css";
 
@@ -29,7 +29,7 @@ type InstanceSelect = ComponentType<{
 
 function PackArtwork({ instance }: { instance: WorkspaceInstance }) {
   return <span className="pack-workspace-art" aria-hidden="true">
-    <CatalogArtwork source={instance.icon} fallback={<Cuboid strokeWidth={1.6} />} />
+    <CatalogArtwork source={instance.icon} fallback={<Cuboid />} />
   </span>;
 }
 
@@ -39,7 +39,7 @@ function WorkspaceNavGroup({ label, icon, children }: { label: string; icon: Rea
   return <>
     <button type="button" className="pack-workspace-group" aria-controls={group} aria-expanded={expanded}
       onClick={() => setExpanded(value => !value)}>
-      {icon}<span>{label}</span><ChevronDown size={14} aria-hidden="true" />
+      {icon}<span>{label}</span><ChevronDown className="workspace-nav-caret" size={14} aria-hidden="true" />
     </button>
     <ul id={group} hidden={!expanded}>{children}</ul>
   </>;

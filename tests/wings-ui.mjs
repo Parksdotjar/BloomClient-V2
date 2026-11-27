@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const page = await browser.newPage({ userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36", viewport: { width: 1440, height: 1000 } });
+await page.exposeFunction('capturePickerView', async () => (await page.screenshot()).toString('base64'));
 const url = process.env.BLOOM_TEST_URL || 'http://localhost:1420';
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
@@ -30,6 +31,7 @@ await page.addInitScript(({offer,secondHat}) => {
     transformCallback(){return next++},unregisterCallback(){},convertFileSrc(path){return path},
     async invoke(command,args){
       state.calls.push({command,args});
+      if(command==="capture_picker_view")return window.capturePickerView();
       if(command==='cosmetics_request'){
         const api = offer.slot === 'hat' ? '/v1/hats/' : '/v1/wings/';
         if(args.path===api+'claim'){state.owned=true;return {id:offer.id,revision:offer.revision}}
@@ -67,7 +69,7 @@ try {
   assert.ok(await openLocker.evaluate(button => {
     const row = button.getBoundingClientRect();
     const label = button.querySelector('span').getBoundingClientRect();
-    const arrow = button.querySelector('svg.lucide-arrow-right').getBoundingClientRect();
+    const arrow = button.querySelector('svg:last-child').getBoundingClientRect();
     const centerX = bounds => bounds.left + bounds.width / 2;
     const centerY = bounds => bounds.top + bounds.height / 2;
     return Math.abs(centerX(label) - centerX(row)) <= 1 &&
@@ -78,6 +80,13 @@ try {
   await page.locator('.wing-detail canvas[data-ready="true"][data-skin="true"]').waitFor();
   const card=page.locator('.wing-card-preview canvas[data-ready="true"]');
   await card.first().waitFor();
+  await page.waitForFunction(() => {
+    const cards = Array.from(document.querySelectorAll('.wing-card-preview canvas'));
+    return cards.length && cards.every(canvas => {
+      const ctx = canvas.getContext('2d');
+      return ctx && ctx.getImageData(0, 0, canvas.width, canvas.height).data.some((v, i) => i % 4 === 3 && v > 0);
+    });
+  });
   assert.equal(await page.locator('.wing-card img,.wing-card svg').count(),0);
   const detail = page.locator('.wing-detail canvas');
   const beforeZoom = await detail.screenshot();
@@ -89,6 +98,7 @@ try {
   await wear.click();
   await page.waitForFunction(()=>window.wingUi.equipped?.id);
   assert.equal(await wear.getAttribute('aria-description'),'Equipped');
+  assert.equal(await page.locator('.desktop-island-notice-preview').count(),0,'claim and equip stay quiet');
   assert.equal(await page.locator('.wing-detail img').count(),0);
   if (mushroom) {
     const bunny = page.getByRole('button',{name:'Wear Bunny Ears',exact:true});
@@ -100,6 +110,7 @@ try {
     assert.equal(await page.locator('.wing-detail img').count(),0);
     await page.evaluate(()=>{window.wingUi.hold=false;window.wingUi.rejectNext=true;window.wingUi.resume()});
     await page.waitForFunction(()=>document.querySelector('[aria-label="Wear Mushroom Cap"]').getAttribute('aria-description')==='Equipped');
+    await page.locator('.desktop-island-notice-preview').filter({hasText:'Test equip failed'}).waitFor();
     await bunny.click();
     await page.waitForFunction(()=>window.wingUi.equipped?.id==='bunny-ears');
     await wear.click();
@@ -124,10 +135,41 @@ try {
   await page.locator('.locker-detail-copy').click();
   await page.waitForFunction(()=>window.wingUi.equipped.colors.left==='#18265d');
   await picker.click();
-  await page.evaluate(()=>{ window.EyeDropper=class {async open(){return {sRGBHex:'#538fe7'}}}; });
-  await page.getByRole('button',{name:'Pick a color from the screen'}).click();
-  await page.waitForFunction(()=>window.wingUi.equipped.colors.left==='#538fe7');
+  const pipette = page.getByRole('button',{name:'Pick a color from the screen'});
+  await pipette.click();
+  const overlay = page.locator('.launcher-eyedropper');
+  await overlay.locator('.eyedropper-frame').waitFor();
   await page.keyboard.press('Escape');
+  await page.getByRole('textbox',{name:'Hex color'}).waitFor();
+  assert.equal(await page.getByRole('textbox',{name:'Hex color'}).inputValue(),'#18265D','Escape cancels sampling only');
+  await pipette.click();
+  await overlay.locator('.eyedropper-frame').waitFor();
+  const target = await page.evaluate(() => {
+    const image = document.querySelector('.eyedropper-frame');
+    const preview = document.querySelector('.wing-detail canvas').getBoundingClientRect();
+    const bounds = image.getBoundingClientRect();
+    const canvas = document.createElement('canvas');
+    canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+    const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    for(let y=Math.ceil(preview.top+preview.height*.12);y<preview.bottom-1;y++){
+      for(let x=Math.ceil(preview.left+preview.width*.33);x<preview.left+preview.width*.67;x++){
+        const i=4*(Math.floor(y*canvas.height/bounds.height)*canvas.width+Math.floor(x*canvas.width/bounds.width));
+        const [r,g,b]=pixels.subarray(i,i+3);
+        if(r>g+15 && b>g+12 && r>=b) return {x,y,hex:'#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')};
+      }
+    }
+    throw Error('No skin-colored pixel in the player preview');
+  });
+  await page.mouse.move(target.x,target.y);
+  assert.equal(await overlay.evaluate(el=>getComputedStyle(el).cursor),'crosshair');
+  assert.equal(await overlay.locator('canvas').evaluate(el=>Array.from(el.getContext('2d').getImageData(5,5,1,1).data).slice(0,3).map(v=>v.toString(16).padStart(2,'0')).join('')),target.hex.slice(1));
+  await page.mouse.click(target.x,target.y);
+  await page.waitForFunction(hex=>window.wingUi.equipped.colors.left===hex,target.hex);
+  assert.equal(await page.getByRole('textbox',{name:'Hex color'}).inputValue(),target.hex.toUpperCase());
+  if (!mushroom) assert.equal(await page.locator('.desktop-island-notice-preview').count(),0,'color changes and undo stay quiet');
+  await page.locator('.locker-detail-copy').click();
+  assert.equal(await page.getByRole('textbox',{name:'Hex color'}).count(),0,'only a subsequent click dismisses the picker');
   await page.keyboard.press('Control+z');
   await page.waitForFunction(()=>window.wingUi.equipped.colors.left==='#18265d');
   for (const label of labels) {

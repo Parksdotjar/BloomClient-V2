@@ -1625,3 +1625,78 @@ Parks approved the ears' shape and replaced the initial palette with rose pink (
 ### 2026-11-26 — Launcher notifications in the top island
 
 Parks retired the full-width rising notification bar and requested the top island for all transient outcomes, including copies and errors. The compact preview expands for details and crash sharing.
+
+### 2026-11-27 — Quieter launcher notifications
+
+Parks requested that cosmetic equips and color saves stay quiet and extended that rule across the launcher. Routine actions use their visible result. Errors, blockers, clipboard feedback and meaningful results still use the island.
+
+### 2026-11-27 — Sample colors directly from the locker skin
+
+Parks reported that the crosshair disappeared beyond the eyedropper button and requested a magnified pixel target. The Windows picker samples the composited launcher frame, including WebGL previews, and keeps the panel open after selection.
+
+- 2026-11-27 — Parks approved the Northstar square buckle after rejecting the thin compass. The local locker exposes independent crown, brim, woven band and brass buckle colors. Crown and brim share the approved midnight default.
+
+- 2026-11-27 — Added the approved Cinder Horns design to the local Hats locker with independent left and right horn and tip colors.
+
+2026-11-27 — Friends now reuses the Settings Minecraft portrait and gives text-only account actions the full menu row.
+
+2026-11-27 — Parks rejected the plain Appear offline toggle and inline website code. The reference illustrates a status chooser. The local revision displays the current state, offers Online and Invisible, and puts pairing and copy feedback in a separate view. Visual review pending.
+
+2026-11-27 — Parks confirmed real-account switching and friend delivery between ParksVAL and batmanTBH. The pending-request inbox now selects the other player for both directions. Status and website pairing live in the global rail account menu. The rail and Settings show the active Minecraft skin portrait. Removed the custom picture uploader and duplicate Friends account button. Ten backend tests passed, including sender and recipient labels.
+
+2026-11-27 — The local rail menu now anchors Status, Switch account and Link website account to aligned flyouts. Unique sibling keys prevent duplicated rows after switching. Native player settings normalize Minecraft UUIDs. The launcher issues single-use eight-digit codes valid for five minutes, with authenticated and rate-limited redemption. The dedicated /link-player/ page supports typing, grouped paste, leading zeros and reduced motion, and is reachable from Connections and the rail. Four isolated browser account switches, flyout alignment, web sign-in gate and simulated successful submission passed. Social tests cover actual API redemption using test identities. Live OAuth and public rollout remain pending.
+
+2026-11-27 — Confirmed player linking now offers a white Back to launcher button using the registered delight://launcher scheme and a Back to dashboard text link. The launcher checks authenticated player link status when the panel opens or regains focus, and every four seconds while a code is displayed. Backend and isolated browser checks cover pending-to-linked. Windows delegates the URI to the installed app.
+
+2026-11-27 — Local Social opens to Play together. Party hosting, invitations, instance selection and explicit server joining share the landing page. Conversation search and thread lists appear in Messages. Friends supports all and online filters. This revision awaits Parks's visual review.
+
+2026-11-27 — Parks rejected page-sized Social navigation and thread-list reflow. Local redesign uses a curved right-edge tab, stationary launcher workspace, and list-to-thread navigation inside a persistent drawer frame. Visual approval pending.
+
+2026-11-27 — The corrected reference groups Party into three distinct surfaces. The local revision separates the roster, invitation row and server settings. The primary footer action saves the server, then offers Join server. Implementation awaits owner review.
+
+2026-11-27 — Parks specified list-first messaging. DMs and groups use the same in-header back arrow and restore the existing conversation list.
+
+2026-11-27 — Parks rejected the header stack and permanently displayed Party forms. Replaced them with roster-first Party navigation, plus-to-invite, and a Server detail view. Removed the drawer title and X. Outside clicks dismiss the drawer while activating the underlying launcher control.
+
+2026-11-27 — Parks requested a red End party button. Local footer now uses a red tinted raised button and a neutral Server button, with consistent dimensions and pressed feedback.
+
+2026-11-27 — Parks requested sharper Social rendering, an integrated returning curve, a shorter panel and an invite dropdown with shared 3D Minecraft portraits. The local changes remove the permanent drawer transform, the hover timer and the separate invite page. Visual review pending.
+
+2026-11-27 — Parks requested rounded, spaced Social tabs, slower travel and a green check after an invitation. Local implementation replaces the old underline and text confirmation. The before comparison used the packaged profile's Verdana at 95%.
+
+Verified WebView-style Chromium rasterization at 95% zoom. The previous panel suppressed LCD subpixel smoothing even with identical text styles. Updated frame restores it while retaining the curved outline.
+
+2026-11-27 — Parks requested centered Social tabs at the same size, pinned bottom roster controls without a line, and a divider that curves into the right wall. Local layout revision prepared for verification.
+
+2026-11-27 — Social drawer edge correction. Parks spotted a second vertical line continuing through the upper and lower window curves. Removed the drawer's full-height sidewall border and aligned the open drawer returns with the existing workspace outline.
+
+2026-11-27 — Social drawer motion now grows both returns directly from the workspace divider. At 95% scale the right anchor stayed within 0.001 CSS pixels across four sampled animation frames. The last local build omitted the Social test endpoint, so Party contacted production. The local preview build script supplies the existing local CA and port 19195.
+
+2026-11-27 — Social uses the right-edge drawer. Friends begins with the username field and icon-only request action. Friends and Inbox omit duplicate headings and totals. Direct and group composers begin on one row, grow with wrapped text and keep emoji and send at the right. Unpinned messages expire after seven days. Local backend and drawer tests passed.
+
+2026-11-27 — Party members share their current multiplayer connection from the ellipsis beside their name. The host appears first with a portrait-width crown. Join sits on the right of a shared player row. The mod reports the current connection locally. Explicit sharing creates a 30-second renewable party lease tied to that connection visit. Stopping, leaving or switching servers ends sharing. The previous footer server view is retired. Four mod builds and the backend and drawer suites passed. Two live players joining the same server still needs in-game verification.
+
+2026-11-27 — Parks revised the party roster: remove the ellipsis beside every name. The right-side action on your own row reads Share or Stop sharing; other members show Join there only while sharing. Keep the host crown. Implemented locally.
+
+2026-11-27 — Give the party Join button a solid lime fill (#A3E635), dark text and no border. Share and Stop sharing retain their neutral style.
+Parks revised the button colors before handoff: solid lime Join, solid red Stop sharing, white text on both and no outline. The inactive Share action stays neutral.
+
+2026-11-27 — Keep party invitations on one row with smaller text. Truncate the sender name with an ellipsis, preserve the invitation wording, and use filled borderless lime check and red X buttons.
+
+2026-11-27 — Incoming party invitations expand the title-bar island for ten seconds. One-line invitation text, ellipsized sender, circular lime accept and red decline actions, and a one-pixel white countdown shrinking toward the left. Timeout hides the island invite while leaving the pending request in Party. Verified both response actions, timeout and screenshot at 95%.
+
+2026-11-27 — Settings → Appearance includes Rail hover brightness. The 50% midpoint uses the original rail material. Adjusting the slider treats the navigation button surface and its inset bevel as one layer. Icon color and progress indicators stay at their theme values. Appearance presets save the setting and resetting Appearance returns it to 50%. Verified both ends and persistence in Light and Dark at 95% interface size.
+
+2026-11-27 — New Appearance defaults requested by Parks: Dark, canvas #0F0F0F, icon rail #0C0B0B, context sidebar #0C0C0C, island #050505 and text #FFFFFF. Bahnschrift, 95% interface size, Compact, rail hover 35%, dividers 12%, Reduce motion off and Snowfall off. Default accent stays #87A9F3. Verified fresh-profile settings and Reset appearance.
+
+2026-11-27 — Create party appears only after the roster request confirms the player has no party. A delayed-response UI test verified opening Social and returning to Party from Friends while already in a party.
+
+2026-11-27 — Parks requested a centered onboarding progress bar, distinct appearance, accent and instance-folder steps, and a developer rehearsal that preserves account and settings. Retained the green Microsoft code-copy transition.
+
+2026-11-27 — Parks corrected the onboarding location to launcher-wide data and requested default/custom rows. Appearance thumbnails now share a miniature of Home across Settings and setup. Custom accent uses the universal picker.
+
+2026-11-27 — Microsoft device-code border follows the enclosing stack. Parks requested common accent colors in place of muted neutrals.
+
+2026-11-27 — Parks chose Phosphor and requested filled active rail icons with outlined inactive destinations. Replaced the launcher control icon family and verified navigation state transitions.
+
+2026-11-27 — Applied the primary rail's Phosphor selection treatment to the Locker category sidebar at Parks's request.

@@ -4,6 +4,7 @@ mod fabric_loader;
 mod catalog_filters;
 mod launch_cache;
 mod screenshots;
+mod eyedropper;
 mod pack_artwork;
 mod content_transfer;
 mod content_downloads;
@@ -1832,21 +1833,80 @@ struct InstanceContentItem {
     icon: Option<String>,
 }
 
-fn bloom_data_dir() -> Result<std::path::PathBuf, String> {
+fn storage_anchor() -> Result<std::path::PathBuf, String> {
     #[cfg(debug_assertions)]
-    if let Some(override_path) = std::env::var_os("BLOOM_DEV_DATA_DIR") {
-        let path = std::path::PathBuf::from(override_path);
-        if !path.is_absolute() {
-            return Err("BLOOM_DEV_DATA_DIR must be an absolute development-only path.".into());
-        }
-        std::fs::create_dir_all(path.join("instances")).map_err(|error| {
-            format!("Could not create the isolated Delight development profile: {error}")
-        })?;
-        return Ok(path);
+    if let Some(path) = std::env::var_os("BLOOM_DEV_DATA_DIR") {
+        let path = std::path::PathBuf::from(path);
+        return path.is_absolute().then_some(path).ok_or_else(|| "Expected an absolute development directory.".into());
     }
-    let path = platform::data_directory()?;
-    std::fs::create_dir_all(path.join("instances")).map_err(|error| error.to_string())?;
+    platform::data_directory()
+}
+
+fn custom_storage_root() -> Result<Option<std::path::PathBuf>, String> {
+    let marker = storage_anchor()?.join("storage-location-v1.json");
+    read_storage_marker(&marker)
+}
+
+fn read_storage_marker(marker: &std::path::Path) -> Result<Option<std::path::PathBuf>, String> {
+    let bytes = match std::fs::read(marker) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+    };
+    let path: std::path::PathBuf = serde_json::from_slice(&bytes).map_err(|_| "Invalid Delight storage location.")?;
+    if !path.is_absolute() || !path.join(".delight-storage").is_file() {
+        return Err("Your Delight folder is unavailable. Reconnect its drive and try again.".into());
+    }
+    Ok(Some(path))
+}
+
+fn bloom_data_dir() -> Result<std::path::PathBuf, String> {
+    let path = custom_storage_root()?.unwrap_or(storage_anchor()?);
+    std::fs::create_dir_all(path.join("instances")).map_err(|e| e.to_string())?;
     Ok(path)
+}
+
+#[tauri::command]
+fn onboarding_storage() -> Result<serde_json::Value, String> {
+    let root = custom_storage_root()?;
+    let data = bloom_data_dir()?;
+    let existing = root.is_some() || data.join("minecraft-accounts.json").is_file()
+        || std::fs::read_dir(data.join("instances")).map_err(|e| e.to_string())?
+            .any(|entry| entry.map_or(true, |entry| entry.path().extension().is_some_and(|ext| ext == "json")));
+    Ok(serde_json::json!({"defaultPath":storage_anchor()?, "path":root, "existing":existing}))
+}
+
+#[tauri::command]
+fn init_onboarding_storage(parent: String) -> Result<(), String> {
+    let parent = std::fs::canonicalize(parent).map_err(|_| "Choose an available folder.")?;
+    let root = parent.join("Delight Client");
+    if custom_storage_root()?.as_ref() == Some(&root) { return Ok(()); }
+    if onboarding_storage()?["existing"] == true {
+        return Err("This installation already has a library. Its location is fixed during setup.".into());
+    }
+    let anchor = std::fs::canonicalize(bloom_data_dir()?).map_err(|e| e.to_string())?;
+    if root.starts_with(&anchor) || anchor.starts_with(&root) {
+        return Err("Choose a folder outside the current launcher data folder.".into());
+    }
+    write_storage_marker(&anchor, &root)
+}
+
+fn write_storage_marker(anchor: &std::path::Path, root: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir(&root).map_err(|e| format!("Could not create a new Delight Client folder here: {e}"))?;
+    let owner = root.join(".delight-storage");
+    let temp = anchor.join(format!("storage-location-{}.tmp", uuid::Uuid::new_v4()));
+    let result = (|| {
+        std::fs::write(&owner, b"1")?;
+        std::fs::write(&temp, serde_json::to_vec(root)?)?;
+        std::fs::hard_link(&temp, anchor.join("storage-location-v1.json"))
+    })();
+    let _ = std::fs::remove_file(temp);
+    if result.is_err() {
+        let _ = std::fs::remove_file(owner);
+        let _ = std::fs::remove_dir(root);
+    }
+    result.map_err(|e: std::io::Error| format!("Could not save the launcher location: {e}"))
+
 }
 
 fn patch_options(path: &std::path::Path, updates: &[(&str, String)]) -> Result<(), String> {
@@ -4029,7 +4089,7 @@ fn install_instance_files_internal(
             );
             install_fabric_api(config)?;
         }
-        if let Err(error) = fabric_loader::remember(config, &loader_version) {
+        if let Err(error) = fabric_loader::remember(app, config, &loader_version) {
             emit_game_log(app, instance_id, "launcher", error);
         }
     } else {
@@ -4677,6 +4737,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            eyedropper::capture_picker_view,
             greet,
             screenshots::list_screenshots,
             screenshots::screenshot_action,
@@ -4804,6 +4865,8 @@ pub fn run() {
             content_downloads::dismiss_content_download,
             launch_minecraft,
             choose_game_directory,
+            onboarding_storage,
+            init_onboarding_storage,
             exit_application,
             reserve_launcher_update,
             get_minecraft_launch_status,
@@ -4828,6 +4891,8 @@ pub fn run() {
             social::social_prepare_sign_in,
             social::social_poll_sign_in,
             social::social_session_state,
+            social::social_player_settings,
+            social::social_party,
             ask_delight::ask_delight_scope,
             ask_delight::ask_delight_history,
             ask_delight::ask_delight_remote,
@@ -4870,10 +4935,31 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
+        read_storage_marker, write_storage_marker,
         account_credential_name, allowed_pack_download, content_import_details, patch_options,
         resolve_instance_target, safe_pack_path,
         split_credential_secret, InstanceConfig,
     };
+
+    #[test]
+    fn storage_choice_survives_reopening_and_never_adopts_another_library() {
+        let scratch = std::env::temp_dir().join(uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir(&scratch).unwrap();
+        let marker = scratch.join("storage-location-v1.json");
+        let root = scratch.join("Delight Client");
+        assert_eq!(read_storage_marker(&marker).unwrap(), None);
+        write_storage_marker(&scratch, &root).unwrap();
+        assert_eq!(read_storage_marker(&marker).unwrap(), Some(root.clone()));
+        assert!(write_storage_marker(&scratch, &root).is_err());
+        let other = scratch.join("other");
+        assert!(write_storage_marker(&scratch, &other).is_err());
+        assert!(!other.exists());
+        std::fs::remove_file(root.join(".delight-storage")).unwrap();
+        assert!(read_storage_marker(&marker).is_err());
+        std::fs::remove_dir(root).unwrap();
+        std::fs::remove_file(marker).unwrap();
+        std::fs::remove_dir(scratch).unwrap();
+    }
 
     #[test]
     fn account_credentials_are_scoped_by_minecraft_uuid() {
