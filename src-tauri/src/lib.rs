@@ -2922,12 +2922,6 @@ async fn import_instance_content_files(
     tauri::async_runtime::spawn_blocking(move || {
         import_instance_content_files_blocking(instance_id, category, paths)
     })
-const PACK_FILE_LIMIT: u64 = 256 * 1024 * 1024;
-const PACK_ARCHIVE_LIMIT: u64 = 512 * 1024 * 1024;
-const PACK_OUTPUT_LIMIT: u64 = 4 * 1024 * 1024 * 1024;
-const PACK_INDEX_LIMIT: u64 = 4 * 1024 * 1024;
-const PACK_ENTRY_LIMIT: usize = 8192;
-
     .await
     .map_err(|error| format!("The content importer stopped unexpectedly: {error}"))?
 }
@@ -2957,6 +2951,12 @@ fn safe_pack_path(raw: &str) -> Result<std::path::PathBuf, String> {
     }
     Ok(path.to_path_buf())
 }
+
+const PACK_FILE_LIMIT: u64 = 256 * 1024 * 1024;
+const PACK_ARCHIVE_LIMIT: u64 = 512 * 1024 * 1024;
+const PACK_OUTPUT_LIMIT: u64 = 4 * 1024 * 1024 * 1024;
+const PACK_INDEX_LIMIT: u64 = 4 * 1024 * 1024;
+const PACK_ENTRY_LIMIT: usize = 8192;
 
 fn allowed_pack_download(url: &str) -> bool {
     reqwest::Url::parse(url).is_ok_and(|url| {
@@ -3075,10 +3075,6 @@ fn open_pack_zip(pack_path: &std::path::Path) -> Result<zip::ZipArchive<std::fs:
     }
     file.seek(SeekFrom::Start(0)).map_err(|error| error.to_string())?;
     let archive = zip::ZipArchive::new(file).map_err(|_| "Choose a valid Modrinth modpack ZIP.".to_string())?;
-            let expected = entry.size();
-            if expected > PACK_FILE_LIMIT || expected > remaining {
-                return Err("The modpack exceeds the override extraction limit.".into());
-            }
     if archive.len() > PACK_ENTRY_LIMIT { return Err("The modpack contains too many ZIP entries.".into()); }
     Ok(archive)
 }
@@ -3107,12 +3103,11 @@ fn extract_pack_overrides(
                 continue;
             }
             if let Some(parent) = target.parent() {
-    if index["files"].as_array().is_none_or(|files| files.len() > PACK_ENTRY_LIMIT)
-        || index["name"].as_str().is_some_and(|name| name.len() > 160)
-    {
-        return Err("The modpack index exceeds Delight's limits.".into());
-    }
                 std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            let expected = entry.size();
+            if expected > PACK_FILE_LIMIT || expected > remaining {
+                return Err("The modpack exceeds the override extraction limit.".into());
             }
             let mut output = std::fs::File::create(target).map_err(|error| error.to_string())?;
             let written = copy(&mut entry.by_ref().take(expected + 1), &mut output).map_err(|error| error.to_string())?;
@@ -3142,6 +3137,11 @@ fn read_fabric_pack_index(pack_path: &std::path::Path) -> Result<(serde_json::Va
     if index_text.len() as u64 > PACK_INDEX_LIMIT { return Err("The modpack index is too large.".into()); }
     let index: serde_json::Value = serde_json::from_str(&index_text)
         .map_err(|_| "The modrinth.index.json file is invalid.".to_string())?;
+    if index["files"].as_array().is_none_or(|files| files.len() > PACK_ENTRY_LIMIT)
+        || index["name"].as_str().is_some_and(|name| name.len() > 160)
+    {
+        return Err("The modpack index exceeds Delight's limits.".into());
+    }
     if index["game"] != "minecraft" {
         return Err("Delight only imports Minecraft modpacks.".into());
     }
@@ -3151,7 +3151,6 @@ fn read_fabric_pack_index(pack_path: &std::path::Path) -> Result<(serde_json::Va
     let minecraft_version = dependencies
         .get("minecraft")
         .and_then(|value| value.as_str())
-    legacy_share: bool,
         .ok_or("The pack does not declare a Minecraft version.")?
         .to_string();
     let fabric_version = dependencies
@@ -3173,7 +3172,6 @@ fn read_fabric_pack_index(pack_path: &std::path::Path) -> Result<(serde_json::Va
         "Imported Fabric Pack".to_string()
     } else {
         name.to_string()
-    let game_root = platform::game_directory()?.join("instances");
     };
     Ok((index, name, minecraft_version, fabric_version))
 }
@@ -3183,6 +3181,7 @@ fn import_fabric_modpack_path_with_icon(
     state: &LauncherState,
     pack_path: std::path::PathBuf,
     icon: Option<String>,
+    legacy_share: bool,
 ) -> Result<String, String> {
     let (index, name, minecraft_version, fabric_version) = read_fabric_pack_index(&pack_path)?;
     let base_id = name
@@ -3204,6 +3203,7 @@ fn import_fabric_modpack_path_with_icon(
         base_id
     };
     let instances_folder = bloom_data_dir()?.join("instances");
+    let game_root = platform::game_directory()?.join("instances");
     let mut id = base_id.clone();
     let mut suffix = 2;
     while instances_folder.join(format!("{id}.json")).exists() || game_root.join(&id).exists() {
@@ -3298,9 +3298,6 @@ fn import_fabric_modpack_path_with_icon(
                     remaining -= written;
                     emit_launch(&app_for_task, &id_for_task, "installing",
                         2 + (56 * (index + 1) / files.len()) as u8, "Downloading modpack files");
-        if result.is_err() && !instances_folder.join(format!("{id_for_task}.json")).exists() {
-            let _ = std::fs::remove_dir_all(&game_directory);
-        }
                 }
                 emit_launch(&app_for_task, &id_for_task, "installing", 60, "Applying modpack overrides");
                 extract_pack_overrides(&pack_path, &staging)?;
@@ -3331,6 +3328,9 @@ fn import_fabric_modpack_path_with_icon(
             )?;
             Ok(duplicate_issue.or(dependency_issue))
         })();
+        if result.is_err() && !instances_folder.join(format!("{id_for_task}.json")).exists() {
+            let _ = std::fs::remove_dir_all(&game_directory);
+        }
         match result {
             Ok(dependency_issue) => emit_launch(
                 &app_for_task,
