@@ -26,10 +26,10 @@ Parks continues working in the primary Bloom folder. Karsten's PR is tested in a
 From the primary repository:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/review-pr.ps1 -PullRequest 123 -Launch
+powershell -ExecutionPolicy Bypass -File scripts/review-pr.ps1 -PullRequest 123
 ```
 
-This fetches PR 123, creates or refreshes `BloomClient-PR-Reviews/PR-123` beside the primary repository, installs dependencies when needed, and opens Tauri development from that isolated worktree. The primary branch and dirty files remain untouched.
+This fetches PR 123 into a sibling review worktree for source inspection. A worktree shares the workstation, credentials, and permissions. Review changes to scripts and package metadata first. Use a disposable environment with no owner credentials, host mounts, or release access to build or launch contributor code. The optional `-Install` runs npm with lifecycle scripts disabled.
 
 After testing, leave an approval or requested changes on GitHub. New commits invalidate the earlier approval and should be tested again. Once checks, review, and hands-on testing all pass, use GitHub's **Squash and merge**, then delete the feature branch.
 

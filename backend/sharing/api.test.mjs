@@ -82,7 +82,18 @@ test("existing pack-channel databases migrate to managed access without enabling
 test("pack channels enforce per-person roles, revocation, and invite invalidation", async (t) => {
   const codes = ["BCDF2345", "GHJK6789", "MNPQ2345", "RSTW6789"];
   const invalidated = [];
-  const api = createSharingApi({ store: new MemoryShareStore(), codeFactory: () => codes.shift() || "VWXY2345", onInviteInvalidated: code => invalidated.push(code) });
+  const claims = new Map();
+  const accepted = new Set();
+  const api = createSharingApi({
+    store: new MemoryShareStore(),
+    codeFactory: () => codes.shift() || "VWXY2345",
+    onInviteInvalidated: code => invalidated.push(code),
+    authorizeClaim: (request, code, claimToken) => {
+      const claim = claims.get(code);
+      return claim && claim.claimHash === claimToken && request.headers.authorization === `Bearer ${claim.recipientId}` ? claim : null;
+    },
+    claimAccepted: (_code, _recipient, hash) => accepted.has(hash),
+  });
   const server = http.createServer((request, response) => api.handle(request, response, new URL(request.url, "http://localhost").pathname));
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve)); t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -91,13 +102,27 @@ test("pack channels enforce per-person roles, revocation, and invite invalidatio
   assert.equal((await fetch(`${base}/v1/pack-channels/${owner.code}`)).status, 403);
 
   const memberInvite = await fetch(`${base}/v1/pack-channels/${owner.code}/invites`, { method: "POST", headers: ownerHeaders, body: JSON.stringify({ recipientId: "member_123", role: "member" }) }).then(r => r.json());
-  const member = await fetch(`${base}/v1/pack-channels/invites/redeem`, { method: "POST", body: JSON.stringify({ code: memberInvite.code }) }).then(r => r.json());
+  const redeem = (code, recipientId, claimHash) => fetch(`${base}/v1/pack-channels/invites/redeem`, {
+    method: "POST", headers: { authorization: `Bearer ${recipientId}` }, body: JSON.stringify({ code, claimToken: claimHash }),
+  });
+  claims.set(memberInvite.code, { recipientId: "member_123", role: "member", claimHash: "member-claim" });
+  assert.equal((await redeem(memberInvite.code, "editor_456", "member-claim")).status, 403);
+  const provisional = await redeem(memberInvite.code, "member_123", "member-claim").then(r => r.json());
+  assert.equal((await fetch(`${base}/v1/pack-channels/${owner.code}`, { headers: { authorization: `Bearer ${provisional.accessToken}` } })).status, 403);
+  api.resolveClaim(memberInvite.code, "member-claim", false);
+  claims.set(memberInvite.code, { recipientId: "member_123", role: "member", claimHash: "new-member-claim" });
+  const member = await redeem(memberInvite.code, "member_123", "new-member-claim").then(r => r.json());
+  accepted.add("new-member-claim");
+  api.resolveClaim(memberInvite.code, "new-member-claim", true);
   assert.equal(member.role, "member");
   assert.equal((await fetch(`${base}/v1/pack-channels/${owner.code}`, { headers: { authorization: `Bearer ${member.accessToken}` } })).status, 200);
   assert.equal((await fetch(`${base}/v1/pack-channels/${owner.code}`, { method: "PUT", headers: { authorization: `Bearer ${member.accessToken}` }, body: JSON.stringify({ baseRevision: 1, manifest }) })).status, 403);
 
   const editorInvite = await fetch(`${base}/v1/pack-channels/${owner.code}/invites`, { method: "POST", headers: ownerHeaders, body: JSON.stringify({ recipientId: "editor_456", role: "editor" }) }).then(r => r.json());
-  const editor = await fetch(`${base}/v1/pack-channels/invites/redeem`, { method: "POST", body: JSON.stringify({ code: editorInvite.code }) }).then(r => r.json());
+  claims.set(editorInvite.code, { recipientId: "editor_456", role: "editor", claimHash: "editor-claim" });
+  const editor = await redeem(editorInvite.code, "editor_456", "editor-claim").then(r => r.json());
+  accepted.add("editor-claim");
+  api.resolveClaim(editorInvite.code, "editor-claim", true);
   const published = await fetch(`${base}/v1/pack-channels/${owner.code}`, { method: "PUT", headers: { authorization: `Bearer ${editor.accessToken}` }, body: JSON.stringify({ baseRevision: 1, manifest: { ...manifest, name: "Friends Pack Updated" } }) });
   assert.equal(published.status, 200); assert.equal((await published.json()).revision, 2);
 
@@ -114,5 +139,5 @@ test("pack channels enforce per-person roles, revocation, and invite invalidatio
   assert.equal(changedPending.id, pending.id); assert.equal(changedPending.role, "editor");
   assert.equal((await fetch(`${base}/v1/pack-channels/${owner.code}/invites/${pending.id}`, { method: "DELETE", headers: ownerHeaders })).status, 200);
   assert.deepEqual(invalidated, [pending.id]);
-  assert.equal((await fetch(`${base}/v1/pack-channels/invites/redeem`, { method: "POST", body: JSON.stringify({ code: pending.code }) })).status, 404);
+  assert.equal((await fetch(`${base}/v1/pack-channels/invites/redeem`, { method: "POST", body: JSON.stringify({ code: pending.code }) })).status, 403);
 });

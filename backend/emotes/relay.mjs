@@ -17,7 +17,7 @@ export function attachEmoteRelay(server, { authenticate, now = Date.now, maxConn
     if(client.socket.bufferedAmount>128*1024){client.socket.close(1013,'Slow connection');return;}
     client.socket.send(JSON.stringify(value));
   };
-  const interested = (viewer, actor) => viewer!==actor && viewer.scope===actor.scope && viewer.subscriptions.has(actor.uuid);
+  const interested = (viewer, actor) => viewer!==actor && viewer.scope===actor.scope && viewer.subscriptions.has(actor.uuid) && actor.subscriptions.has(viewer.uuid);
   const broadcast = (actor, value) => { for(const viewer of clients) if(interested(viewer,actor))send(viewer,value); };
   const stop = client => {
     if(!client.active)return;

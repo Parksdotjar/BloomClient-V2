@@ -1162,6 +1162,7 @@ async fn sign_out_minecraft(
         let Some(active_id) = store.active_id.clone() else {
             return Ok(None);
         };
+        social::revoke_profile_session(&active_id)?;
         delete_account_credentials(&active_id)
             .map_err(|error| format!("The system credential store could not remove the saved account: {error}"))?;
         store.accounts.retain(|account| account.id != active_id);
@@ -2951,27 +2952,140 @@ fn safe_pack_path(raw: &str) -> Result<std::path::PathBuf, String> {
     Ok(path.to_path_buf())
 }
 
+const PACK_FILE_LIMIT: u64 = 256 * 1024 * 1024;
+const PACK_ARCHIVE_LIMIT: u64 = 512 * 1024 * 1024;
+const PACK_OUTPUT_LIMIT: u64 = 4 * 1024 * 1024 * 1024;
+const PACK_INDEX_LIMIT: u64 = 4 * 1024 * 1024;
+const PACK_ENTRY_LIMIT: usize = 8192;
+
 fn allowed_pack_download(url: &str) -> bool {
-    reqwest::Url::parse(url)
-        .ok()
-        .and_then(|url| url.host_str().map(str::to_ascii_lowercase))
-        .map(|host| {
-            matches!(
-                host.as_str(),
-                "cdn.modrinth.com" | "github.com" | "raw.githubusercontent.com" | "gitlab.com"
-            )
-        })
-        .unwrap_or(false)
+    reqwest::Url::parse(url).is_ok_and(|url| {
+        url.scheme() == "https" && url.username().is_empty() && url.password().is_none()
+            && url.port_or_known_default() == Some(443)
+            && matches!(url.host_str(), Some("cdn.modrinth.com" | "github.com"
+                | "raw.githubusercontent.com" | "release-assets.githubusercontent.com" | "gitlab.com"))
+    })
+}
+
+fn valid_pack_digest(hash: &str, length: usize) -> bool {
+    hash.len() == length && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn pack_http_client() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(90))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() < 5 && allowed_pack_download(attempt.url().as_str()) {
+                attempt.follow()
+            } else {
+                attempt.error("Untrusted modpack download redirect")
+            }
+        }))
+        .build().map_err(|error| error.to_string())
+}
+
+fn download_verified_pack_file(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    path: &std::path::Path,
+    digest: &str,
+    expected: Option<u64>,
+    maximum: u64,
+) -> Result<u64, String> {
+    use sha2::{Digest, Sha512};
+    use std::io::{Read, Write};
+    let limit = expected.unwrap_or(maximum);
+    if !allowed_pack_download(url) || limit == 0 || limit > maximum
+        || !(valid_pack_digest(digest, 128) || valid_pack_digest(digest, 40))
+    {
+        return Err("The pack contains a download without a trusted URL, checksum or valid size.".into());
+    }
+    let response = client.get(url).send().and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| format!("Modpack download failed: {error}"))?;
+    if !response.status().is_success() || response.content_length().is_some_and(|size| {
+        size > limit || expected.is_some_and(|required| size != required)
+    }) {
+        return Err("A pack download returned an invalid size or status.".into());
+    }
+    let parent = path.parent().ok_or("Invalid modpack download destination.")?;
+    std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let temporary = parent.join(format!(".pack-{}.download", uuid::Uuid::new_v4()));
+    let result = (|| {
+        let mut target = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary)
+            .map_err(|error| error.to_string())?;
+        let mut stream = response.take(limit + 1);
+        let mut hash = Sha512::new();
+        let mut buffer = [0; 64 * 1024];
+        let mut written = 0;
+        loop {
+            let count = stream.read(&mut buffer).map_err(|error| error.to_string())?;
+            if count == 0 { break; }
+            written += count as u64;
+            if written > limit { return Err("A pack download exceeded its byte limit.".into()); }
+            target.write_all(&buffer[..count]).map_err(|error| error.to_string())?;
+            hash.update(&buffer[..count]);
+        }
+        if written == 0 || expected.is_some_and(|size| size != written) {
+            return Err("A pack download did not match its declared size.".into());
+        }
+        target.sync_all().map_err(|error| error.to_string())?;
+        drop(target);
+        let actual = if digest.len() == 128 { format!("{:x}", hash.finalize()) } else {
+            mc_launcher_core::io::hash::sha1_file(&temporary).map_err(|error| error.to_string())?
+        };
+        if !actual.eq_ignore_ascii_case(digest) { return Err("A pack download failed checksum verification.".into()); }
+        std::fs::rename(&temporary, path).map_err(|error| error.to_string())?;
+        Ok(written)
+    })();
+    if result.is_err() { let _ = std::fs::remove_file(&temporary); }
+    result
+}
+
+fn open_pack_zip(pack_path: &std::path::Path) -> Result<zip::ZipArchive<std::fs::File>, String> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let mut file = std::fs::File::open(pack_path).map_err(|error| error.to_string())?;
+    let length = file.metadata().map_err(|error| error.to_string())?.len();
+    if length > PACK_ARCHIVE_LIMIT {
+        return Err("The modpack archive is larger than 512 MiB.".into());
+    }
+
+    // Inspect the central directory footer before the ZIP library allocates
+    // per-entry metadata. Small Modrinth exports fit in ordinary single-disk ZIP.
+    const FOOTER_SIZE: usize = 22;
+    const DIRECTORY_LIMIT: u64 = 16 * 1024 * 1024;
+    let tail_size = length.min((FOOTER_SIZE + u16::MAX as usize) as u64) as usize;
+    let mut tail = vec![0; tail_size];
+    file.seek(SeekFrom::End(-(tail_size as i64))).map_err(|error| error.to_string())?;
+    file.read_exact(&mut tail).map_err(|error| error.to_string())?;
+    let footer_index = tail.windows(FOOTER_SIZE).enumerate().rfind(|(index, bytes)| {
+        bytes[..4] == *b"PK\x05\x06"
+            && u16::from_le_bytes([bytes[20], bytes[21]]) as usize == tail_size - index - FOOTER_SIZE
+    }).map(|(index, _)| index).ok_or("The modpack ZIP directory is missing.")?;
+    let footer = &tail[footer_index..footer_index + FOOTER_SIZE];
+    let count = u16::from_le_bytes([footer[10], footer[11]]) as usize;
+    let directory_size = u32::from_le_bytes([footer[12], footer[13], footer[14], footer[15]]) as u64;
+    let directory_start = u32::from_le_bytes([footer[16], footer[17], footer[18], footer[19]]) as u64;
+    let zip64 = footer_index >= 20 && tail[footer_index - 20..footer_index - 16] == *b"PK\x06\x07";
+    if zip64 || footer[4..8] != [0; 4] || footer[8..10] != footer[10..12] ||
+        count > PACK_ENTRY_LIMIT || directory_size > DIRECTORY_LIMIT ||
+        directory_start + directory_size != length - tail_size as u64 + footer_index as u64
+    {
+        return Err("The modpack ZIP directory exceeds supported limits.".into());
+    }
+    file.seek(SeekFrom::Start(0)).map_err(|error| error.to_string())?;
+    let archive = zip::ZipArchive::new(file).map_err(|_| "Choose a valid Modrinth modpack ZIP.".to_string())?;
+    if archive.len() > PACK_ENTRY_LIMIT { return Err("The modpack contains too many ZIP entries.".into()); }
+    Ok(archive)
 }
 
 fn extract_pack_overrides(
     pack_path: &std::path::Path,
     destination: &std::path::Path,
 ) -> Result<(), String> {
-    use std::io::copy;
-    let file = std::fs::File::open(pack_path).map_err(|error| error.to_string())?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|_| "The selected file is not a valid Modrinth pack ZIP.".to_string())?;
+    use std::io::{copy, Read};
+    let mut archive = open_pack_zip(pack_path)?;
+    let mut remaining = PACK_OUTPUT_LIMIT;
     for root in ["overrides/", "client-overrides/"] {
         for index in 0..archive.len() {
             let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
@@ -2991,8 +3105,14 @@ fn extract_pack_overrides(
             if let Some(parent) = target.parent() {
                 std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
             }
+            let expected = entry.size();
+            if expected > PACK_FILE_LIMIT || expected > remaining {
+                return Err("The modpack exceeds the override extraction limit.".into());
+            }
             let mut output = std::fs::File::create(target).map_err(|error| error.to_string())?;
-            copy(&mut entry, &mut output).map_err(|error| error.to_string())?;
+            let written = copy(&mut entry.by_ref().take(expected + 1), &mut output).map_err(|error| error.to_string())?;
+            if written != expected { return Err("A modpack override exceeded its declared size.".into()); }
+            remaining -= written;
         }
     }
     Ok(())
@@ -3003,18 +3123,25 @@ fn import_fabric_modpack_path(
     state: &LauncherState,
     pack_path: std::path::PathBuf,
 ) -> Result<String, String> {
-    import_fabric_modpack_path_with_icon(app, state, pack_path, None)
+    import_fabric_modpack_path_with_icon(app, state, pack_path, None, false)
 }
 
 fn read_fabric_pack_index(pack_path: &std::path::Path) -> Result<(serde_json::Value, String, String, String), String> {
     use std::io::Read;
-    let file = std::fs::File::open(pack_path).map_err(|error| error.to_string())?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|_| "Choose a valid .mrpack or ZIP containing modrinth.index.json.".to_string())?;
+    let mut archive = open_pack_zip(pack_path)?;
+    let entry = archive.by_name("modrinth.index.json")
+        .map_err(|_| "This ZIP is not a Modrinth modpack.".to_string())?;
+    if entry.size() > PACK_INDEX_LIMIT { return Err("The modpack index is too large.".into()); }
     let mut index_text = String::new();
-    archive.by_name("modrinth.index.json").map_err(|_| "This ZIP is not a Modrinth modpack. Delight currently imports Fabric Modrinth packs only.".to_string())?.read_to_string(&mut index_text).map_err(|error| error.to_string())?;
+    entry.take(PACK_INDEX_LIMIT + 1).read_to_string(&mut index_text).map_err(|error| error.to_string())?;
+    if index_text.len() as u64 > PACK_INDEX_LIMIT { return Err("The modpack index is too large.".into()); }
     let index: serde_json::Value = serde_json::from_str(&index_text)
         .map_err(|_| "The modrinth.index.json file is invalid.".to_string())?;
+    if index["files"].as_array().is_none_or(|files| files.len() > PACK_ENTRY_LIMIT)
+        || index["name"].as_str().is_some_and(|name| name.len() > 160)
+    {
+        return Err("The modpack index exceeds Delight's limits.".into());
+    }
     if index["game"] != "minecraft" {
         return Err("Delight only imports Minecraft modpacks.".into());
     }
@@ -3054,6 +3181,7 @@ fn import_fabric_modpack_path_with_icon(
     state: &LauncherState,
     pack_path: std::path::PathBuf,
     icon: Option<String>,
+    legacy_share: bool,
 ) -> Result<String, String> {
     let (index, name, minecraft_version, fabric_version) = read_fabric_pack_index(&pack_path)?;
     let base_id = name
@@ -3075,16 +3203,14 @@ fn import_fabric_modpack_path_with_icon(
         base_id
     };
     let instances_folder = bloom_data_dir()?.join("instances");
+    let game_root = platform::game_directory()?.join("instances");
     let mut id = base_id.clone();
     let mut suffix = 2;
-    while instances_folder.join(format!("{id}.json")).exists() {
+    while instances_folder.join(format!("{id}.json")).exists() || game_root.join(&id).exists() {
         id = format!("{base_id}-{suffix}");
         suffix += 1;
     }
-    let game_directory =
-        platform::game_directory()?
-            .join("instances")
-            .join(&id);
+    let game_directory = game_root.join(&id);
     let config = InstanceConfig {
         id: id.clone(),
         name,
@@ -3105,37 +3231,33 @@ fn import_fabric_modpack_path_with_icon(
         visible: true,
         shortcut: false,
     };
-    let mut plan = mc_launcher_core::net::download::DownloadPlan::default();
-    for file in index["files"]
-        .as_array()
-        .ok_or("The pack does not contain a files list.")?
-    {
-        if file["env"]["client"] == "unsupported" {
-            continue;
+    let mut files = Vec::new();
+    let mut paths = std::collections::HashSet::new();
+    let mut declared = 0u64;
+    for file in index["files"].as_array().ok_or("Missing modpack files list.")? {
+        if file["env"]["client"] == "unsupported" { continue; }
+        let relative = safe_pack_path(file["path"].as_str().ok_or("A pack file is missing its path.")?)?;
+        if relative.as_os_str().is_empty() || !paths.insert(relative.to_string_lossy().to_lowercase()) {
+            return Err("The modpack contains a duplicate or empty download path.".into());
         }
-        let relative = safe_pack_path(
-            file["path"]
-                .as_str()
-                .ok_or("A pack file is missing its path.")?,
-        )?;
-        let url = file["downloads"]
-            .as_array()
-            .and_then(|urls| {
-                urls.iter()
-                    .filter_map(|url| url.as_str())
-                    .find(|url| allowed_pack_download(url))
-            })
+        let url = file["downloads"].as_array().filter(|urls| urls.len() <= 16)
+            .and_then(|urls| urls.iter().filter_map(|url| url.as_str())
+                .find(|url| url.len() <= 2048 && allowed_pack_download(url)))
             .ok_or("A pack file has no allowed download URL.")?;
-        let checksum = file["hashes"]["sha1"]
-            .as_str()
-            .map(|hash| mc_launcher_core::net::download::Checksum::Sha1(hash.to_string()));
-        plan.tasks
-            .push(mc_launcher_core::net::download::DownloadTask {
-                url: url.to_string(),
-                destination: game_directory.join(relative),
-                checksum,
-                label: "Downloading modpack files".into(),
-            });
+        let sha512 = file["hashes"]["sha512"].as_str().filter(|hash| valid_pack_digest(hash, 128));
+        let size = file["fileSize"].as_u64().filter(|size| (1..=PACK_FILE_LIMIT).contains(size));
+        let (digest, size) = match (sha512, size) {
+            (Some(digest), Some(size)) => (digest, Some(size)),
+            _ if legacy_share && url.starts_with("https://cdn.modrinth.com/") => {
+                let hash = file["hashes"]["sha1"].as_str().filter(|hash| valid_pack_digest(hash, 40))
+                    .ok_or("A shared pack download has no checksum.")?;
+                (hash, None)
+            }
+            _ => return Err("A pack file must include a SHA-512 checksum and a valid size.".into()),
+        };
+        declared += size.unwrap_or(0);
+        if declared > PACK_OUTPUT_LIMIT { return Err("The modpack exceeds the download limit.".into()); }
+        files.push((url.to_string(), relative, digest.to_string(), size));
     }
     {
         let mut active = state
@@ -3147,17 +3269,9 @@ fn import_fabric_modpack_path_with_icon(
         }
         *active = true;
     }
-    if let Err(error) = std::fs::create_dir_all(&game_directory) {
-        if let Ok(mut active) = state.launch_active.lock() {
-            *active = false;
-        }
+    if let Err(error) = std::fs::create_dir_all(&game_root).and_then(|_| std::fs::create_dir(&game_directory)) {
+        if let Ok(mut active) = state.launch_active.lock() { *active = false; }
         return Err(error.to_string());
-    }
-    if let Err(error) = write_instance(&config) {
-        if let Ok(mut active) = state.launch_active.lock() {
-            *active = false;
-        }
-        return Err(error);
     }
     state.cancel_requested.store(false, Ordering::SeqCst);
     let active = state.launch_active.clone();
@@ -3173,24 +3287,29 @@ fn import_fabric_modpack_path_with_icon(
             "Preparing Fabric modpack",
         );
         let result = (|| -> Result<Option<String>, String> {
-            execute_download_plan(
-                &app_for_task,
-                &id_for_task,
-                &plan,
-                &cancel,
-                2,
-                58,
-                "Downloading modpack files",
-                false,
-            )?;
-            emit_launch(
-                &app_for_task,
-                &id_for_task,
-                "installing",
-                60,
-                "Applying modpack overrides",
-            );
-            extract_pack_overrides(&pack_path, &game_directory)?;
+            let staging = game_directory.join(format!(".delight-import-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir(&staging).map_err(|error| error.to_string())?;
+            let staged = (|| {
+                let client = pack_http_client()?;
+                let mut remaining = PACK_OUTPUT_LIMIT;
+                for (index, (url, path, hash, size)) in files.iter().enumerate() {
+                    if cancel.load(Ordering::SeqCst) { return Err("__cancelled__".into()); }
+                    let written = download_verified_pack_file(&client, url, &staging.join(path), hash, *size, remaining.min(PACK_FILE_LIMIT))?;
+                    remaining -= written;
+                    emit_launch(&app_for_task, &id_for_task, "installing",
+                        2 + (56 * (index + 1) / files.len()) as u8, "Downloading modpack files");
+                }
+                emit_launch(&app_for_task, &id_for_task, "installing", 60, "Applying modpack overrides");
+                extract_pack_overrides(&pack_path, &staging)?;
+                for entry in std::fs::read_dir(&staging).map_err(|error| error.to_string())? {
+                    let entry = entry.map_err(|error| error.to_string())?;
+                    std::fs::rename(entry.path(), game_directory.join(entry.file_name())).map_err(|error| error.to_string())?;
+                }
+                Ok::<(), String>(())
+            })();
+            let _ = std::fs::remove_dir_all(staging);
+            staged?;
+            write_instance(&config)?;
             let duplicate_issue = mod_duplicates::before_play(&app_for_task, &config).err();
             emit_launch(&app_for_task, &id_for_task, "installing", 61, "Checking required mod dependencies");
             let dependency_issue = pack_compatibility::dependencies::catalog::complete_pack_import(&config, &cancel).err();
@@ -3209,6 +3328,9 @@ fn import_fabric_modpack_path_with_icon(
             )?;
             Ok(duplicate_issue.or(dependency_issue))
         })();
+        if result.is_err() && !instances_folder.join(format!("{id_for_task}.json")).exists() {
+            let _ = std::fs::remove_dir_all(&game_directory);
+        }
         match result {
             Ok(dependency_issue) => emit_launch(
                 &app_for_task,
@@ -3310,22 +3432,10 @@ async fn import_modrinth_modpack(
     {
         return Err("Delight only imports trusted Modrinth .mrpack downloads.".into());
     }
-    if file.size > 512 * 1024 * 1024 {
-        return Err("That Modrinth pack is larger than Delight's 512 MB import limit.".into());
-    }
-    let bytes = client
-        .get(&file.url)
-        .send()
-        .await
-        .map_err(|error| format!("Delight could not download that Modrinth pack: {error}"))?
-        .error_for_status()
-        .map_err(|error| format!("The Modrinth pack download failed: {error}"))?
-        .bytes()
-        .await
-        .map_err(|error| format!("Delight could not read that Modrinth pack: {error}"))?;
-    if bytes.len() > 512 * 1024 * 1024 {
-        return Err("That Modrinth pack exceeded Delight's 512 MB import limit.".into());
-    }
+    let archive_url = file.url.clone();
+    let archive_size = file.size;
+    let archive_hash = file.hashes.get("sha512").filter(|hash| valid_pack_digest(hash, 128))
+        .ok_or("The Modrinth archive has no SHA-512 checksum.")?.clone();
     let imports = bloom_data_dir()?.join("imports");
     std::fs::create_dir_all(&imports).map_err(|error| error.to_string())?;
     let safe_project = project_id
@@ -3340,9 +3450,12 @@ async fn import_modrinth_modpack(
             character.is_ascii_alphanumeric() || *character == '-' || *character == '_'
         })
         .collect::<String>();
-    let pack_path = imports.join(format!("{}-{}.mrpack", safe_project, safe_version));
-    std::fs::write(&pack_path, bytes)
-        .map_err(|error| format!("Delight could not save the downloaded pack: {error}"))?;
+    let pack_path = imports.join(format!("{safe_project}-{safe_version}-{}.mrpack", uuid::Uuid::new_v4()));
+    let destination = pack_path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        download_verified_pack_file(&pack_http_client()?, &archive_url, &destination, &archive_hash,
+            Some(archive_size), PACK_ARCHIVE_LIMIT)
+    }).await.map_err(|error| error.to_string())??;
     // Keep the canonical project artwork with the instance, including during installation.
     let icon = async {
         let project: serde_json::Value = client
@@ -3353,7 +3466,7 @@ async fn import_modrinth_modpack(
         // Validate the source and persist its small URL, not base64 image bytes.
         cache::get_cached_catalog_artwork(url.clone()).ok().map(|_| url)
     }.await;
-    import_fabric_modpack_path_with_icon(app, &state, pack_path, icon)
+    import_fabric_modpack_path_with_icon(app, &state, pack_path, icon, false)
 }
 
 fn install_fabric_api(config: &InstanceConfig) -> Result<(), String> {

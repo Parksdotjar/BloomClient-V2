@@ -48,7 +48,10 @@ const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const uuid = () => crypto.randomUUID();
 const now = () => Date.now();
 const MESSAGE_RETENTION_MS = 7 * 24 * 60 * 60_000;
-const PINNED_BLOB_EXPIRY = 253402300799000;
+const DURABLE_RETENTION_MS = 90 * 24 * 60 * 60_000;
+const MAX_PREKEYS = 100;
+const BLOB_OWNER_BYTES = 128 * 1024 * 1024;
+const BLOB_GLOBAL_BYTES = 2 * 1024 * 1024 * 1024;
 const text = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
 const validUsername = (value) => /^[A-Za-z0-9_]{3,20}$/.test(value);
 const validKey = (value) => typeof value === "string" && value.length >= 20 && value.length <= 512;
@@ -306,7 +309,7 @@ async function verifyJavaPlayer(token) {
   return result.json();
 }
 
-export function createSocialApi({ auth, database: accountDatabase, siteOrigin, siteOrigins = [siteOrigin], env = process.env, verifyPlayer = verifyJavaPlayer, onInstanceInviteClosed = () => {} } = {}) {
+export function createSocialApi({ auth, database: accountDatabase, siteOrigin, siteOrigins = [siteOrigin], env = process.env, verifyPlayer = verifyJavaPlayer, onInstanceInviteClosed = () => {}, onInstanceInviteResolved = () => {} } = {}) {
   const dataDirectory = path.resolve(env.BLOOM_SOCIAL_DATA_DIR || env.BLOOM_AUTH_DATA_DIR || path.join(process.cwd(), ".bloom-auth"));
   fs.mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
   const database = new DatabaseSync(path.join(dataDirectory, "social.sqlite"));
@@ -319,6 +322,20 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
     digest TEXT PRIMARY KEY, player_id TEXT NOT NULL UNIQUE REFERENCES social_users(id), expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS player_visibility (player_id TEXT PRIMARY KEY REFERENCES social_users(id), hidden INTEGER NOT NULL DEFAULT 0);`);
 
+  if (!database.prepare("PRAGMA table_info(social_sessions)").all().some(column => column.name === "family_id")) {
+    database.exec("ALTER TABLE social_sessions ADD COLUMN family_id TEXT");
+  }
+  database.exec(`CREATE INDEX IF NOT EXISTS social_session_family ON social_sessions(user_id, device_id, family_id);
+    CREATE INDEX IF NOT EXISTS social_envelopes_sender ON social_envelopes(sender_id);
+    CREATE INDEX IF NOT EXISTS social_envelope_capacity_conversation ON social_envelopes(conversation_id);
+    CREATE INDEX IF NOT EXISTS social_envelope_capacity_group ON social_group_envelopes(group_id);
+    CREATE INDEX IF NOT EXISTS social_group_envelopes_sender ON social_group_envelopes(sender_id);
+    CREATE INDEX IF NOT EXISTS social_blob_owner ON social_blobs(owner_id);
+    CREATE TABLE IF NOT EXISTS social_prekey_claim_budget (
+      requester TEXT NOT NULL, device_id TEXT NOT NULL, claimed_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS social_prekey_claim_device ON social_prekey_claim_budget(device_id, claimed_at);
+    CREATE INDEX IF NOT EXISTS social_prekey_claim_expiry ON social_prekey_claim_budget(claimed_at);`);
   const blobDirectory = path.join(dataDirectory, "social-blobs");
   fs.mkdirSync(blobDirectory, { recursive: true, mode: 0o700 });
   let lastRetentionSweep = 0;
@@ -329,6 +346,13 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
     const cutoff = timestamp - MESSAGE_RETENTION_MS;
     database.prepare("DELETE FROM social_envelopes WHERE event_kind IN ('message','reaction','edit') AND created_at <= ?").run(cutoff);
     database.prepare("DELETE FROM social_group_envelopes WHERE event_kind IN ('message','reaction','edit') AND created_at <= ?").run(cutoff);
+    for (const table of ["social_envelopes", "social_group_envelopes"]) {
+      database.prepare(`DELETE FROM ${table} WHERE event_kind IN ('security','pin') AND created_at <= ?`).run(timestamp - DURABLE_RETENTION_MS);
+    }
+    database.prepare("DELETE FROM social_prekey_claim_budget WHERE claimed_at <= ?").run(timestamp - 60 * 60_000);
+    database.prepare("DELETE FROM social_one_time_prekeys WHERE claimed_at IS NOT NULL AND claimed_at <= ?").run(timestamp - 60 * 60_000);
+    database.prepare("DELETE FROM social_sessions WHERE refresh_expires_at <= ?").run(timestamp);
+    database.prepare("UPDATE social_blobs SET expires_at = created_at + ? WHERE expires_at > created_at + ?").run(DURABLE_RETENTION_MS, DURABLE_RETENTION_MS);
     const expiredBlobs = database.prepare("SELECT id FROM social_blobs WHERE expires_at <= ?").all(timestamp);
     database.prepare("DELETE FROM social_blobs WHERE expires_at <= ?").run(timestamp);
     for (const blob of expiredBlobs) {
@@ -337,21 +361,43 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
     }
   };
   purgeExpiredData(true);
+  for (const name of fs.readdirSync(blobDirectory)) {
+    if (/^[0-9a-f-]{36}\.bin$/i.test(name) && !database.prepare("SELECT 1 FROM social_blobs WHERE id = ?").get(name.slice(0, -4))) {
+      fs.unlinkSync(path.join(blobDirectory, name));
+    }
+  }
   const retentionTimer = setInterval(() => {
     try { purgeExpiredData(true); }
     catch (error) { console.error("Social retention cleanup failed", error?.message || error); }
   }, 5 * 60_000);
   retentionTimer.unref?.();
+  const envelopeTables = ["social_envelopes", "social_group_envelopes"];
+  const envelopeCount = (where, parameters = []) => envelopeTables.reduce(
+    (total, table) => total + database.prepare(`SELECT COUNT(*) count FROM ${table} ${where}`).get(...parameters).count, 0);
+  const diskHasHeadroom = () => {
+    const disk = fs.statfsSync(dataDirectory);
+    return disk.bavail * disk.bsize >= 256 * 1024 * 1024;
+  };
+  const envelopeCapacity = (table, conversationField, conversation, user, count) =>
+    diskHasHeadroom() && envelopeCount("") + count <= 20_000
+    && envelopeCount("WHERE sender_id = ?", [user]) + count <= 1200
+    && database.prepare(`SELECT COUNT(*) count FROM ${table} WHERE ${conversationField}=?`).get(conversation).count + count <= 2400;
   const rateBuckets = new Map();
+  let rateSweep = 0;
   const allowRate = (key, maximum, windowMs, idempotencyKey = null) => {
     const timestamp = now();
-    const current = (rateBuckets.get(key) || []).filter((value) => value.at > timestamp - windowMs);
+    if (timestamp - rateSweep > 60_000) {
+      rateSweep = timestamp;
+      for (const [id, bucket] of rateBuckets) if (bucket.every(value => value.expires <= timestamp)) rateBuckets.delete(id);
+    }
+    if (!rateBuckets.has(key) && rateBuckets.size >= 20_000) return false;
+    const current = (rateBuckets.get(key) || []).filter(value => value.expires > timestamp);
     if (idempotencyKey && current.some((value) => value.idempotencyKey === idempotencyKey)) {
       rateBuckets.set(key, current);
       return true;
     }
     if (current.length >= maximum) { rateBuckets.set(key, current); return false; }
-    current.push({ at: timestamp, idempotencyKey });
+    current.push({ expires: timestamp + windowMs, idempotencyKey });
     rateBuckets.set(key, current);
     return true;
   };
@@ -512,6 +558,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
     members: database.prepare(`SELECT u.* FROM social_group_members m JOIN social_users u ON u.id = m.user_id
       WHERE m.group_id = ? ORDER BY CASE WHEN u.id = ? THEN 0 ELSE 1 END, lower(u.username)`).all(group.id, group.owner_id).map(publicUser),
     canManage: group.owner_id === viewerId,
+    blockedMemberIds: groupUserIds(group.id).filter(id => isBlocked(viewerId, id)),
   });
   const publicInstanceInvite = (invite) => ({
     id: invite.id,
@@ -540,20 +587,39 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
     return row;
   };
 
-  const issueTokens = (userId, deviceId) => {
+  const issueTokens = (userId, deviceId, family = uuid(), familyExpiresAt = null) => {
     const accessToken = randomToken(32);
     const refreshToken = randomToken(48);
     const timestamp = now();
-    const accessExpiresAt = timestamp + 15 * 60_000;
-    const refreshExpiresAt = timestamp + 30 * 24 * 60 * 60_000;
-    database.prepare("INSERT INTO social_sessions(access_hash, refresh_hash, user_id, device_id, access_expires_at, refresh_expires_at, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(hash(accessToken), hash(refreshToken), userId, deviceId, accessExpiresAt, refreshExpiresAt, timestamp, timestamp);
+    const refreshExpiresAt = familyExpiresAt ?? timestamp + 30 * 24 * 60 * 60_000;
+    const accessExpiresAt = Math.min(timestamp + 15 * 60_000, refreshExpiresAt);
+    database.prepare("INSERT INTO social_sessions(access_hash, refresh_hash, user_id, device_id, access_expires_at, refresh_expires_at, created_at, last_used_at, family_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(hash(accessToken), hash(refreshToken), userId, deviceId, accessExpiresAt, refreshExpiresAt, timestamp, timestamp, family);
     return { accessToken, refreshToken, accessExpiresAt, refreshExpiresAt };
   };
 
   return {
     database,
     purgeExpiredData,
+    authorizePackClaim(request, code, claimToken) {
+      const session = bearerSession(request);
+      if (!session || typeof claimToken !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(claimToken)) return null;
+      const claimHash = hash(claimToken);
+      const invite = database.prepare(`SELECT recipient_id,role FROM social_instance_invites WHERE share_code=?
+        AND recipient_id=? AND share_mode='synced' AND status='installing' AND claim_hash=? AND claim_expires_at>? AND expires_at>?`)
+        .get(code, session.user_id, claimHash, now(), now());
+      return invite ? { recipientId: invite.recipient_id, role: invite.role, claimHash } : null;
+    },
+    packClaimCurrent(code, recipientId, claimHash) {
+      return Boolean(database.prepare(`SELECT 1 FROM social_instance_invites WHERE share_code=?
+        AND recipient_id=? AND share_mode='synced' AND claim_hash=?
+        AND (status='accepted' OR (status='installing' AND claim_expires_at>? AND expires_at>?))`)
+        .get(code, recipientId, claimHash, now(), now()));
+    },
+    packClaimAccepted(code, recipientId, claimHash) {
+      return Boolean(database.prepare(`SELECT 1 FROM social_instance_invites WHERE share_code=?
+        AND recipient_id=? AND share_mode='synced' AND status='accepted' AND claim_hash=?`).get(code, recipientId, claimHash));
+    },
     workspacePublisher(request) {
       const session = bearerSession(request);
       return session ? { id: session.user_id, username: session.username } : null;
@@ -763,10 +829,22 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
               database.exec("ROLLBACK");
               sendJson(response, 401, { error: "invalid_refresh_token" }); return true;
             }
-            const bundle = issueTokens(current.user_id, current.device_id);
+            const bundle = issueTokens(current.user_id, current.device_id, current.family_id, current.refresh_expires_at);
             database.exec("COMMIT");
             sendJson(response, 200, bundle); return true;
           } catch (error) { database.exec("ROLLBACK"); throw error; }
+        }
+
+        if (pathname === "/v1/social/native/logout" && request.method === "POST") {
+          const body = await readBody(request, 1024);
+          const token = text(body.refreshToken, 256);
+          if (token) {
+            database.prepare(`UPDATE social_sessions SET revoked_at = ? WHERE revoked_at IS NULL AND EXISTS (
+              SELECT 1 FROM social_sessions original WHERE original.refresh_hash = ?
+              AND original.user_id = social_sessions.user_id AND original.device_id = social_sessions.device_id
+              AND original.family_id IS social_sessions.family_id)`).run(now(), hash(token));
+          }
+          sendJson(response, 200, { signedOut: true }); return true;
         }
 
         const session = requireSession(request, response);
@@ -836,6 +914,10 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           sendJson(response, 200, { user: publicUser(findUser.get(session.user_id)) }); return true;
         }
 
+        if (pathname === "/v1/social/prekeys" && request.method === "GET") {
+          const { count } = database.prepare("SELECT COUNT(*) count FROM social_one_time_prekeys WHERE device_id=? AND claimed_at IS NULL").get(session.device_id);
+          sendJson(response, 200, { available: count }); return true;
+        }
         if (pathname === "/v1/social/prekeys" && request.method === "PUT") {
           const body = await readBody(request);
           const keys = Array.isArray(body.keys) ? body.keys.slice(0, 100) : [];
@@ -844,9 +926,19 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           }
           const insert = database.prepare("INSERT OR IGNORE INTO social_one_time_prekeys(device_id, key_id, public_key) VALUES (?, ?, ?)");
           database.exec("BEGIN IMMEDIATE");
-          try { for (const entry of keys) insert.run(session.device_id, entry.id, entry.key); database.exec("COMMIT"); }
+          let accepted = 0;
+          try {
+            const count = database.prepare("SELECT COUNT(*) count FROM social_one_time_prekeys WHERE device_id = ? AND claimed_at IS NULL").get(session.device_id).count;
+            const globalCount = database.prepare("SELECT COUNT(*) count FROM social_one_time_prekeys").get().count;
+            const remaining = diskHasHeadroom() ? Math.min(MAX_PREKEYS - count, 200_000 - globalCount) : 0;
+            for (const entry of keys) {
+              if (accepted >= remaining) break;
+              accepted += Number(insert.run(session.device_id, entry.id, entry.key).changes);
+            }
+            database.exec("COMMIT");
+          }
           catch (error) { database.exec("ROLLBACK"); throw error; }
-          sendJson(response, 200, { accepted: keys.length }); return true;
+          sendJson(response, 200, { accepted }); return true;
         }
 
         const exactLookup = pathname === "/v1/social/users/exact" && request.method === "GET";
@@ -963,12 +1055,13 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           }
           const normalized = entries.map((entry) => ({
             recipientId: text(entry?.recipientId, 64),
-            shareCode: text(entry?.shareCode, 16).toUpperCase(),
+            shareCode: text(entry?.shareCode, 64).toUpperCase(),
             role: shareMode === "copy" ? "member" : text(entry?.role, 16),
           }));
           if (new Set(normalized.map((entry) => entry.recipientId)).size !== normalized.length
             || normalized.some((entry) => !acceptedFriends(session.user_id, entry.recipientId)
-              || !/^[23456789A-HJ-NP-Z]{8}$/.test(entry.shareCode)
+              || !(/^[23456789A-HJ-NP-Z]{8}$/.test(entry.shareCode)
+                || (shareMode === "synced" && /^[A-F0-9]{64}$/.test(entry.shareCode)))
               || !["member", "editor"].includes(entry.role))) {
             sendJson(response, 400, { error: "invalid_instance_invite_recipient" }); return true;
           }
@@ -1018,18 +1111,37 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           const body = await readBody(request);
           if (action === "complete" || action === "release") {
             const claimToken = text(body.claimToken, 128);
+            const claimHash = hash(claimToken);
+            if (action === "complete" && invite.recipient_id === session.user_id && invite.status === "accepted" && invite.claim_hash === claimHash) {
+              sendJson(response, 200, { invite: publicInstanceInvite(invite) }); return true;
+            }
             if (invite.recipient_id !== session.user_id || invite.status !== "installing" || !claimToken || invite.claim_hash !== hash(claimToken) || invite.claim_expires_at <= timestamp) {
               sendJson(response, 409, { error: "instance_invite_claim_invalid" }); return true;
             }
             const status = action === "complete" ? "accepted" : "pending";
-            database.prepare("UPDATE social_instance_invites SET status = ?, claim_hash = NULL, claim_expires_at = NULL, updated_at = ? WHERE id = ?").run(status, timestamp, inviteId);
+            const accepted = action === "complete";
+            const changed = database.prepare(`UPDATE social_instance_invites SET status = ?, claim_hash = ?, claim_expires_at = NULL, updated_at = ?
+              WHERE id = ? AND status = 'installing' AND claim_hash = ? AND claim_expires_at > ? AND expires_at > ?`)
+              .run(status, accepted ? claimHash : null, timestamp, inviteId, claimHash, timestamp, timestamp);
+            if (!changed.changes) { sendJson(response, 409, { error: "instance_invite_claim_invalid" }); return true; }
+            if (invite.share_mode === "synced") onInstanceInviteResolved(invite.share_code, claimHash, accepted);
           } else if (action === "decline") {
-            if (invite.recipient_id !== session.user_id || invite.status !== "pending") { sendJson(response, 409, { error: "instance_invite_cannot_decline" }); return true; }
-            database.prepare("UPDATE social_instance_invites SET status = 'declined', claim_hash = NULL, claim_expires_at = NULL, updated_at = ? WHERE id = ?").run(timestamp, inviteId);
+            if (invite.recipient_id !== session.user_id || (invite.status !== "pending" && !(invite.share_mode === "synced" && invite.status === "installing"))) {
+              sendJson(response, 409, { error: "instance_invite_cannot_decline" }); return true;
+            }
+            const changed = database.prepare("UPDATE social_instance_invites SET status = 'declined', claim_hash = NULL, claim_expires_at = NULL, updated_at = ? WHERE id = ? AND status = ? AND claim_hash IS ?")
+              .run(timestamp, inviteId, invite.status, invite.claim_hash);
+            if (!changed.changes) { sendJson(response, 409, { error: "instance_invite_cannot_decline" }); return true; }
+            if (invite.claim_hash && invite.share_mode === "synced") onInstanceInviteResolved(invite.share_code, invite.claim_hash, false);
             onInstanceInviteClosed(invite.share_code);
           } else {
-            if (invite.sender_id !== session.user_id || invite.status !== "pending") { sendJson(response, 409, { error: "instance_invite_cannot_revoke" }); return true; }
-            database.prepare("UPDATE social_instance_invites SET status = 'revoked', claim_hash = NULL, claim_expires_at = NULL, updated_at = ? WHERE id = ?").run(timestamp, inviteId);
+            if (invite.sender_id !== session.user_id || (invite.status !== "pending" && !(invite.share_mode === "synced" && invite.status === "installing"))) {
+              sendJson(response, 409, { error: "instance_invite_cannot_revoke" }); return true;
+            }
+            const changed = database.prepare("UPDATE social_instance_invites SET status = 'revoked', claim_hash = NULL, claim_expires_at = NULL, updated_at = ? WHERE id = ? AND status = ? AND claim_hash IS ?")
+              .run(timestamp, inviteId, invite.status, invite.claim_hash);
+            if (!changed.changes) { sendJson(response, 409, { error: "instance_invite_cannot_revoke" }); return true; }
+            if (invite.claim_hash && invite.share_mode === "synced") onInstanceInviteResolved(invite.share_code, invite.claim_hash, false);
             onInstanceInviteClosed(invite.share_code);
           }
           signalUsers([invite.sender_id, invite.recipient_id], "invites");
@@ -1039,7 +1151,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
         const devicesMatch = pathname.match(/^\/v1\/social\/users\/([^/]+)\/devices$/);
         if (devicesMatch && request.method === "GET") {
           const otherId = decodeURIComponent(devicesMatch[1]);
-          if (otherId !== session.user_id && !acceptedFriends(session.user_id, otherId) && !sharedGroup(session.user_id, otherId)) { sendJson(response, 403, { error: "friendship_or_group_required" }); return true; }
+          if (otherId !== session.user_id && (isBlocked(session.user_id, otherId) || (!acceptedFriends(session.user_id, otherId) && !sharedGroup(session.user_id, otherId)))) { sendJson(response, 403, { error: "friendship_or_group_required" }); return true; }
           const devices = database.prepare("SELECT id, curve25519_key, ed25519_key FROM social_devices WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at").all(otherId);
           sendJson(response, 200, { devices: devices.map((device) => ({ deviceId: device.id, curve25519Key: device.curve25519_key, ed25519Key: device.ed25519_key })) }); return true;
         }
@@ -1047,16 +1159,23 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
         const prekeyMatch = pathname.match(/^\/v1\/social\/users\/([^/]+)\/prekey-bundle$/);
         if (prekeyMatch && request.method === "GET") {
           const otherId = decodeURIComponent(prekeyMatch[1]);
-          if (!acceptedFriends(session.user_id, otherId) && !sharedGroup(session.user_id, otherId)) { sendJson(response, 403, { error: "friendship_or_group_required" }); return true; }
+          if (isBlocked(session.user_id, otherId) || (!acceptedFriends(session.user_id, otherId) && !sharedGroup(session.user_id, otherId))) { sendJson(response, 403, { error: "friendship_or_group_required" }); return true; }
           const excluded = new Set((url.searchParams.get("exclude") || "").split(",").filter((value) => validDeviceId(value)).slice(0, 12));
           const devices = database.prepare("SELECT * FROM social_devices WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at").all(otherId).filter((device) => !excluded.has(device.id));
           const bundles = [];
           database.exec("BEGIN IMMEDIATE");
           try {
             for (const device of devices) {
+              const budget = database.prepare(`SELECT
+                COUNT(CASE WHEN requester = ? THEN 1 END) AS peer,
+                COUNT(CASE WHEN claimed_at > ? THEN 1 END) AS total
+                FROM social_prekey_claim_budget WHERE device_id = ? AND claimed_at > ?`)
+                .get(session.user_id, now() - 15 * 60_000, device.id, now() - 60 * 60_000);
+              if (budget.peer >= 3 || budget.total >= 24) continue;
               const key = database.prepare("SELECT * FROM social_one_time_prekeys WHERE device_id = ? AND claimed_at IS NULL ORDER BY rowid LIMIT 1").get(device.id);
               if (!key) continue;
               database.prepare("UPDATE social_one_time_prekeys SET claimed_at = ? WHERE device_id = ? AND key_id = ?").run(now(), device.id, key.key_id);
+              database.prepare("INSERT INTO social_prekey_claim_budget VALUES (?, ?, ?)").run(session.user_id, device.id, now());
               bundles.push({ deviceId: device.id, curve25519Key: device.curve25519_key, ed25519Key: device.ed25519_key, oneTimeKeyId: key.key_id, oneTimeKey: key.public_key });
             }
             database.exec("COMMIT");
@@ -1152,7 +1271,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           const clientNonce = text(body.clientNonce, 80);
           const eventKind = text(body.eventKind, 16);
           const envelopes = Array.isArray(body.envelopes) ? body.envelopes.slice(0, 12) : [];
-          if (recipientId === session.user_id || !groupMember(groupId, recipientId) || !/^[A-Za-z0-9_-]{16,80}$/.test(clientNonce) || !["message", "reaction", "security", "pin", "edit"].includes(eventKind) || !envelopes.length) {
+          if (recipientId === session.user_id || isBlocked(session.user_id, recipientId) || !groupMember(groupId, recipientId) || !/^[A-Za-z0-9_-]{16,80}$/.test(clientNonce) || !["message", "reaction", "security", "pin", "edit"].includes(eventKind) || !envelopes.length) {
             sendJson(response, 400, { error: "invalid_group_envelope_batch" }); return true;
           }
           if (!allowRate(`group-message:${session.user_id}`, 60, 60_000, `${groupId}:${clientNonce}`)) { sendJson(response, 429, { error: "message_rate_limited" }); return true; }
@@ -1164,6 +1283,10 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           const insert = database.prepare("INSERT OR IGNORE INTO social_group_envelopes(group_id, sender_id, sender_device_id, recipient_id, recipient_device_id, client_nonce, event_kind, ciphertext, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
           database.exec("BEGIN IMMEDIATE");
           try {
+            if (!envelopeCapacity("social_group_envelopes", "group_id", groupId, session.user_id, envelopes.length)) {
+              database.exec("ROLLBACK");
+              sendJson(response, 429, { error: "message_storage_limit" }); return true;
+            }
             for (const entry of envelopes) insert.run(groupId, session.user_id, session.device_id, recipientId, entry.deviceId, clientNonce, eventKind, entry.ciphertext, timestamp);
             database.prepare("UPDATE social_groups SET updated_at = ? WHERE id = ?").run(timestamp, groupId);
             database.exec("COMMIT");
@@ -1176,7 +1299,10 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           const after = validCursor(url.searchParams.get("after"));
           const rows = database.prepare(`SELECT e.*, d.curve25519_key sender_curve25519_key FROM social_group_envelopes e
             JOIN social_devices d ON d.id = e.sender_device_id JOIN social_group_members m ON m.group_id = e.group_id AND m.user_id = ?
-            WHERE e.recipient_device_id = ? AND e.sequence > ? ORDER BY e.sequence LIMIT 200`).all(session.user_id, session.device_id, after);
+            WHERE e.recipient_device_id = ? AND e.sequence > ? AND NOT EXISTS (
+              SELECT 1 FROM social_blocks b WHERE (b.blocker_id = e.sender_id AND b.blocked_id = e.recipient_id)
+                OR (b.blocker_id = e.recipient_id AND b.blocked_id = e.sender_id)
+            ) ORDER BY e.sequence LIMIT 200`).all(session.user_id, session.device_id, after);
           sendJson(response, 200, { envelopes: rows.map((row) => ({ sequence: row.sequence, conversationId: row.group_id, groupId: row.group_id, senderId: row.sender_id, senderDeviceId: row.sender_device_id, senderCurve25519Key: row.sender_curve25519_key, eventKind: row.event_kind, ciphertext: row.ciphertext, createdAt: row.created_at })) }); return true;
         }
 
@@ -1212,6 +1338,10 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           const insert = database.prepare("INSERT OR IGNORE INTO social_envelopes(conversation_id, sender_id, sender_device_id, recipient_id, recipient_device_id, client_nonce, event_kind, ciphertext, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
           database.exec("BEGIN IMMEDIATE");
           try {
+            if (!envelopeCapacity("social_envelopes", "conversation_id", conversation.id, session.user_id, envelopes.length)) {
+              database.exec("ROLLBACK");
+              sendJson(response, 429, { error: "message_storage_limit" }); return true;
+            }
             for (const entry of envelopes) insert.run(conversation.id, session.user_id, session.device_id, recipientId, entry.deviceId, clientNonce, eventKind, entry.ciphertext, timestamp);
             database.prepare("UPDATE social_conversations SET updated_at = ? WHERE id = ?").run(timestamp, conversation.id);
             database.exec("COMMIT");
@@ -1229,9 +1359,28 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           const id = uuid();
           const digest = crypto.createHash("sha256").update(ciphertext).digest("hex");
           const timestamp = now();
-          fs.writeFileSync(path.join(blobDirectory, `${id}.bin`), ciphertext, { mode: 0o600, flag: "wx" });
-          database.prepare("INSERT INTO social_blobs(id, owner_id, recipient_id, ciphertext_size, ciphertext_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .run(id, session.user_id, recipientId, ciphertext.length, digest, timestamp, timestamp + MESSAGE_RETENTION_MS);
+          const file = path.join(blobDirectory, `${id}.bin`);
+          database.exec("BEGIN IMMEDIATE");
+          let created = false;
+          try {
+            const owner = database.prepare("SELECT COUNT(*) count, COALESCE(SUM(ciphertext_size),0) bytes FROM social_blobs WHERE owner_id = ?").get(session.user_id);
+            const global = database.prepare("SELECT COUNT(*) count, COALESCE(SUM(ciphertext_size),0) bytes FROM social_blobs").get();
+            const disk = fs.statfsSync(blobDirectory);
+            if (owner.count >= 256 || global.count >= 8192 || owner.bytes + ciphertext.length > BLOB_OWNER_BYTES
+                || global.bytes + ciphertext.length > BLOB_GLOBAL_BYTES || disk.bavail * disk.bsize < 256 * 1024 * 1024 + ciphertext.length) {
+              database.exec("ROLLBACK");
+              sendJson(response, 429, { error: "screenshot_storage_limit" }); return true;
+            }
+            fs.writeFileSync(file, ciphertext, { mode: 0o600, flag: "wx" });
+            created = true;
+            database.prepare("INSERT INTO social_blobs(id, owner_id, recipient_id, ciphertext_size, ciphertext_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+              .run(id, session.user_id, recipientId, ciphertext.length, digest, timestamp, timestamp + MESSAGE_RETENTION_MS);
+            database.exec("COMMIT");
+          } catch (error) {
+            database.exec("ROLLBACK");
+            if (created) fs.rmSync(file, { force: true });
+            throw error;
+          }
           sendJson(response, 201, { id, ciphertextSize: ciphertext.length, ciphertextHash: digest, expiresAt: timestamp + MESSAGE_RETENTION_MS }); return true;
         }
 
@@ -1241,7 +1390,7 @@ export function createSocialApi({ auth, database: accountDatabase, siteOrigin, s
           if (!blob) { sendJson(response, 404, { error: "blob_not_found" }); return true; }
           const body = await readBody(request);
           const pinned = body.pinned === true;
-          const expiresAt = pinned ? PINNED_BLOB_EXPIRY : Math.max(now(), blob.created_at + MESSAGE_RETENTION_MS);
+          const expiresAt = pinned ? blob.created_at + DURABLE_RETENTION_MS : Math.max(now(), blob.created_at + MESSAGE_RETENTION_MS);
           database.prepare("UPDATE social_blobs SET expires_at = ? WHERE id = ?").run(expiresAt, blob.id);
           sendJson(response, 200, { id: blob.id, pinned, expiresAt }); return true;
         }

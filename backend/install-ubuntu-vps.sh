@@ -46,6 +46,9 @@ fi
 systemctl enable --now docker
 docker build --pull -t bloom-minecraft-api:local "${API_ROOT}"
 
+PROXY_GATEWAY="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
+[[ -n "${PROXY_GATEWAY}" ]]
+
 cat >/etc/systemd/system/bloom-api.service <<EOF
 [Unit]
 Description=Bloom Minecraft API
@@ -58,24 +61,46 @@ Type=simple
 Restart=always
 RestartSec=4
 ExecStartPre=-/usr/bin/docker rm -f bloom-minecraft-api
-ExecStart=/usr/bin/docker run --name bloom-minecraft-api --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m -p 127.0.0.1:8110:8110 -v ${CAPE_DATA}:${CAPE_DATA} -v ${ACCOUNT_DATA}:${ACCOUNT_DATA} --env-file ${AUTH_ENV} --env PORT=8110 --env BLOOM_COSMETICS_ENABLED=true --env BLOOM_CAPE_STORAGE=sqlite --env BLOOM_CAPE_DATA_DIR=${CAPE_DATA} --env BLOOM_CAPE_PUBLIC_URL=https://${API_HOST}/minecraft --env BLOOM_CAPE_OWNER_UUIDS=${OWNER_UUID} --env BLOOM_SHARE_DATA_DIR=${CAPE_DATA} --env BLOOM_SHARE_PUBLIC_URL=https://${API_HOST}/minecraft bloom-minecraft-api:local
+ExecStart=/usr/bin/docker run --name bloom-minecraft-api --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m -p 127.0.0.1:8110:8110 -v ${CAPE_DATA}:${CAPE_DATA} -v ${ACCOUNT_DATA}:${ACCOUNT_DATA} --env-file ${AUTH_ENV} --env PORT=8110 --env BLOOM_TRUSTED_PROXY_IPS=127.0.0.1,::1,${PROXY_GATEWAY} --env BLOOM_COSMETICS_ENABLED=true --env BLOOM_CAPE_STORAGE=sqlite --env BLOOM_CAPE_DATA_DIR=${CAPE_DATA} --env BLOOM_CAPE_PUBLIC_URL=https://${API_HOST}/minecraft --env BLOOM_CAPE_OWNER_UUIDS=${OWNER_UUID} --env BLOOM_SHARE_DATA_DIR=${CAPE_DATA} --env BLOOM_SHARE_PUBLIC_URL=https://${API_HOST}/minecraft bloom-minecraft-api:local
 ExecStop=/usr/bin/docker stop -t 20 bloom-minecraft-api
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+# Accept Cloudflare visitor headers only from Cloudflare's published edges.
+CF_NETS="$(curl --fail --silent --show-error https://www.cloudflare.com/ips-v4; echo; curl --fail --silent --show-error https://www.cloudflare.com/ips-v6)"
+CF_NETS="$(printf '%s' "${CF_NETS}" | xargs)"
+[[ -n "${CF_NETS}" ]]
 cat >/etc/caddy/Caddyfile <<EOF
 ${API_HOST} {
   encode zstd gzip
-  reverse_proxy 127.0.0.1:8110
+  @cloudflare remote_ip ${CF_NETS}
+  route {
+    reverse_proxy @cloudflare 127.0.0.1:8110 {
+      header_up X-Delight-Client-Ip {http.request.header.CF-Connecting-IP}
+    }
+    reverse_proxy 127.0.0.1:8110 {
+      header_up X-Delight-Client-Ip {remote_host}
+    }
+  }
+}
+
+# The local cloudflared connector is the only intended caller of this listener.
+http://127.0.0.1:8111 {
+  bind 127.0.0.1
+  reverse_proxy 127.0.0.1:8110 {
+    header_up X-Delight-Client-Ip {http.request.header.CF-Connecting-IP}
+  }
 }
 EOF
+caddy validate --config /etc/caddy/Caddyfile
 
 systemctl daemon-reload
 systemctl enable bloom-api
 systemctl restart bloom-api
 systemctl enable --now caddy
+systemctl reload caddy
 
 for attempt in {1..30}; do
   if curl --fail --silent --show-error http://127.0.0.1:8110/health >/tmp/bloom-health.json; then

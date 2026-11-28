@@ -211,6 +211,8 @@ pub struct SocialGroup {
     updated_at: u64,
     members: Vec<SocialUser>,
     can_manage: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    blocked_member_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -987,7 +989,11 @@ fn upload_blob(friend_id: &str, ciphertext: Vec<u8>) -> Result<serde_json::Value
     response.json().map_err(|error| error.to_string())
 }
 
-fn download_blob(blob_id: &str) -> Result<Vec<u8>, String> {
+const SCREENSHOT_MAX_BYTES: usize = 8 * 1024 * 1024;
+const SCREENSHOT_MAX_EDGE: u32 = 4096;
+
+fn download_blob(blob_id: &str, expected_size: usize) -> Result<Vec<u8>, String> {
+    use std::io::Read;
     let tokens = current_tokens()?;
     let response = http_client()?
         .get(format!("{}/blobs/{blob_id}", social_endpoint()))
@@ -1000,31 +1006,53 @@ fn download_blob(blob_id: &str) -> Result<Vec<u8>, String> {
     if !response.status().is_success() {
         return Err("The encrypted screenshot is unavailable.".into());
     }
-    response
-        .bytes()
-        .map(|value| value.to_vec())
-        .map_err(|error| error.to_string())
+    if response.content_length().is_some_and(|size| size != expected_size as u64) {
+        return Err("Delight rejected an invalid screenshot size.".into());
+    }
+    let mut bytes = Vec::new();
+    response.take(expected_size as u64 + 1).read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    if bytes.len() != expected_size {
+        return Err("Delight rejected an invalid screenshot size.".into());
+    }
+    Ok(bytes)
+}
+
+fn decode_screenshot(input: &[u8], format: Option<image::ImageFormat>) -> Result<image::DynamicImage, String> {
+    let reader = image::ImageReader::new(std::io::Cursor::new(input));
+    let mut reader = match format {
+        Some(format) => image::ImageReader::with_format(reader.into_inner(), format),
+        None => reader.with_guessed_format().map_err(|error| error.to_string())?,
+    };
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(SCREENSHOT_MAX_EDGE);
+    limits.max_image_height = Some(SCREENSHOT_MAX_EDGE);
+    limits.max_alloc = Some(144 * 1024 * 1024);
+    reader.limits(limits);
+    reader.decode().map_err(|_| "Choose a valid PNG, JPEG, or WebP screenshot up to 4096 by 4096 pixels.".into())
 }
 
 fn normalize_screenshot(path: &std::path::Path) -> Result<(Vec<u8>, u32, u32), String> {
-    use image::GenericImageView;
-    let input = std::fs::read(path)
+    use std::io::Read;
+    let limit = 32 * 1024 * 1024;
+    let file = std::fs::File::open(path)
         .map_err(|error| format!("Delight could not read that screenshot: {error}"))?;
-    if input.len() > 32 * 1024 * 1024 {
+    if file.metadata().map_err(|error| error.to_string())?.len() > limit {
         return Err("That screenshot is too large to process.".into());
     }
-    let image = image::load_from_memory(&input)
-        .map_err(|_| "Choose a valid PNG, JPEG, or WebP screenshot.".to_string())?;
-    let (width, height) = image.dimensions();
-    if width == 0 || height == 0 || width > 4096 || height > 4096 {
-        return Err("Screenshots must be no larger than 4096 by 4096 pixels.".into());
+    let mut input = Vec::new();
+    file.take(limit + 1).read_to_end(&mut input).map_err(|error| error.to_string())?;
+    if input.len() as u64 > limit {
+        return Err("That screenshot is too large to process.".into());
     }
+    let image = decode_screenshot(&input, None)?;
+    let (width, height) = (image.width(), image.height());
     let mut output = std::io::Cursor::new(Vec::new());
     image
         .write_to(&mut output, image::ImageFormat::Png)
         .map_err(|error| format!("Delight could not normalize that screenshot: {error}"))?;
     let bytes = output.into_inner();
-    if bytes.len() > 8 * 1024 * 1024 {
+    if bytes.len() > SCREENSHOT_MAX_BYTES {
         return Err("The normalized screenshot is larger than 8 MiB.".into());
     }
     Ok((bytes, width, height))
@@ -1070,26 +1098,33 @@ fn encrypt_screenshot(
 }
 
 fn decrypt_screenshot(descriptor: &AttachmentDescriptor) -> Result<String, String> {
-    let ciphertext = download_blob(&descriptor.blob_id)?;
-    if format!("{:x}", Sha256::digest(&ciphertext)) != descriptor.ciphertext_hash
-        || ciphertext.len() < 29
+    if descriptor.mime_type != "image/png"
+        || descriptor.blob_id.len() != 36 || uuid::Uuid::parse_str(&descriptor.blob_id).is_err()
+        || !(1..=SCREENSHOT_MAX_BYTES).contains(&descriptor.byte_size)
+        || !(1..=SCREENSHOT_MAX_EDGE).contains(&descriptor.width)
+        || !(1..=SCREENSHOT_MAX_EDGE).contains(&descriptor.height)
+        || descriptor.ciphertext_hash.len() != 64 || !descriptor.ciphertext_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || descriptor.content_key.len() != 43
     {
-        return Err("Delight rejected a damaged encrypted screenshot.".into());
+        return Err("Delight rejected invalid screenshot metadata.".into());
     }
     let key = URL_SAFE_NO_PAD
         .decode(&descriptor.content_key)
         .map_err(|_| "The screenshot key is invalid.".to_string())?;
+    let ciphertext = download_blob(&descriptor.blob_id, descriptor.byte_size + 28)?;
+    if format!("{:x}", Sha256::digest(&ciphertext)) != descriptor.ciphertext_hash {
+        return Err("Delight rejected a damaged encrypted screenshot.".into());
+    }
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|_| "The screenshot key is invalid.".to_string())?;
     let plaintext = cipher
         .decrypt(Nonce::from_slice(&ciphertext[..12]), &ciphertext[12..])
         .map_err(|_| "Delight could not authenticate this screenshot.".to_string())?;
-    let decoded = image::load_from_memory(&plaintext)
-        .map_err(|_| "Delight rejected an invalid decrypted screenshot.".to_string())?;
-    use image::GenericImageView;
-    if decoded.dimensions() != (descriptor.width, descriptor.height)
-        || plaintext.len() != descriptor.byte_size
-    {
+    if plaintext.len() != descriptor.byte_size {
+        return Err("Delight rejected mismatched screenshot details.".into());
+    }
+    let decoded = decode_screenshot(&plaintext, Some(image::ImageFormat::Png))?;
+    if (decoded.width(), decoded.height()) != (descriptor.width, descriptor.height) {
         return Err("Delight rejected mismatched screenshot details.".into());
     }
     Ok(format!(
@@ -1531,7 +1566,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
             if let Some(message) = vault
                 .messages
                 .iter_mut()
-                .find(|message| message.id == *target_id)
+                .find(|message| message.id == *target_id && message.conversation_id == envelope.conversation_id)
             {
                 if updating {
                     let valid_text = event.text.as_ref().is_some_and(|text| {
@@ -1546,9 +1581,8 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
                     message.pinned = pinned;
                 }
             } else if pinned {
-                if updating
-                    && event.subject_sender_id.as_deref() != Some(envelope.sender_id.as_str())
-                {
+                // Missing content has no local original to authenticate its author.
+                if event.subject_sender_id.as_deref().is_some_and(|sender| sender != envelope.sender_id) {
                     advance_envelope_cursor(vault, groups, envelope.sequence);
                     continue;
                 }
@@ -1576,10 +1610,7 @@ fn decrypt_envelopes(vault: &mut SocialVault, groups: bool) -> Result<Option<Str
                         envelope.sender_id.clone()
                     },
                     group_id: envelope.group_id.clone(),
-                    sender_id: event
-                        .subject_sender_id
-                        .clone()
-                        .unwrap_or_else(|| envelope.sender_id.clone()),
+                    sender_id: envelope.sender_id.clone(),
                     kind: "message".into(),
                     text: event.text.clone(),
                     target_id: None,
@@ -1709,6 +1740,13 @@ fn snapshot() -> Result<SocialSnapshot, String> {
     };
     prune_expired_messages(&mut vault);
     save_vault(&vault)?;
+    if let Ok(status) = request::<serde_json::Value>(reqwest::Method::GET, "/prekeys", None) {
+        if status["available"].as_u64().is_some_and(|available| available < 25) {
+            if let Err(error) = upload_prekeys() {
+                eprintln!("[Delight Social] prekey replenishment will retry: {error}");
+            }
+        }
+    }
     Ok(SocialSnapshot {
         session: SocialSessionState {
             signed_in: true,
@@ -2516,7 +2554,7 @@ fn send_group_event(group_id: String, event: PlainEvent) -> Result<SocialMessage
         .ok_or("Delight account profile is unavailable.")?;
     let plaintext = serde_json::to_vec(&event).map_err(|error| error.to_string())?;
     let mut batches = Vec::new();
-    for member in group.members.iter().filter(|member| member.id != me) {
+    for member in group.members.iter().filter(|member| member.id != me && !group.blocked_member_ids.contains(&member.id)) {
         let label = member.display_name.as_deref().or(member.username.as_deref()).unwrap_or("A group member");
         let envelopes = encrypt_for_recipient(&mut vault, &account, &member.id, &plaintext).map_err(|error| {
             if error.contains("encryption identity changed") {
@@ -2661,7 +2699,7 @@ pub async fn social_edit_group_message(
         };
         let plaintext = serde_json::to_vec(&event).map_err(|error| error.to_string())?;
         let mut batches = Vec::new();
-        for member in group.members.iter().filter(|member| member.id != me) {
+        for member in group.members.iter().filter(|member| member.id != me && !group.blocked_member_ids.contains(&member.id)) {
             let envelopes = encrypt_for_recipient(&mut vault, &account, &member.id, &plaintext)?;
             batches.push((member.id.clone(), envelopes));
         }
@@ -2700,7 +2738,7 @@ pub async fn social_pin_group_message(
         let account = load_account(&vault)?;
         let me = vault.profile.as_ref().map(|user| user.id.clone()).ok_or("Delight account profile is unavailable.")?;
         let mut batches = Vec::new();
-        for member in group.members.iter().filter(|member| member.id != me) {
+        for member in group.members.iter().filter(|member| member.id != me && !group.blocked_member_ids.contains(&member.id)) {
             let label = member.display_name.as_deref().or(member.username.as_deref()).unwrap_or("A group member");
             let envelopes = encrypt_for_recipient(&mut vault, &account, &member.id, &plaintext).map_err(|error| {
                 if error.contains("encryption identity changed") {
@@ -2725,19 +2763,37 @@ pub async fn social_pin_group_message(
     }).await.map_err(|error| error.to_string())?
 }
 
+pub(crate) fn revoke_profile_session(player: &str) -> Result<(), String> {
+    let player = Uuid::parse_str(player).map_err(|_| "Invalid Minecraft profile.")?.to_string();
+    let _guard = social_credential_io().lock().map_err(|_| "Delight account restoration is busy.".to_string())?;
+    let token_name = format!("tokens:{player}");
+    let legacy = legacy_active_profile().as_deref() == Some(player.as_str());
+    if let Some(tokens) = get_secret(&token_name).or_else(|| legacy.then(|| get_secret("tokens")).flatten()) {
+        let tokens: SavedTokens = serde_json::from_str(&tokens).map_err(|_| "The saved Social session is invalid.")?;
+        http_client()?.post(format!("{}/native/logout", social_endpoint()))
+            .json(&serde_json::json!({ "refreshToken": tokens.refresh_token }))
+            .send().and_then(reqwest::blocking::Response::error_for_status)
+            .map_err(|_| "Delight could not revoke this session. Reconnect and try signing out again.".to_string())?;
+    }
+    delete_secret(&token_name)?;
+    if legacy {
+        delete_secret("tokens")?;
+        delete_secret("active-profile")?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn social_sign_out() -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let _guard = social_credential_io().lock().map_err(|_| "Delight account restoration is busy.".to_string())?;
-        let token_name = profile_secret("tokens");
-        delete_secret(&token_name)?;
-        // Clear the pre-profile migration credential too, otherwise it can be
-        // picked up on the next launch and restore an account the user removed.
-        delete_secret("tokens")?;
-        delete_secret("active-profile")
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    let player = selected_player().or_else(legacy_active_profile);
+    tauri::async_runtime::spawn_blocking(move || match player {
+        Some(player) => revoke_profile_session(&player),
+        None => Ok(()),
+    }).await.map_err(|error| error.to_string())?
+}
+
+pub(crate) async fn social_access_token() -> Result<String, String> {
+    player_task(|| Ok(current_tokens()?.access_token)).await.map_err(|error| error.to_string())?
 }
 
 #[cfg(test)]

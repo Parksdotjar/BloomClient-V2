@@ -5,6 +5,8 @@ use std::io::Write;
 #[serde(rename_all = "camelCase")]
 struct ShareHashes {
     sha1: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sha512: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -13,6 +15,8 @@ struct ShareFile {
     path: String,
     hashes: ShareHashes,
     downloads: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    file_size: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     env: Option<std::collections::BTreeMap<String, String>>,
 }
@@ -193,11 +197,11 @@ fn normalize_code(input: &str) -> Result<String, String> {
     Ok(code)
 }
 
-fn resolve_modrinth_file(
-    version: &super::ModrinthVersion,
+fn resolve_modrinth_file<'a>(
+    version: &'a super::ModrinthVersion,
     sha1: &str,
     game_version: &str,
-) -> Result<(String, String), String> {
+) -> Result<&'a super::ModrinthFile, String> {
     if !version
         .game_versions
         .iter()
@@ -217,7 +221,7 @@ fn resolve_modrinth_file(
     if !super::allowed_pack_download(&file.url) {
         return Err("Modrinth returned an untrusted mod download address.".into());
     }
-    Ok((file.filename.clone(), file.url.clone()))
+    Ok(file)
 }
 
 fn create_manifest(app: &tauri::AppHandle, instance_id: &str) -> Result<ShareManifest, String> {
@@ -279,13 +283,16 @@ fn create_manifest(app: &tauri::AppHandle, instance_id: &str) -> Result<ShareMan
             .ok_or_else(|| "One or more mods are not available through Modrinth.".to_string())
             .and_then(|version| resolve_modrinth_file(version, &sha1, &config.version));
         match resolved {
-            Ok((resolved_name, download)) => files.push(ShareFile {
-                path: format!("mods/{resolved_name}"),
-                hashes: ShareHashes { sha1 },
-                downloads: vec![download],
-                env: None,
-            }),
-            Err(_) => unsupported.push(file_name),
+            Ok(file) if (1..=super::PACK_FILE_LIMIT).contains(&file.size)
+                && file.hashes.get("sha512").is_some_and(|hash| super::valid_pack_digest(hash, 128)) =>
+                files.push(ShareFile {
+                    path: format!("mods/{}", file.filename),
+                    hashes: ShareHashes { sha1, sha512: file.hashes.get("sha512").cloned() },
+                    downloads: vec![file.url.clone()],
+                    file_size: Some(file.size),
+                    env: None,
+                }),
+            _ => unsupported.push(file_name),
         }
     }
     Ok(ShareManifest {
@@ -385,7 +392,7 @@ pub(crate) async fn import_modpack_share(
             .await
             .map_err(|error| format!("Delight returned an invalid shared pack: {error}"))?;
     let archive = write_share_archive(&loaded.code, &loaded.manifest)?;
-    let instance_id = super::import_fabric_modpack_path(app, &state, archive)?;
+    let instance_id = super::import_fabric_modpack_path_with_icon(app, &state, archive, None, true)?;
     Ok(ModpackShareImport {
         instance_id,
         missing_mods: loaded.manifest.missing_mods,
@@ -400,7 +407,7 @@ fn import_channel_manifest(
     token: Option<&str>,
 ) -> Result<ModpackShareImport, String> {
     let archive = write_share_archive(&response.code, &response.manifest)?;
-    let instance_id = super::import_fabric_modpack_path(app, state, archive)?;
+    let instance_id = super::import_fabric_modpack_path_with_icon(app, state, archive, None, true)?;
     save_channel_record(PackChannelRecord {
         instance_id: instance_id.clone(),
         code: response.code.clone(),
@@ -511,6 +518,7 @@ async fn redeem_pack_access(
     app: tauri::AppHandle,
     state: &super::LauncherState,
     code: String,
+    claim_token: String,
 ) -> Result<ModpackShareImport, String> {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -521,13 +529,19 @@ async fn redeem_pack_access(
         revision: u64,
         manifest: ShareManifest,
     }
-    let code = normalize_code(&code)?;
+    let code = if code.len() == 64 && code.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        code.to_ascii_uppercase()
+    } else {
+        normalize_code(&code)?
+    };
+    let access_token = super::social::social_access_token().await?;
     let joined = super::bloom_backend_request(
         reqwest::Method::POST,
         "/v1/pack-channels/invites/redeem",
         20,
     )?
-    .json(&serde_json::json!({"code": code}))
+    .bearer_auth(access_token)
+    .json(&serde_json::json!({"code": code, "claimToken": claim_token}))
     .send()
     .await
     .map_err(|error| error.to_string())?
@@ -551,8 +565,9 @@ pub(crate) async fn import_pack_channel(
     app: tauri::AppHandle,
     state: tauri::State<'_, super::LauncherState>,
     code: String,
+    claim_token: String,
 ) -> Result<ModpackShareImport, String> {
-    redeem_pack_access(app, &state, code).await
+    redeem_pack_access(app, &state, code, claim_token).await
 }
 
 #[tauri::command]
@@ -560,8 +575,9 @@ pub(crate) async fn join_pack_as_editor(
     app: tauri::AppHandle,
     state: tauri::State<'_, super::LauncherState>,
     code: String,
+    claim_token: String,
 ) -> Result<ModpackShareImport, String> {
-    redeem_pack_access(app, &state, code).await
+    redeem_pack_access(app, &state, code, claim_token).await
 }
 
 #[tauri::command]
@@ -786,34 +802,25 @@ pub(crate) async fn apply_pack_channel_update(
         }
         std::fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
         let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
-            .build()
-            .map_err(|error| error.to_string())?;
+            .timeout(std::time::Duration::from_secs(90))
+            .redirect(reqwest::redirect::Policy::none())
+            .build().map_err(|error| error.to_string())?;
+        if response.manifest.files.len() > 500 { return Err("The synced pack exceeds its file limit.".into()); }
+        let mut remaining = super::PACK_OUTPUT_LIMIT;
+        let mut paths = std::collections::HashSet::new();
         for file in &response.manifest.files {
             let name = std::path::Path::new(&file.path)
                 .file_name()
                 .ok_or("A shared mod has an invalid filename.")?;
             let temporary = staging.join(name);
-            let bytes = client
-                .get(
-                    file.downloads
-                        .first()
-                        .ok_or("A shared mod has no download URL.")?,
-                )
-                .send()
-                .map_err(|error| error.to_string())?
-                .error_for_status()
-                .map_err(|error| error.to_string())?
-                .bytes()
-                .map_err(|error| error.to_string())?;
-            std::fs::write(&temporary, bytes).map_err(|error| error.to_string())?;
-            if mc_launcher_core::io::hash::sha1_file(&temporary)
-                .map_err(|error| error.to_string())?
-                != file.hashes.sha1
-            {
-                let _ = std::fs::remove_file(&temporary);
-                return Err(format!("{} failed verification.", name.to_string_lossy()));
+            if !paths.insert(name.to_string_lossy().to_lowercase()) {
+                return Err("The synced pack contains a duplicate filename.".into());
             }
+            let url = file.downloads.first().filter(|url| url.starts_with("https://cdn.modrinth.com/"))
+                .ok_or("A shared mod has no trusted Modrinth download URL.")?;
+            remaining -= super::download_verified_pack_file(&client, url, &temporary,
+                file.hashes.sha512.as_deref().unwrap_or(&file.hashes.sha1), file.file_size,
+                remaining.min(super::PACK_FILE_LIMIT))?;
         }
         std::fs::create_dir_all(&backup).map_err(|error| error.to_string())?;
         for old in &record.managed_files {

@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { fromNodeHeaders } from "better-auth/node";
+import { CLIENT_IP_HEADER, clientIp } from "../client-ip.mjs";
 import { multiSession } from "better-auth/plugins/multi-session";
 
 const DEFAULT_SITE_URL = "http://127.0.0.1:4176";
@@ -96,7 +97,7 @@ export async function createBloomAuth({ env = process.env } = {}) {
     advanced: {
       cookiePrefix: "bloom",
       useSecureCookies: production,
-      ipAddress: production ? { ipAddressHeaders: ["cf-connecting-ip"] } : { disableIpTracking: true },
+      ipAddress: production ? { ipAddressHeaders: [CLIENT_IP_HEADER] } : { disableIpTracking: true },
       defaultCookieAttributes: {
         httpOnly: true,
         secure: production,
@@ -132,9 +133,11 @@ const sendJson = (response, status, body) => {
 
 const nodeRequestToFetch = (request, origin) => {
   const method = request.method || "GET";
+  const headers = fromNodeHeaders(request.headers);
+  headers.set(CLIENT_IP_HEADER, clientIp(request));
   return new Request(new URL(request.url || "/", origin), {
     method,
-    headers: fromNodeHeaders(request.headers),
+    headers,
     body: method === "GET" || method === "HEAD" ? undefined : request,
     duplex: method === "GET" || method === "HEAD" ? undefined : "half",
   });

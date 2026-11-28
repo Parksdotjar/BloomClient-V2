@@ -4,7 +4,7 @@ credentials-file: /etc/cloudflared/e01584f8-7706-4612-9214-bb392806a766.json
 ingress:
   - hostname: api.north.bloomclient.org
     path: ^/minecraft(/.*)?$
-    service: http://127.0.0.1:8110
+    service: http://127.0.0.1:8111
   - hostname: api.north.bloomclient.org
     path: ^/(auth|rest|realtime|storage|functions)/v1(/.*)?$
     service: http://127.0.0.1:8000
