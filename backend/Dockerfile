@@ -3,7 +3,7 @@ FROM node:22-alpine
 WORKDIR /app
 COPY --chown=node:node package.json package-lock.json /app/
 RUN npm ci --omit=dev
-COPY --chown=node:node server.mjs /app/server.mjs
+COPY --chown=node:node server.mjs client-ip.mjs /app/
 COPY --chown=node:node auth /app/auth
 COPY --chown=node:node cosmetics /app/cosmetics
 COPY --chown=node:node sharing /app/sharing

@@ -30,8 +30,10 @@ const subscribe=(c,room=scope)=>c.send({type:'subscribe',scope:room,players:ids}
 const start=(c,extra={})=>c.send({type:'start',emote:'bloom:wave',revision,playbackId,mode:'once',duration:2.5,...extra});
 test('relay authenticates identity, isolates rooms, sends late snapshot and exact stops',async t=>{
  const env=await setup(t),a=await env.connect(0),b=await env.connect(1),c=await env.connect(2);
- subscribe(a);subscribe(b);subscribe(c,'c'.repeat(64));
- await b.wait(m=>m.type==='snapshot');await c.wait(m=>m.type==='snapshot');
+ a.send({type:'subscribe',scope,players:[ids[1]]});
+ subscribe(b);
+ subscribe(c);
+ await a.wait(m=>m.type==='snapshot');await b.wait(m=>m.type==='snapshot');await c.wait(m=>m.type==='snapshot');
  start(a,{uuid:ids[2]});
  const event=await b.wait(m=>m.type==='start');assert.equal(event.uuid,ids[0]);assert.equal(event.startedAt,100000);
  subscribe(b);const snap=await b.wait(m=>m.type==='snapshot');assert.equal(snap.playing[0].playbackId,playbackId);

@@ -127,7 +127,7 @@ The number `123` shown in other examples is only a placeholder. Parks must use t
 4. Replace `REAL_PR_NUMBER` with the number GitHub created and launch the isolated review copy:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts/review-pr.ps1 -PullRequest REAL_PR_NUMBER -Launch
+   powershell -ExecutionPolicy Bypass -File scripts/review-pr.ps1 -PullRequest REAL_PR_NUMBER
    ```
 
    Do not literally enter `123` or `REAL_PR_NUMBER`.
@@ -162,7 +162,7 @@ This step proves that Karsten can respond to review without opening another pull
 4. Parks stops the old review process, then reruns the same review command with the same PR number:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts/review-pr.ps1 -PullRequest REAL_PR_NUMBER -Launch
+   powershell -ExecutionPolicy Bypass -File scripts/review-pr.ps1 -PullRequest REAL_PR_NUMBER
    ```
 
 5. Parks verifies the updated wording. This confirms that review feedback, new commits, GitHub checks, and isolated retesting all work end to end.
@@ -210,3 +210,5 @@ Merging a real pull request adds reviewed code to `main`; it does not publish an
 - The practice PR was closed without merging.
 - The review worktree and practice branch were removed.
 - No version, tag, release, Manager file, credential, or upstream `main` content changed.
+
+The review helper prepares source only. Run code from a contributor branch in a disposable environment with no owner credentials or host mounts.

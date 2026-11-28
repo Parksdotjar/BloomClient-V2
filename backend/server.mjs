@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
+import { clientIp, fixedWindowLimit } from "./client-ip.mjs";
 import { initializeCosmetics } from "./cosmetics/readiness.mjs";
 import { sharingFromEnvironment } from "./sharing/api.mjs";
 import { workspacePacksFromEnvironment } from "./sharing/workspace-packs.mjs";
@@ -17,12 +18,24 @@ const cosmetics = await initializeCosmetics();
 const accountRuntime = await authFromEnvironment();
 const accounts = createAccountApi(accountRuntime);
 let sharing;
-const social = createSocialApi({ ...accountRuntime, onInstanceInviteClosed: code => sharing?.invalidateInvite(code) });
-sharing = sharingFromEnvironment(process.env, { onInviteInvalidated: code => social.invalidateInstanceInviteByShareCode(code) });
+const social = createSocialApi({
+  ...accountRuntime,
+  onInstanceInviteClosed: code => sharing?.invalidateInvite(code),
+  onInstanceInviteResolved: (code, claimHash, accepted) => sharing?.resolveClaim(code, claimHash, accepted),
+});
+sharing = sharingFromEnvironment(process.env, {
+  onInviteInvalidated: code => social.invalidateInstanceInviteByShareCode(code),
+  authorizeClaim: social.authorizePackClaim,
+  claimAccepted: social.packClaimAccepted,
+  claimCurrent: social.packClaimCurrent,
+});
 sharing.checkReadiness();
 const workspacePacks = workspacePacksFromEnvironment(social.workspacePublisher, process.env, social.workspaceAuthorProfile);
 const capabilities = Object.freeze({ catalog: true, modrinth: true, curseforge: false, modpacks: true, cosmetics: cosmetics.enabled, emotes: cosmetics.enabled, emoteProtocol: 1, packSharing: true, packChannels: true, accounts: true, social: true });
 const cache = new Map();
+const pending = new Map();
+const catalogClient = fixedWindowLimit({ max: 90, duration: 60_000 });
+const catalogGlobal = fixedWindowLimit({ max: 600, duration: 60_000 });
 
 const sendJson = (response, status, body, cacheControl = "no-store") => {
   const payload = JSON.stringify(body);
@@ -37,11 +50,25 @@ const sendJson = (response, status, body, cacheControl = "no-store") => {
 };
 
 const cached = async (key, lifetimeMs, load) => {
+  const timestamp = Date.now();
+  for (const [saved, entry] of cache) if (entry.expiresAt <= timestamp) cache.delete(saved);
   const existing = cache.get(key);
-  if (existing && existing.expiresAt > Date.now()) return existing.value;
-  const value = await load();
-  cache.set(key, { value, expiresAt: Date.now() + lifetimeMs });
-  return value;
+  if (existing) {
+    cache.delete(key);
+    cache.set(key, existing);
+    return existing.value;
+  }
+  if (pending.has(key)) return pending.get(key);
+  if (pending.size >= 32) throw Object.assign(new Error("Catalog busy"), { status: 503 });
+  const request = Promise.resolve().then(load).then(value => {
+    if (Buffer.byteLength(JSON.stringify(value)) <= 256 * 1024) {
+      if (cache.size >= 256) cache.delete(cache.keys().next().value);
+      cache.set(key, { value, expiresAt: Date.now() + lifetimeMs });
+    }
+    return value;
+  }).finally(() => pending.delete(key));
+  pending.set(key, request);
+  return request;
 };
 
 const modrinth = async (path, parameters = {}) => {
@@ -49,7 +76,7 @@ const modrinth = async (path, parameters = {}) => {
   for (const [name, value] of Object.entries(parameters)) {
     if (value !== undefined && value !== "") url.searchParams.set(name, String(value));
   }
-  const response = await fetch(url, { headers: { "user-agent": userAgent } });
+  const response = await fetch(url, { headers: { "user-agent": userAgent }, signal: AbortSignal.timeout(15_000) });
   if (!response.ok) throw new Error(`Modrinth returned HTTP ${response.status}`);
   return response.json();
 };
@@ -168,6 +195,9 @@ const requestHandler = async (request, response) => {
       return sendJson(response, 200, { service, status: "ok", apiVersion, capabilities, timestamp: new Date().toISOString() });
     }
     if (pathname === "/v1/capabilities") return sendJson(response, 200, { service, apiVersion, capabilities });
+    if (pathname.startsWith("/v1/catalog/") && (!catalogClient(clientIp(request)) || !catalogGlobal("catalog"))) {
+      return sendJson(response, 429, { error: "catalog_rate_limited" });
+    }
     if (pathname === "/v1/catalog/search") {
       const query = (url.searchParams.get("query") || "").trim().slice(0, 100);
       const gameVersion = url.searchParams.get("gameVersion") || "";
@@ -188,6 +218,7 @@ const requestHandler = async (request, response) => {
     }
     return sendJson(response, 404, { error: "not_found" });
   } catch (error) {
+    if (error.status === 503) return sendJson(response, 503, { error: "catalog_busy" });
     console.error(error);
     return sendJson(response, 502, { error: "provider_unavailable", message: String(error?.message || error) });
   }

@@ -94,6 +94,10 @@ test("native PKCE codes are single-use and create a credentialed social device",
   assert.equal(me.body.needsUsername, false);
   assert.equal(me.body.user.displayName, "Parks Updated");
   assert.equal(me.body.user.avatarUrl, "https://images.example/updated.png");
+  const logout = await call(api, { method: "POST", path: "/v1/social/native/logout", body: { refreshToken: session.refreshToken } });
+  assert.equal(logout.status, 200);
+  assert.equal((await call(api, { path: "/v1/social/me", token: refreshed.body.accessToken })).status, 401);
+  assert.equal((await call(api, { method: "POST", path: "/v1/social/native/refresh", body: { refreshToken: refreshed.body.refreshToken } })).status, 401);
 });
 
 test("native approval supports cancellation and legacy loopback clients", async (t) => {
@@ -289,6 +293,23 @@ test("instance invites are idempotent, friend-scoped, and claimed exactly once",
   const declineCreated = await call(api, { method: "POST", path: "/v1/social/instance-invites", token: parks.accessToken, body: declineRequest });
   assert.equal((await call(api, { method: "POST", path: `/v1/social/instance-invites/${declineCreated.body.invites[0].id}/decline`, token: karsten.accessToken })).status, 200);
   assert.deepEqual(closedCodes, ["GHJK6789"]);
+  const secureCode = "AB".repeat(32);
+  const secureInvite = await call(api, { method: "POST", path: "/v1/social/instance-invites", token: parks.accessToken, body: {
+    ...declineRequest, requestKey: "synced-instance-request-123", invites: [{ recipientId: karsten.user.id, shareCode: secureCode, role: "editor" }],
+  } });
+  assert.equal(secureInvite.status, 201);
+  const securePath = `/v1/social/instance-invites/${secureInvite.body.invites[0].id}`;
+  const secureClaim = await call(api, { method: "POST", path: `${securePath}/claim`, token: karsten.accessToken });
+  const recipient = { headers: { authorization: `Bearer ${karsten.accessToken}` } };
+  const outsider = { headers: { authorization: `Bearer ${alex.accessToken}` } };
+  const grant = api.authorizePackClaim(recipient, secureCode, secureClaim.body.claimToken);
+  assert.equal(grant?.role, "editor");
+  assert.equal(api.authorizePackClaim(outsider, secureCode, secureClaim.body.claimToken), null);
+  assert.equal(api.packClaimAccepted(secureCode, karsten.user.id, grant.claimHash), false);
+  const complete = { method: "POST", path: `${securePath}/complete`, token: karsten.accessToken, body: { claimToken: secureClaim.body.claimToken } };
+  assert.equal((await call(api, complete)).status, 200);
+  assert.equal((await call(api, complete)).status, 200);
+  assert.equal(api.packClaimAccepted(secureCode, karsten.user.id, grant.claimHash), true);
 });
 
 test("group chats cap membership, require friendships, and deliver only to members", async (t) => {

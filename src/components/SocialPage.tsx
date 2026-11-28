@@ -870,7 +870,7 @@ export function SocialPage({ onNotify, onInstanceImported, destination, ...launc
     try {
       claim = await invoke<InstanceInviteClaim>("social_claim_instance_invite", { inviteId: invite.id });
       const command = claim.shareMode === "copy" ? "import_modpack_share" : claim.role === "editor" ? "join_pack_as_editor" : "import_pack_channel";
-      const result = await invoke<ModpackShareImport>(command, { code: claim.shareCode });
+      const result = await invoke<ModpackShareImport>(command, { code: claim.shareCode, claimToken: claim.claimToken });
       const next = await invoke<Snapshot>("social_complete_instance_invite", { inviteId: invite.id, claimToken: claim.claimToken });
       setSnapshot(next);
       setSession(next.session);

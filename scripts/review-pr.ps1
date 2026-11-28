@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($Launch) { throw "Run contributor builds in a disposable credential-free environment. This helper only prepares source for review." }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $repoParent = Split-Path $repoRoot -Parent
 $reviewRoot = Join-Path $repoParent "BloomClient-PR-Reviews"
@@ -58,18 +59,12 @@ else {
     Invoke-Checked git @("worktree", "add", "--detach", $reviewPath, $remoteRef)
 }
 
-if ($Install -or -not (Test-Path -LiteralPath (Join-Path $reviewPath "node_modules"))) {
-    Invoke-Checked npm.cmd @("ci") $reviewPath
+if ($Install) {
+    Invoke-Checked npm.cmd @("ci", "--ignore-scripts", "--no-audit", "--no-fund") $reviewPath
 }
 
 Write-Host ""
 Write-Host "PR $PullRequest is isolated at: $reviewPath" -ForegroundColor Green
 Write-Host "Your primary Delight workspace was not switched or modified."
 
-if ($Launch) {
-    Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "npm run tauri dev" -WorkingDirectory $reviewPath
-    Write-Host "Opened the PR in its own Tauri development terminal."
-}
-else {
-    Write-Host "Run with -Launch when you are ready to test this PR in Tauri."
-}
+Write-Host "Review the source here. Use a disposable credential-free environment for builds and previews."

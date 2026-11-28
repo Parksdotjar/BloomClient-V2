@@ -1,3 +1,4 @@
+import { clientIp } from "../client-ip.mjs";
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { ApiError, requireValue, uuid, validateCape } from './assets.mjs';
 import { SupabaseCosmeticsStore } from './store.mjs';
@@ -91,11 +92,11 @@ export function createCosmeticsApi({ store, owners = [], verify = verifyMinecraf
     if (!/^\/v1\/(capes(?:\/|$)|(?:wings|hats)(?:\/|$)|cosmetics(?:\/|$)|admin\/(?:capes|studio)(?:\/|$))/.test(pathname)) return false;
     try {
       if (!enabled) throw new ApiError(503,'cosmetics_not_configured');
-      // Do not trust forwarded headers without a deployment-specific proxy allowlist.
-      limit(`ip:${request.socket.remoteAddress}`,240);
       const method = request.method;
+      const scope = pathname.startsWith("/v1/admin/") ? "admin" : method === "GET" ? "public" : "mutation";
+      limit(`${scope}:${clientIp(request)}`, scope === "public" ? 240 : 60);
       if (pathname === '/v1/admin/studio/session' && method === 'POST') {
-        limit(`studio-login:${request.socket.remoteAddress}`,5);
+        limit(`studio-login:${clientIp(request)}`,5);
         const body = await readBody(request,1024);
         requireValue(studioOwner && typeof body.password === 'string' && body.password.length >= 16 && body.password.length <= 256,'studio_password_required');
         if (!studioPassword(body.password)) throw new ApiError(401,'studio_password_invalid');
